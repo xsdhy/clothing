@@ -1,0 +1,16 @@
+
+# Editor directories and files
+.vscode/*
+!.vscode/extensions.json
+.idea
+.DS_Store
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+__debug_bin*
+./Makefile
+*.db
+coverage.html
+coverage.out
