@@ -51,7 +51,6 @@ func main() {
 
 	serverHost := fmt.Sprintf("0.0.0.0:%s", cfg.HTTPPort)
 	logger.WithField("host", serverHost).Info("服务器启动")
-
 	// 创建HTTP服务器
 	httpServer := &http.Server{
 		Addr:         serverHost,
@@ -60,9 +59,6 @@ func main() {
 		WriteTimeout: 30 * time.Second,
 		IdleTimeout:  60 * time.Second,
 	}
-
-	// 启动服务器
-	logger.Info("正在启动HTTP服务器...")
 	err = httpServer.ListenAndServe()
 	if err != nil && err != http.ErrServerClosed {
 		logger.WithError(err).Error("服务器启动失败")

@@ -26,7 +26,7 @@ func (h *HTTPHandler) GenerateImage(c *gin.Context) {
 		return
 	}
 
-	providerID := strings.ToLower(strings.TrimSpace(request.Provider))
+	providerID := strings.TrimSpace(request.Provider)
 	provider, ok := h.providerMap[providerID]
 	if !ok {
 		c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("unsupported provider: %s", request.Provider)})
@@ -45,13 +45,7 @@ func (h *HTTPHandler) GenerateImage(c *gin.Context) {
 	}
 
 	ctx := c.Request.Context()
-	var (
-		result string
-		err    error
-		text   string
-	)
-
-	result, text, err = h.providerMap[providerID].GenerateImages(ctx, request)
+	result, text, err := provider.GenerateImages(ctx, request)
 
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})

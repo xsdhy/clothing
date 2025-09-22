@@ -41,7 +41,7 @@ import {
 
 // 导入类型和服务
 import type { GenerationRequest, AIProvider, AIModel } from './types';
-import { generateImage, fetchProviders } from './services/ai';
+import { generateImage, fetchProviders } from './ai';
 
 // 下载工具函数
 function downloadImage(dataUrl: string, filename: string = 'generated-image.png'): void {

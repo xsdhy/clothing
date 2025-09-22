@@ -5,6 +5,7 @@ export interface GenerationRequest {
   images: string[];
   provider: AIProvider;
   model: string;
+  timeoutMs?: number;
 }
 
 export interface AIProvider {
@@ -18,7 +19,6 @@ export interface AIModel {
   name: string;
   description?: string;
 }
-
 
 
 

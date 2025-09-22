@@ -1,8 +1,9 @@
-import type { AIProvider, GenerationRequest } from '../types';
+import type { AIProvider, GenerationRequest } from './types';
 
-const LLM_BASE_PATH = '/api/llm';
-const LLM_GENERATE_ENDPOINT = LLM_BASE_PATH;
-const LLM_PROVIDERS_ENDPOINT = `${LLM_BASE_PATH}/providers`;
+
+const LLM_GENERATE_ENDPOINT = '/api/llm';
+const LLM_PROVIDERS_ENDPOINT = `/api/llm/providers`;
+const DEFAULT_HTTP_TIMEOUT_MS = 120_000;
 
 interface BackendResponse {
   image?: string;
@@ -19,6 +20,38 @@ const sanitizeImages = (images: string[] = []): string[] =>
   images
     .map((image) => (typeof image === 'string' ? image.trim() : ''))
     .filter((image): image is string => image.length > 0);
+
+const requestWithTimeout = async (
+  input: RequestInfo | URL,
+  init: RequestInit = {},
+  timeout = DEFAULT_HTTP_TIMEOUT_MS,
+): Promise<Response> => {
+  const controller = new AbortController();
+  const { signal, ...rest } = init;
+
+  let timedOut = false;
+  const timeoutId = window.setTimeout(() => {
+    timedOut = true;
+    controller.abort();
+  }, timeout);
+
+  const abortHandler = () => controller.abort();
+  signal?.addEventListener?.('abort', abortHandler);
+
+  try {
+    return await fetch(input, { ...rest, signal: controller.signal });
+  } catch (error) {
+    if (timedOut || (error instanceof DOMException && error.name === 'AbortError')) {
+      const timeoutError = new Error('请求超时，请稍后重试');
+      timeoutError.name = 'TimeoutError';
+      throw timeoutError;
+    }
+    throw error;
+  } finally {
+    clearTimeout(timeoutId);
+    signal?.removeEventListener?.('abort', abortHandler);
+  }
+};
 
 export const generateImage = async (request: GenerationRequest): Promise<string> => {
   const prompt = request.prompt.trim();
@@ -39,13 +72,17 @@ export const generateImage = async (request: GenerationRequest): Promise<string>
 
   let response: Response;
   try {
-    response = await fetch(LLM_GENERATE_ENDPOINT, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
+    response = await requestWithTimeout(
+      LLM_GENERATE_ENDPOINT,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(payload),
       },
-      body: JSON.stringify(payload),
-    });
+      request.timeoutMs ?? DEFAULT_HTTP_TIMEOUT_MS,
+    );
   } catch (error) {
     throw new Error(`请求后端服务失败: ${error instanceof Error ? error.message : '未知错误'}`);
   }
@@ -80,7 +117,7 @@ export const generateImage = async (request: GenerationRequest): Promise<string>
 export const fetchProviders = async (): Promise<AIProvider[]> => {
   let response: Response;
   try {
-    response = await fetch(LLM_PROVIDERS_ENDPOINT);
+    response = await requestWithTimeout(LLM_PROVIDERS_ENDPOINT);
   } catch (error) {
     throw new Error(`请求模型列表失败: ${error instanceof Error ? error.message : '未知错误'}`);
   }
