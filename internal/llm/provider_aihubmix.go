@@ -163,26 +163,6 @@ func (o *AiHubMix) GenerateImages(ctx context.Context, request entity.GenerateIm
 	return imageDataURL, text, nil
 }
 
-// ------- 内部：SSE 流解析 -------
-
-type respImageBegin struct {
-	Index    int    `json:"index"`
-	MIMEType string `json:"mime_type"` // e.g. "image/png"
-}
-
-type respImageDelta struct {
-	Index int    `json:"index"`
-	B64   string `json:"b64"`            // 官方事件里为 base64 块
-	Data  string `json:"data"`           // 有些兼容实现可能用 data 字段
-	Chunk string `json:"chunk"`          // 也兼容 chunk 命名
-	URL   string `json:"image_url"`      // 某些实现可能直接给 dataURL
-	Type  string `json:"type,omitempty"` // 兜底识别
-}
-
-type respTextDelta struct {
-	Delta string `json:"delta"`
-}
-
 func (o *AiHubMix) streamResponsesImages(ctx context.Context, body map[string]any, logger *logrus.Entry) (string, string, error) {
 	reqBytes, _ := json.Marshal(body)
 	url := strings.TrimRight(o.baseURL, "/") + "/responses"
@@ -227,6 +207,7 @@ func (o *AiHubMix) streamResponsesImages(ctx context.Context, body map[string]an
 		textBuilder strings.Builder
 		imgChunks   = make(map[int]*bytes.Buffer) // index -> b64 buffer
 		imgMIMEs    = make(map[int]string)        // index -> mime
+		imgURLs     = make(map[int]string)        // index -> url
 		completed   bool
 		chunkIndex  int
 	)
@@ -239,63 +220,120 @@ func (o *AiHubMix) streamResponsesImages(ctx context.Context, body map[string]an
 		payload := strings.Join(dataBuf, "\n")
 		dataBuf = dataBuf[:0]
 
+		payloadBytes := []byte(payload)
 		chunkIndex++
+		eventName := responseEventType(curEvent, payloadBytes)
 		logger.WithFields(logrus.Fields{
-			"event":       curEvent,
+			"event":       eventName,
 			"chunk_index": chunkIndex,
-			"len":         len(payload),
+			"len":         len(payloadBytes),
 		}).Debug("responses_stream_event")
 
-		switch curEvent {
-		case "response.output_text.delta":
-			var td respTextDelta
-			if err := json.Unmarshal([]byte(payload), &td); err == nil && td.Delta != "" {
-				textBuilder.WriteString(td.Delta)
-			}
-		case "response.output_image.begin":
-			var mb respImageBegin
-			if err := json.Unmarshal([]byte(payload), &mb); err == nil {
-				if mb.MIMEType == "" {
-					mb.MIMEType = "image/png"
+		handleTextFragments := func(paths ...string) {
+			fragments := responseEventTextFragments(payloadBytes, paths...)
+			for _, fragment := range fragments {
+				if fragment == "" {
+					continue
 				}
-				imgMIMEs[mb.Index] = mb.MIMEType
-				if _, ok := imgChunks[mb.Index]; !ok {
-					imgChunks[mb.Index] = &bytes.Buffer{}
+				textBuilder.WriteString(fragment)
+			}
+		}
+
+		handleImageDelta := func(defaultIndex int) error {
+			index, ok := responseEventIndex(payloadBytes)
+			if !ok {
+				index = defaultIndex
+			}
+			if _, exists := imgChunks[index]; !exists {
+				imgChunks[index] = &bytes.Buffer{}
+			}
+			if mime := responseEventMIME(payloadBytes); mime != "" {
+				imgMIMEs[index] = mime
+			} else if _, exists := imgMIMEs[index]; !exists {
+				imgMIMEs[index] = "image/png"
+			}
+
+			candidates := extractResponseImageCandidates(payloadBytes, "delta", "content", "image", "choices")
+			if len(candidates) == 0 {
+				return nil
+			}
+			for _, candidate := range candidates {
+				idx := index
+				if candidate.Index != 0 {
+					idx = candidate.Index
+				}
+				if candidate.MIME != "" {
+					imgMIMEs[idx] = candidate.MIME
+				}
+				if candidate.DataURL != "" {
+					return fmt.Errorf("__RETURN_IMMEDIATELY__|%s|%s", candidate.DataURL, textBuilder.String())
+				}
+				if candidate.URL != "" {
+					imgURLs[idx] = candidate.URL
+					continue
+				}
+				if candidate.Base64 != "" {
+					imgChunks[idx].WriteString(candidate.Base64)
 				}
 			}
-		case "response.output_image.delta":
-			var id respImageDelta
-			_ = json.Unmarshal([]byte(payload), &id)
-			i := id.Index
-			if _, ok := imgChunks[i]; !ok {
-				imgChunks[i] = &bytes.Buffer{}
+			return nil
+		}
+
+		if eventName == "" {
+			handleTextFragments("choices.#.delta.content", "delta.content", "delta")
+			return handleImageDelta(0)
+		}
+
+		switch eventName {
+		case "response.output_text.delta", "response.reasoning_text.delta", "response.output_text.annotation.added":
+			handleTextFragments("delta", "delta.content")
+		case "response.output_image.begin", "response.image_generation_call.partial_image":
+			index, ok := responseEventIndex(payloadBytes)
+			if !ok {
+				index = 0
 			}
-			// 兼容不同字段名
-			switch {
-			case id.B64 != "":
-				imgChunks[i].WriteString(id.B64)
-			case id.Chunk != "":
-				imgChunks[i].WriteString(id.Chunk)
-			case id.Data != "":
-				// 有些实现直接推 dataURL
-				if strings.HasPrefix(id.Data, "data:image") {
-					// 直接返回
-					return fmt.Errorf("__RETURN_IMMEDIATELY__|%s|%s", id.Data, textBuilder.String())
-				}
-				imgChunks[i].WriteString(id.Data)
-			case id.URL != "":
-				if strings.HasPrefix(id.URL, "data:image") {
-					return fmt.Errorf("__RETURN_IMMEDIATELY__|%s|%s", id.URL, textBuilder.String())
-				}
+			if mime := responseEventMIME(payloadBytes); mime != "" {
+				imgMIMEs[index] = mime
+			} else if _, exists := imgMIMEs[index]; !exists {
+				imgMIMEs[index] = "image/png"
 			}
-		case "response.output_image.done":
-			// 单图完成事件：无需特别处理，最终统一拼接 dataURL
+			if _, exists := imgChunks[index]; !exists {
+				imgChunks[index] = &bytes.Buffer{}
+			}
+		case "response.output_image.delta", "response.image_generation_call.generating":
+			if err := handleImageDelta(0); err != nil {
+				return err
+			}
+		case "response.output_image.done", "response.image_generation_call.completed":
+			// no-op
 		case "response.completed":
 			completed = true
-		case "error":
-			return fmt.Errorf("responses stream error: %s", payload)
+			if textBuilder.Len() == 0 {
+				handleTextFragments("response.output", "response.text", "response.output_items")
+			}
+			if len(imgChunks) == 0 && len(imgURLs) == 0 {
+				candidates := extractResponseImageCandidates(payloadBytes, "response.output", "response.output_items")
+				if len(candidates) > 0 {
+					candidate := candidates[0]
+					if url := candidate.dataURL(); url != "" {
+						return fmt.Errorf("__RETURN_IMMEDIATELY__|%s|%s", url, textBuilder.String())
+					}
+					if candidate.URL != "" {
+						return fmt.Errorf("__RETURN_IMMEDIATELY__|%s|%s", candidate.URL, textBuilder.String())
+					}
+				}
+			}
+		case "response.failed", "response.incomplete", "response.error", "error", "response.image_generation_call.failed":
+			msg := responseErrorMessage(payloadBytes)
+			if msg == "" {
+				msg = payload
+			}
+			return errors.New(msg)
 		default:
-			// 其它事件忽略（如 response.created / response.refusal.delta 等）
+			handleTextFragments("delta.content", "delta", "content", "response.output")
+			if err := handleImageDelta(0); err != nil {
+				return err
+			}
 		}
 		curEvent = ""
 		return nil
@@ -354,6 +392,17 @@ func (o *AiHubMix) streamResponsesImages(ctx context.Context, body map[string]an
 
 	// 选择第一张图输出（如需多图可扩展返回切片）
 	if len(imgChunks) == 0 {
+		if len(imgURLs) > 0 {
+			minIdx := int(^uint(0) >> 1)
+			for idx := range imgURLs {
+				if idx < minIdx {
+					minIdx = idx
+				}
+			}
+			if url := strings.TrimSpace(imgURLs[minIdx]); url != "" {
+				return url, textBuilder.String(), nil
+			}
+		}
 		// 有些实现只在文本里内嵌 dataURL，这里兜底尝试
 		text := textBuilder.String()
 		if s := strings.TrimSpace(text); strings.Contains(s, "data:image") {
@@ -377,7 +426,13 @@ func (o *AiHubMix) streamResponsesImages(ctx context.Context, body map[string]an
 			minIdx = i
 		}
 	}
-	b64 := imgChunks[minIdx].String()
+	b64 := strings.TrimSpace(imgChunks[minIdx].String())
+	if b64 == "" {
+		if url := strings.TrimSpace(imgURLs[minIdx]); url != "" {
+			return url, textBuilder.String(), nil
+		}
+		return "", textBuilder.String(), errors.New("model did not return an image in stream")
+	}
 	mime := imgMIMEs[minIdx]
 	if mime == "" {
 		mime = "image/png"

@@ -53,5 +53,13 @@ func NewProviderBundle(cfg config.Config) ([]entity.LlmProvider, map[string]llm.
 		logrus.WithError(err).Warn("failed to initialise Gemini provider")
 	}
 
+	dashscope, err := llm.NewDashscope(cfg)
+	if err == nil && dashscope != nil {
+		providerMap[dashscope.ProviderID()] = dashscope
+		providers = append(providers, dashscope.Provider())
+	} else if err != nil && strings.TrimSpace(cfg.DashscopeAPIKey) != "" {
+		logrus.WithError(err).Warn("failed to initialise Dashscope provider")
+	}
+
 	return providers, providerMap
 }

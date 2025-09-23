@@ -11,6 +11,7 @@ type Config struct {
 	OpenRouterAPIKey string `env:"OPENROUTER_API_KEY" envDefault:""`
 	GeminiAPIKey     string `env:"GEMINI_API_KEY" envDefault:""`
 	AiHubMixAPIKey   string `env:"AIHUBMIX_API_KEY" envDefault:""`
+	DashscopeAPIKey  string `env:"DASHSCOPE_API_KEY" envDefault:""`
 }
 
 func ParseConfig() (Config, error) {
