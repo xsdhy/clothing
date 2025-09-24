@@ -28,9 +28,10 @@ type orDelta struct {
 	Images  []orImage `json:"images"`
 }
 type orChoice struct {
-	Delta        orDelta `json:"delta"`
-	FinishReason string  `json:"finish_reason"`
-	Index        int     `json:"index"`
+	Delta              orDelta `json:"delta"`
+	FinishReason       string  `json:"finish_reason"`
+	NativeFinishReason string  `json:"native_finish_reason"`
+	Index              int     `json:"index"`
 }
 type orStreamChunk struct {
 	Choices []orChoice `json:"choices"`
@@ -62,9 +63,9 @@ func makeUserMessage(prompt string, refs []string) orMessage {
 	return orMessage{Role: "user", Content: parts}
 }
 
-func GenerateImagesOR(ctx context.Context, apiKey, baseURL, model, prompt string, refs []string) (imageDataURL string, assistantText string, err error) {
+func GenerateImagesByOpenaiProtocol(ctx context.Context, apiKey, baseURL, model, prompt string, refs []string) (imageDataURL string, assistantText string, err error) {
 	if strings.TrimSpace(apiKey) == "" {
-		return "", "", errors.New("openrouter api key missing")
+		return "", "", errors.New("api key missing")
 	}
 
 	logrus.WithFields(logrus.Fields{
@@ -86,7 +87,8 @@ func GenerateImagesOR(ctx context.Context, apiKey, baseURL, model, prompt string
 	req.Header.Set("Authorization", "Bearer "+apiKey)
 	req.Header.Set("Content-Type", "application/json")
 
-	httpCli := &http.Client{Timeout: 0} // SSE 不要超短超时
+	httpCli := &http.Client{Timeout: 0}
+	// SSE 不要超短超时
 	resp, err := httpCli.Do(req)
 	if err != nil {
 		return "", "", err
@@ -109,8 +111,10 @@ func GenerateImagesOR(ctx context.Context, apiKey, baseURL, model, prompt string
 	sc := bufio.NewScanner(resp.Body)
 	sc.Buffer(make([]byte, 0, 64*1024), 10*1024*1024)
 
+	nativeFinishReasonText := ""
 	for sc.Scan() {
 		line := sc.Text()
+		logrus.WithFields(logrus.Fields{"data": line}).Info("stream chunk")
 		if !strings.HasPrefix(line, "data: ") {
 			continue
 		}
@@ -119,10 +123,6 @@ func GenerateImagesOR(ctx context.Context, apiKey, baseURL, model, prompt string
 			break
 		}
 
-		logrus.WithFields(logrus.Fields{
-			"data": data,
-		}).Debug("stream chunk")
-
 		var chunk orStreamChunk
 		if err := json.Unmarshal([]byte(data), &chunk); err != nil {
 			continue
@@ -130,21 +130,38 @@ func GenerateImagesOR(ctx context.Context, apiKey, baseURL, model, prompt string
 		if len(chunk.Choices) == 0 {
 			continue
 		}
+		for i := 0; i < len(chunk.Choices); i++ {
+			choice := chunk.Choices[i]
 
-		delta := chunk.Choices[0].Delta
-		if delta.Content != "" {
-			assistantText += delta.Content
+			// 累积文本和图片 URL
+			delta := choice.Delta
+			if delta.Content != "" {
+				assistantText += delta.Content
+			}
+
+			if choice.FinishReason != "" {
+				nativeFinishReasonText += choice.NativeFinishReason
+				logrus.WithFields(logrus.Fields{
+					"finish_reason":        choice.FinishReason,
+					"native_finish_reason": choice.NativeFinishReason,
+				}).Info("stream chunk finish reason")
+			}
+
+			if len(delta.Images) > 0 && delta.Images[0].ImageURL.URL != "" && imageDataURL == "" {
+				// 只取第一张（你也可以收集多张）
+				imageDataURL = delta.Images[0].ImageURL.URL
+			}
 		}
-		if len(delta.Images) > 0 && delta.Images[0].ImageURL.URL != "" && imageDataURL == "" {
-			// 只取第一张（你也可以收集多张）
-			imageDataURL = delta.Images[0].ImageURL.URL
-		}
+
 	}
 	logrus.Info("openrouter stream response ended")
 	if err := sc.Err(); err != nil {
 		return "", "", err
 	}
 	if strings.TrimSpace(imageDataURL) == "" {
+		if len(nativeFinishReasonText) > 0 {
+			return "", "", errors.New(nativeFinishReasonText)
+		}
 		return "", "", errors.New("no image in streamed response")
 	}
 	return imageDataURL, strings.TrimSpace(assistantText), nil

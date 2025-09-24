@@ -93,5 +93,5 @@ func (o *AiHubMix) GenerateImages(ctx context.Context, request entity.GenerateIm
 		"reference_image_cnt": len(request.Images),
 	}).Info("llm_generate_images_start")
 
-	return GenerateImagesOR(ctx, o.apiKey, "https://aihubmix.com/v1/chat/completions", request.Model, request.Prompt, request.Images)
+	return GenerateImagesByOpenaiProtocol(ctx, o.apiKey, "https://aihubmix.com/v1/chat/completions", request.Model, request.Prompt, request.Images)
 }

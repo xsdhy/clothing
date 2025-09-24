@@ -74,5 +74,5 @@ func (o *OpenRouter) GenerateImages(ctx context.Context, request entity.Generate
 		"reference_image_cnt": len(request.Images),
 	}).Info("llm_generate_images_start")
 
-	return GenerateImagesOR(ctx, o.apiKey, "https://openrouter.ai/api/v1/chat/completions", request.Model, request.Prompt, request.Images)
+	return GenerateImagesByOpenaiProtocol(ctx, o.apiKey, "https://openrouter.ai/api/v1/chat/completions", request.Model, request.Prompt, request.Images)
 }
