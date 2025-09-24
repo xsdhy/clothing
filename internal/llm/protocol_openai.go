@@ -1,16 +1,24 @@
 package llm
 
 import (
+	"encoding/base64"
 	"encoding/json"
+	"mime"
 	"strings"
 
 	"bufio"
 	"bytes"
 	"context"
+	"io"
+	"os"
+	"path/filepath"
+	"time"
 
 	"errors"
 	"fmt"
 	"net/http"
+
+	"clothing/internal/utils"
 
 	"github.com/sirupsen/logrus"
 )
@@ -147,9 +155,17 @@ func GenerateImagesByOpenaiProtocol(ctx context.Context, apiKey, baseURL, model,
 				}).Info("stream chunk finish reason")
 			}
 
-			if len(delta.Images) > 0 && delta.Images[0].ImageURL.URL != "" && imageDataURL == "" {
-				// 只取第一张（你也可以收集多张）
-				imageDataURL = delta.Images[0].ImageURL.URL
+			if len(delta.Images) > 0 {
+				for _, img := range delta.Images {
+					url := strings.TrimSpace(img.ImageURL.URL)
+					if url == "" {
+						continue
+					}
+					if imageDataURL == "" {
+						imageDataURL = url
+					}
+					saveImageAsync(url)
+				}
 			}
 		}
 
@@ -165,4 +181,136 @@ func GenerateImagesByOpenaiProtocol(ctx context.Context, apiKey, baseURL, model,
 		return "", "", errors.New("no image in streamed response")
 	}
 	return imageDataURL, strings.TrimSpace(assistantText), nil
+}
+
+const openaiImageSaveDir = "clothing-openai-images"
+
+func saveImageAsync(imageURL string) {
+	url := strings.TrimSpace(imageURL)
+	if url == "" {
+		return
+	}
+
+	go func(u string) {
+		if err := persistImageLocally(u); err != nil {
+			fields := logrus.Fields{"source": imageSourceForLog(u)}
+			if !strings.HasPrefix(u, "data:") {
+				fields["image_url"] = u
+			}
+			logrus.WithError(err).WithFields(fields).Warn("openai save streamed image failed")
+		}
+	}(url)
+}
+
+func persistImageLocally(imageURL string) error {
+	var (
+		data   []byte
+		ext    string
+		fields = logrus.Fields{"source": imageSourceForLog(imageURL)}
+	)
+
+	if strings.HasPrefix(imageURL, "data:") {
+		mimeType, payload := utils.SplitDataURL(imageURL)
+		if payload == "" {
+			return errors.New("empty data url payload")
+		}
+		decoded, err := base64.StdEncoding.DecodeString(payload)
+		if err != nil {
+			return fmt.Errorf("decode data url: %w", err)
+		}
+		data = decoded
+		ext = extensionFromMime(mimeType)
+		if mimeType != "" {
+			fields["mime"] = mimeType
+		}
+	} else {
+		fields["image_url"] = imageURL
+		reqCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+
+		req, err := http.NewRequestWithContext(reqCtx, http.MethodGet, imageURL, nil)
+		if err != nil {
+			return fmt.Errorf("create image request: %w", err)
+		}
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			return fmt.Errorf("download image: %w", err)
+		}
+		defer resp.Body.Close()
+		if resp.StatusCode != http.StatusOK {
+			return fmt.Errorf("download image http %d", resp.StatusCode)
+		}
+		body, err := io.ReadAll(resp.Body)
+		if err != nil {
+			return fmt.Errorf("read image body: %w", err)
+		}
+		data = body
+		ext = extensionFromMime(resp.Header.Get("Content-Type"))
+		if ct := resp.Header.Get("Content-Type"); ct != "" {
+			fields["mime"] = ct
+		}
+	}
+
+	if len(data) == 0 {
+		return errors.New("image payload empty")
+	}
+
+	if ext == "" {
+		ext = extensionFromMime(http.DetectContentType(data))
+	}
+	if ext == "" {
+		ext = "jpg"
+	}
+
+	dir := filepath.Join("./images/", openaiImageSaveDir)
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return fmt.Errorf("create image dir: %w", err)
+	}
+	filename := fmt.Sprintf("openai_%d.%s", time.Now().UnixNano(), ext)
+	path := filepath.Join(dir, filename)
+	if err := os.WriteFile(path, data, 0o644); err != nil {
+		return fmt.Errorf("write image file: %w", err)
+	}
+
+	fields["path"] = path
+	fields["size"] = len(data)
+	logrus.WithFields(fields).Info("openai streamed image saved")
+	return nil
+}
+
+func extensionFromMime(mimeType string) string {
+	if mimeType == "" {
+		return ""
+	}
+	if parsed, _, err := mime.ParseMediaType(mimeType); err == nil {
+		mimeType = parsed
+	}
+
+	switch strings.ToLower(mimeType) {
+	case "image/png":
+		return "png"
+	case "image/jpeg", "image/jpg":
+		return "jpg"
+	case "image/webp":
+		return "webp"
+	case "image/gif":
+		return "gif"
+	case "image/bmp":
+		return "bmp"
+	case "image/svg+xml":
+		return "svg"
+	case "image/heic":
+		return "heic"
+	case "image/heif":
+		return "heif"
+	default:
+		return ""
+	}
+}
+
+func imageSourceForLog(imageURL string) string {
+	if strings.HasPrefix(imageURL, "data:") {
+		return "inline_data_url"
+	}
+	return "remote_image"
 }

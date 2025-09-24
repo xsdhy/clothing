@@ -14,3 +14,4 @@ __debug_bin*
 *.db
 coverage.html
 coverage.out
+cmd/server/images/
