@@ -88,5 +88,5 @@ func (d *Dashscope) GenerateImages(ctx context.Context, request entity.GenerateI
 		return "", "", err
 	}
 
-	return GenerateImagesByOpenaiProtocol(ctx, d.apiKey, "https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions", request.Model, request.Prompt, request.Images)
+	return GenerateImagesByDashscopeProtocol(ctx, d.apiKey, request.Model, request.Prompt, request.Images)
 }
