@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/gin-gonic/gin"
+	"github.com/sirupsen/logrus"
 )
 
 func (h *HTTPHandler) ListProviders(c *gin.Context) {
@@ -48,6 +49,10 @@ func (h *HTTPHandler) GenerateImage(c *gin.Context) {
 	result, text, err := provider.GenerateImages(ctx, request)
 
 	if err != nil {
+		logrus.WithError(err).WithFields(logrus.Fields{
+			"provider": providerID,
+			"model":    request.Model,
+		}).Error("failed to generate image")
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}

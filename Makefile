@@ -7,3 +7,5 @@ build:
 
 
 
+web:
+	cp ./web/dist/index.html cmd/server/web/dist
