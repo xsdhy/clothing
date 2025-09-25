@@ -44,13 +44,13 @@ const inlineAssets = (): Plugin => ({
     if (cssSnippets.length > 0) {
       const styles = `<style>${cssSnippets.join('\n')}</style>`
       html = html.replace(/<link rel="stylesheet"[^>]*>\s*/g, '')
-      html = html.replace('</head>', `${styles}</head>`)
+      html = html.replace(/<\/head>/, (match) => `${styles}${match}`)
     }
 
     if (jsSnippets.length > 0) {
       const scripts = `<script type="module">${jsSnippets.join('\n')}</script>`
       html = html.replace(/<script[^>]*type="module"[^>]*src="[^"]+"[^>]*><\/script>\s*/g, '')
-      html = html.replace('</body>', `${scripts}</body>`)
+      html = html.replace(/<\/body>/, (match) => `${scripts}${match}`)
     }
 
     htmlAsset.source = html
