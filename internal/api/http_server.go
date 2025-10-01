@@ -61,5 +61,13 @@ func NewProviderBundle(cfg config.Config) ([]entity.LlmProvider, map[string]llm.
 		logrus.WithError(err).Warn("failed to initialise Dashscope provider")
 	}
 
+	volcengine, err := llm.NewVolcengine(cfg)
+	if err == nil && volcengine != nil {
+		providerMap[volcengine.ProviderID()] = volcengine
+		providers = append(providers, volcengine.Provider())
+	} else if err != nil && strings.TrimSpace(cfg.VolcengineAPIKey) != "" {
+		logrus.WithError(err).Warn("failed to initialise Volcengine provider")
+	}
+
 	return providers, providerMap
 }
