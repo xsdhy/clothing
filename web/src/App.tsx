@@ -40,7 +40,7 @@ import {
 } from '@mui/icons-material';
 
 // 导入类型和服务
-import type { GenerationRequest, AIProvider, AIModel } from './types';
+import type { GenerationRequest, GenerationResult, AIProvider, AIModel } from './types';
 import { generateImage, fetchProviders } from './ai';
 
 // 下载工具函数
@@ -815,9 +815,10 @@ interface ImageGeneratorProps {
   prompt: string;
   images: string[];
   onPromptChange: (prompt: string) => void;
-  onGenerate: (result: string) => void;
+  onGenerate: (result: GenerationResult) => void;
   onImagesChange: (images: string[]) => void;
-  lastGeneratedImage?: string;
+  lastGeneratedImages?: string[];
+  lastGenerationText?: string;
 }
 
 const ImageGenerator: React.FC<ImageGeneratorProps> = ({
@@ -826,7 +827,8 @@ const ImageGenerator: React.FC<ImageGeneratorProps> = ({
   onPromptChange,
   onGenerate,
   onImagesChange,
-  lastGeneratedImage,
+  lastGeneratedImages = [],
+  lastGenerationText,
 }) => {
   const [isGenerating, setIsGenerating] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -835,7 +837,18 @@ const ImageGenerator: React.FC<ImageGeneratorProps> = ({
   const [providerError, setProviderError] = useState<string | null>(null);
   const [selectedProvider, setSelectedProvider] = useState<AIProvider | null>(null);
   const [selectedModel, setSelectedModel] = useState<AIModel | null>(null);
-  const [viewerOpen, setViewerOpen] = useState(false);
+  const [selectedSize, setSelectedSize] = useState<string>('');
+  const [resultViewerOpen, setResultViewerOpen] = useState(false);
+  const [resultViewerIndex, setResultViewerIndex] = useState(0);
+
+  useEffect(() => {
+    const sizes = selectedModel?.image_sizes ?? [];
+    if (sizes.length === 0) {
+      setSelectedSize('');
+      return;
+    }
+    setSelectedSize((current) => (sizes.includes(current) ? current : sizes[0]));
+  }, [selectedModel]);
 
   useEffect(() => {
     let cancelled = false;
@@ -856,6 +869,7 @@ const ImageGenerator: React.FC<ImageGeneratorProps> = ({
         } else {
           setSelectedProvider(null);
           setSelectedModel(null);
+          setSelectedSize('');
         }
       } catch (err) {
         if (!cancelled) {
@@ -896,10 +910,15 @@ const ImageGenerator: React.FC<ImageGeneratorProps> = ({
         images,
         provider: selectedProvider,
         model: selectedModel.id,
+        size: selectedModel?.image_sizes?.length ? selectedSize : undefined,
       };
 
       const result = await generateImage(request);
       onGenerate(result);
+      if (result.images.length > 0) {
+        setResultViewerIndex(0);
+      }
+      setResultViewerOpen(false);
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : '生成失败，请重试';
       setError(errorMessage);
@@ -910,21 +929,34 @@ const ImageGenerator: React.FC<ImageGeneratorProps> = ({
     }
   };
 
-  const handleDownload = () => {
-    if (lastGeneratedImage) {
-      const timestamp = Date.now();
-      downloadImage(lastGeneratedImage, `generated-${timestamp}.png`);
+  const handleDownload = (index: number) => {
+    const image = lastGeneratedImages[index];
+    if (!image) {
+      return;
     }
+    const timestamp = Date.now();
+    downloadImage(image, `generated-${timestamp}-${index + 1}.png`);
+  };
+
+  const handleDownloadAll = () => {
+    if (!lastGeneratedImages.length) {
+      return;
+    }
+    const timestamp = Date.now();
+    lastGeneratedImages.forEach((image, idx) => {
+      downloadImage(image, `generated-${timestamp}-${idx + 1}.png`);
+    });
   };
 
   // 打开图片查看器
-  const handleImageClick = () => {
-    setViewerOpen(true);
+  const handleImageClick = (index: number) => {
+    setResultViewerIndex(index);
+    setResultViewerOpen(true);
   };
 
   // 关闭图片查看器
   const handleCloseViewer = () => {
-    setViewerOpen(false);
+    setResultViewerOpen(false);
   };
 
   return (
@@ -962,6 +994,7 @@ const ImageGenerator: React.FC<ImageGeneratorProps> = ({
                 }
                 setSelectedProvider(provider);
                 setSelectedModel(provider.models[0] ?? null);
+                setSelectedSize(provider.models[0]?.image_sizes?.[0] ?? '');
               }}
             >
               {providersLoading && providers.length === 0 && (
@@ -996,6 +1029,7 @@ const ImageGenerator: React.FC<ImageGeneratorProps> = ({
                   return;
                 }
                 setSelectedModel(model);
+                setSelectedSize(model.image_sizes?.[0] ?? '');
               }}
             >
               {(selectedProvider?.models ?? []).map((model) => (
@@ -1012,6 +1046,23 @@ const ImageGenerator: React.FC<ImageGeneratorProps> = ({
               ))}
             </Select>
           </FormControl>
+          {selectedModel?.image_sizes && selectedModel.image_sizes.length > 0 && (
+            <FormControl fullWidth size="small">
+              <InputLabel>图片尺寸</InputLabel>
+              <Select
+                value={selectedSize}
+                label="图片尺寸"
+                disabled={isGenerating}
+                onChange={(e) => setSelectedSize(e.target.value)}
+              >
+                {selectedModel.image_sizes.map((sizeOption) => (
+                  <MenuItem key={sizeOption} value={sizeOption}>
+                    {sizeOption}
+                  </MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+          )}
         </Box>
         {providerError && (
           <Alert severity="error" sx={{ mt: 1 }}>
@@ -1077,54 +1128,92 @@ const ImageGenerator: React.FC<ImageGeneratorProps> = ({
       </Box>
 
       {/* 生成结果 */}
-      {lastGeneratedImage && (
+      {lastGeneratedImages.length > 0 && (
         <Card sx={{ mb: 2 }}>
           <Box sx={{ p: 1.5, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
               <ImageIcon color="success" fontSize="small" />
               <Typography variant="body2" fontWeight="medium">生成成功</Typography>
-              <Chip label="完成" color="success" size="small" />
+              <Chip label={`共 ${lastGeneratedImages.length} 张`} color="success" size="small" />
             </Box>
             <Button
               variant="contained"
               color="success"
               size="small"
               startIcon={<Download />}
-              onClick={handleDownload}
+              onClick={lastGeneratedImages.length > 1 ? handleDownloadAll : () => handleDownload(0)}
               sx={{ borderRadius: 2 }}
             >
-              下载
+              {lastGeneratedImages.length > 1 ? '下载全部' : '下载'}
             </Button>
           </Box>
-          <CardMedia
-            component="img"
-            image={lastGeneratedImage}
-            alt="AI生成的图片"
-            onClick={handleImageClick}
-            sx={{
-              maxHeight: 500,
-              objectFit: 'contain',
-              bgcolor: 'grey.100',
-              cursor: 'pointer',
-              transition: 'all 0.2s',
-              '&:hover': {
-                filter: 'brightness(1.05)',
-                transform: 'scale(1.01)',
-              },
-            }}
-          />
+          {lastGenerationText && (
+            <Box sx={{ px: 2, pb: 1 }}>
+              <Alert severity="info" sx={{ m: 0 }}>
+                {lastGenerationText}
+              </Alert>
+            </Box>
+          )}
+          <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 2, px: 2, pb: 2 }}>
+            {lastGeneratedImages.map((image, index) => (
+              <Box
+                key={image + index}
+                sx={{
+                  flex: '1 1 240px',
+                  maxWidth: '100%',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: 1,
+                }}
+              >
+                <CardMedia
+                  component="img"
+                  image={image}
+                  alt={`AI生成的图片 ${index + 1}`}
+                  onClick={() => handleImageClick(index)}
+                  sx={{
+                    maxHeight: 420,
+                    objectFit: 'contain',
+                    bgcolor: 'grey.100',
+                    cursor: 'pointer',
+                    borderRadius: 1,
+                    transition: 'all 0.2s',
+                    '&:hover': {
+                      filter: 'brightness(1.05)',
+                      transform: 'scale(1.01)',
+                    },
+                  }}
+                />
+                <Button
+                  variant="outlined"
+                  size="small"
+                  startIcon={<Download />}
+                  onClick={() => handleDownload(index)}
+                  sx={{ alignSelf: 'flex-end' }}
+                >
+                  下载第 {index + 1} 张
+                </Button>
+              </Box>
+            ))}
+          </Box>
         </Card>
       )}
 
       {/* 图片查看器 */}
       <ImageViewer
-        open={viewerOpen}
+        open={resultViewerOpen}
         onClose={handleCloseViewer}
-        imageUrl={lastGeneratedImage || ''}
-        title="AI生成的图片"
-        showDownload={true}
-        onDownload={handleDownload}
+        imageUrl={lastGeneratedImages[resultViewerIndex] || ''}
+        title={`AI生成的图片 ${resultViewerIndex + 1}/${lastGeneratedImages.length}`}
+        showDownload
+        onDownload={() => handleDownload(resultViewerIndex)}
       />
+
+      {lastGeneratedImages.length === 0 && lastGenerationText && (
+        <Alert severity="info" sx={{ mt: 2 }}>
+          {lastGenerationText}
+        </Alert>
+      )}
     </Paper>
   );
 };
@@ -1194,11 +1283,13 @@ const theme = createTheme({
 function App() {
   const [prompt, setPrompt] = useState('');
   const [images, setImages] = useState<string[]>([]);
-  const [lastGeneratedImage, setLastGeneratedImage] = useState<string>('');
+  const [lastGeneratedImages, setLastGeneratedImages] = useState<string[]>([]);
+  const [lastGenerationText, setLastGenerationText] = useState<string>('');
 
   // 处理图片生成完成
-  const handleGenerate = (result: string) => {
-    setLastGeneratedImage(result);
+  const handleGenerate = (result: GenerationResult) => {
+    setLastGeneratedImages(result.images);
+    setLastGenerationText(result.text ?? '');
   };
 
 
@@ -1235,7 +1326,8 @@ function App() {
             onPromptChange={setPrompt}
             onGenerate={handleGenerate}
             onImagesChange={setImages}
-            lastGeneratedImage={lastGeneratedImage}
+            lastGeneratedImages={lastGeneratedImages}
+            lastGenerationText={lastGenerationText || undefined}
           />
         </Box>
       </Container>

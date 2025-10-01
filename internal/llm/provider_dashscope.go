@@ -74,18 +74,19 @@ func (d *Dashscope) SupportsModel(modelID string) bool {
 	return ok
 }
 
-func (d *Dashscope) GenerateImages(ctx context.Context, request entity.GenerateImageRequest) (string, string, error) {
+func (d *Dashscope) GenerateImages(ctx context.Context, request entity.GenerateImageRequest) ([]string, string, error) {
 
 	logrus.WithFields(logrus.Fields{
 
 		"prompt_preview":      request.Prompt,
 		"reference_image_cnt": len(request.Images),
+		"size":                strings.TrimSpace(request.Size),
 	}).Info("llm_generate_images_start")
 
 	if !d.SupportsModel(request.Model) {
 		err := fmt.Errorf("dashscope model %q is not supported", request.Model)
 		logrus.WithError(err).Warn("llm_generate_images_invalid_model")
-		return "", "", err
+		return nil, "", err
 	}
 
 	return GenerateImagesByDashscopeProtocol(ctx, d.apiKey, request.Model, request.Prompt, request.Images)

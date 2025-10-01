@@ -5,7 +5,13 @@ export interface GenerationRequest {
   images: string[];
   provider: AIProvider;
   model: string;
+  size?: string;
   timeoutMs?: number;
+}
+
+export interface GenerationResult {
+  images: string[];
+  text?: string;
 }
 
 export interface AIProvider {
@@ -18,7 +24,7 @@ export interface AIModel {
   id: string;
   name: string;
   description?: string;
+  image_sizes?: string[];
 }
-
 
 

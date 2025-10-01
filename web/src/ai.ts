@@ -1,4 +1,4 @@
-import type { AIProvider, GenerationRequest } from './types';
+import type { AIProvider, GenerationRequest, GenerationResult } from './types';
 
 
 const LLM_GENERATE_ENDPOINT = '/api/llm';
@@ -7,6 +7,7 @@ const DEFAULT_HTTP_TIMEOUT_MS = 120_000;
 
 interface BackendResponse {
   image?: string;
+  images?: string[];
   text?: string;
   error?: string;
 }
@@ -53,7 +54,7 @@ const requestWithTimeout = async (
   }
 };
 
-export const generateImage = async (request: GenerationRequest): Promise<string> => {
+export const generateImage = async (request: GenerationRequest): Promise<GenerationResult> => {
   const prompt = request.prompt.trim();
   if (!prompt) {
     throw new Error('请输入图片描述');
@@ -63,12 +64,16 @@ export const generateImage = async (request: GenerationRequest): Promise<string>
     throw new Error('请选择服务商');
   }
 
-  const payload = {
+  const payload: Record<string, unknown> = {
     prompt,
     images: sanitizeImages(request.images),
     provider: request.provider.id,
     model: request.model,
   };
+
+  if (typeof request.size === 'string' && request.size.trim()) {
+    payload.size = request.size.trim();
+  }
 
   let response: Response;
   try {
@@ -103,15 +108,34 @@ export const generateImage = async (request: GenerationRequest): Promise<string>
     throw new Error(body.error);
   }
 
-  if (body?.image) {
-    return body.image;
+  const imageSet = new Set<string>();
+
+  if (Array.isArray(body?.images)) {
+    sanitizeImages(body.images).forEach((item) => {
+      if (!imageSet.has(item)) {
+        imageSet.add(item);
+      }
+    });
   }
 
-  if (body?.text) {
-    return `data:text/plain;charset=utf-8,${encodeURIComponent(body.text)}`;
+  if (typeof body?.image === 'string') {
+    const trimmed = body.image.trim();
+    if (trimmed) {
+      imageSet.add(trimmed);
+    }
   }
 
-  throw new Error('后端未返回有效的图片数据');
+  const images = Array.from(imageSet);
+
+  if (images.length === 0 && body?.text) {
+    return { images, text: body.text };
+  }
+
+  if (images.length === 0) {
+    throw new Error('后端未返回有效的图片数据');
+  }
+
+  return { images, text: body?.text };
 };
 
 export const fetchProviders = async (): Promise<AIProvider[]> => {

@@ -61,14 +61,14 @@ type dashscopeChoiceMsg struct {
 	Content []dashscopeContent `json:"content"`
 }
 
-func GenerateImagesByDashscopeProtocol(ctx context.Context, apiKey, model, prompt string, base64Images []string) (imageDataURL, assistantText string, err error) {
+func GenerateImagesByDashscopeProtocol(ctx context.Context, apiKey, model, prompt string, base64Images []string) (imageDataURLs []string, assistantText string, err error) {
 	if strings.TrimSpace(apiKey) == "" {
-		return "", "", errors.New("api key missing")
+		return nil, "", errors.New("api key missing")
 	}
 
 	trimmedPrompt := strings.TrimSpace(prompt)
 	if trimmedPrompt == "" {
-		return "", "", errors.New("prompt is empty")
+		return nil, "", errors.New("prompt is empty")
 	}
 
 	logrus.WithFields(logrus.Fields{
@@ -107,25 +107,25 @@ func GenerateImagesByDashscopeProtocol(ctx context.Context, apiKey, model, promp
 
 	payload, err := json.Marshal(reqBody)
 	if err != nil {
-		return "", "", fmt.Errorf("dashscope marshal request: %w", err)
+		return nil, "", fmt.Errorf("dashscope marshal request: %w", err)
 	}
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, dashscopeGenerationURL, bytes.NewReader(payload))
 	if err != nil {
-		return "", "", fmt.Errorf("dashscope create request: %w", err)
+		return nil, "", fmt.Errorf("dashscope create request: %w", err)
 	}
 	req.Header.Set("Authorization", "Bearer "+apiKey)
 	req.Header.Set("Content-Type", "application/json")
 
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
-		return "", "", fmt.Errorf("dashscope request: %w", err)
+		return nil, "", fmt.Errorf("dashscope request: %w", err)
 	}
 	defer resp.Body.Close()
 
 	buf := new(bytes.Buffer)
 	if _, err := buf.ReadFrom(resp.Body); err != nil {
-		return "", "", fmt.Errorf("dashscope read response: %w", err)
+		return nil, "", fmt.Errorf("dashscope read response: %w", err)
 	}
 
 	if resp.StatusCode != http.StatusOK {
@@ -133,12 +133,12 @@ func GenerateImagesByDashscopeProtocol(ctx context.Context, apiKey, model, promp
 			"status": resp.StatusCode,
 			"body":   buf.String(),
 		}).Error("dashscope generate images http error")
-		return "", "", fmt.Errorf("dashscope http %d: %s", resp.StatusCode, buf.String())
+		return nil, "", fmt.Errorf("dashscope http %d: %s", resp.StatusCode, buf.String())
 	}
 
 	var result dashscopeResponse
 	if err := json.Unmarshal(buf.Bytes(), &result); err != nil {
-		return "", "", fmt.Errorf("dashscope unmarshal response: %w", err)
+		return nil, "", fmt.Errorf("dashscope unmarshal response: %w", err)
 	}
 
 	if result.Code != "" && strings.ToLower(result.Code) != "success" {
@@ -146,17 +146,21 @@ func GenerateImagesByDashscopeProtocol(ctx context.Context, apiKey, model, promp
 		if msg == "" {
 			msg = "dashscope error"
 		}
-		return "", "", fmt.Errorf("dashscope api error: %s", msg)
+		return nil, "", fmt.Errorf("dashscope api error: %s", msg)
 	}
 
 	if len(result.Output.Choices) == 0 {
-		return "", "", errors.New("dashscope no choices in response")
+		return nil, "", errors.New("dashscope no choices in response")
 	}
+	seen := make(map[string]struct{})
 
 	for _, choice := range result.Output.Choices {
 		for _, content := range choice.Message.Content {
-			if imageDataURL == "" && strings.TrimSpace(content.Image) != "" {
-				imageDataURL = strings.TrimSpace(content.Image)
+			if url := strings.TrimSpace(content.Image); url != "" {
+				if _, exists := seen[url]; !exists {
+					seen[url] = struct{}{}
+					imageDataURLs = append(imageDataURLs, url)
+				}
 			}
 			if text := strings.TrimSpace(content.Text); text != "" {
 				if assistantText != "" {
@@ -167,9 +171,9 @@ func GenerateImagesByDashscopeProtocol(ctx context.Context, apiKey, model, promp
 		}
 	}
 
-	if strings.TrimSpace(imageDataURL) == "" {
-		return "", assistantText, errors.New("dashscope no image found in response")
+	if len(imageDataURLs) == 0 {
+		return nil, assistantText, errors.New("dashscope no image found in response")
 	}
 
-	return imageDataURL, assistantText, nil
+	return imageDataURLs, assistantText, nil
 }

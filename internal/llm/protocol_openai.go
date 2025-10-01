@@ -71,9 +71,9 @@ func makeUserMessage(prompt string, refs []string) orMessage {
 	return orMessage{Role: "user", Content: parts}
 }
 
-func GenerateImagesByOpenaiProtocol(ctx context.Context, apiKey, baseURL, model, prompt string, refs []string) (imageDataURL string, assistantText string, err error) {
+func GenerateImagesByOpenaiProtocol(ctx context.Context, apiKey, baseURL, model, prompt string, refs []string) (imageDataURLs []string, assistantText string, err error) {
 	if strings.TrimSpace(apiKey) == "" {
-		return "", "", errors.New("api key missing")
+		return nil, "", errors.New("api key missing")
 	}
 
 	logrus.WithFields(logrus.Fields{
@@ -99,7 +99,7 @@ func GenerateImagesByOpenaiProtocol(ctx context.Context, apiKey, baseURL, model,
 	// SSE 不要超短超时
 	resp, err := httpCli.Do(req)
 	if err != nil {
-		return "", "", err
+		return nil, "", err
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != 200 {
@@ -111,7 +111,7 @@ func GenerateImagesByOpenaiProtocol(ctx context.Context, apiKey, baseURL, model,
 			"status":  resp.StatusCode,
 			"body":    buf.String(),
 		}).Error("openrouter generate images failed")
-		return "", "", fmt.Errorf("openrouter http %d: %s", resp.StatusCode, buf.String())
+		return nil, "", fmt.Errorf("openrouter http %d: %s", resp.StatusCode, buf.String())
 	}
 	// 处理 SSE 流式响应
 	logrus.Info("openrouter stream response started")
@@ -120,6 +120,7 @@ func GenerateImagesByOpenaiProtocol(ctx context.Context, apiKey, baseURL, model,
 	sc.Buffer(make([]byte, 0, 64*1024), 10*1024*1024)
 
 	nativeFinishReasonText := ""
+	seenImages := make(map[string]struct{})
 	for sc.Scan() {
 		line := sc.Text()
 		logrus.WithFields(logrus.Fields{"data": line}).Info("stream chunk")
@@ -161,9 +162,11 @@ func GenerateImagesByOpenaiProtocol(ctx context.Context, apiKey, baseURL, model,
 					if url == "" {
 						continue
 					}
-					if imageDataURL == "" {
-						imageDataURL = url
+					if _, exists := seenImages[url]; exists {
+						continue
 					}
+					seenImages[url] = struct{}{}
+					imageDataURLs = append(imageDataURLs, url)
 					saveImageAsync(url)
 				}
 			}
@@ -172,15 +175,15 @@ func GenerateImagesByOpenaiProtocol(ctx context.Context, apiKey, baseURL, model,
 	}
 	logrus.Info("openrouter stream response ended")
 	if err := sc.Err(); err != nil {
-		return "", "", err
+		return nil, "", err
 	}
-	if strings.TrimSpace(imageDataURL) == "" {
+	if len(imageDataURLs) == 0 {
 		if len(nativeFinishReasonText) > 0 {
-			return "", "", errors.New(nativeFinishReasonText)
+			return nil, "", errors.New(nativeFinishReasonText)
 		}
-		return "", "", errors.New("no image in streamed response")
+		return nil, "", errors.New("no image in streamed response")
 	}
-	return imageDataURL, strings.TrimSpace(assistantText), nil
+	return imageDataURLs, strings.TrimSpace(assistantText), nil
 }
 
 const openaiImageSaveDir = "clothing-openai-images"

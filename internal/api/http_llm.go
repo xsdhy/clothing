@@ -27,6 +27,8 @@ func (h *HTTPHandler) GenerateImage(c *gin.Context) {
 		return
 	}
 
+	request.Size = strings.TrimSpace(request.Size)
+
 	providerID := strings.TrimSpace(request.Provider)
 	provider, ok := h.providerMap[providerID]
 	if !ok {
@@ -46,7 +48,7 @@ func (h *HTTPHandler) GenerateImage(c *gin.Context) {
 	}
 
 	ctx := c.Request.Context()
-	result, text, err := provider.GenerateImages(ctx, request)
+	images, text, err := provider.GenerateImages(ctx, request)
 
 	if err != nil {
 		logrus.WithError(err).WithFields(logrus.Fields{
@@ -57,6 +59,12 @@ func (h *HTTPHandler) GenerateImage(c *gin.Context) {
 		return
 	}
 
-	response := entity.GenerateImageResponse{Image: result, Text: text}
+	response := entity.GenerateImageResponse{
+		Text: text,
+	}
+	if len(images) > 0 {
+		response.Image = images[0]
+		response.Images = images
+	}
 	c.JSON(http.StatusOK, response)
 }

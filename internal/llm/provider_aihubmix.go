@@ -87,10 +87,11 @@ func (o *AiHubMix) SupportsModel(modelID string) bool {
 	return ok
 }
 
-func (o *AiHubMix) GenerateImages(ctx context.Context, request entity.GenerateImageRequest) (string, string, error) {
+func (o *AiHubMix) GenerateImages(ctx context.Context, request entity.GenerateImageRequest) ([]string, string, error) {
 	logrus.WithFields(logrus.Fields{
 		"prompt_preview":      request.Prompt,
 		"reference_image_cnt": len(request.Images),
+		"size":                strings.TrimSpace(request.Size),
 	}).Info("llm_generate_images_start")
 
 	return GenerateImagesByOpenaiProtocol(ctx, o.apiKey, "https://aihubmix.com/v1/chat/completions", request.Model, request.Prompt, request.Images)
