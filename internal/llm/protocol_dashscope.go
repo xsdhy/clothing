@@ -9,6 +9,8 @@ import (
 	"net/http"
 	"strings"
 
+	"clothing/internal/utils"
+
 	"github.com/sirupsen/logrus"
 )
 
@@ -156,10 +158,19 @@ func GenerateImagesByDashscopeProtocol(ctx context.Context, apiKey, model, promp
 
 	for _, choice := range result.Output.Choices {
 		for _, content := range choice.Message.Content {
-			if url := strings.TrimSpace(content.Image); url != "" {
-				if _, exists := seen[url]; !exists {
-					seen[url] = struct{}{}
-					imageDataURLs = append(imageDataURLs, url)
+			if raw := strings.TrimSpace(content.Image); raw != "" {
+				if _, exists := seen[raw]; !exists {
+					seen[raw] = struct{}{}
+					imageDataURLs = append(imageDataURLs, raw)
+					imageURL := ""
+					base64Payload := ""
+					switch {
+					case strings.HasPrefix(raw, "http://"), strings.HasPrefix(raw, "https://"), strings.HasPrefix(raw, "data:"):
+						imageURL = raw
+					default:
+						base64Payload = raw
+					}
+					utils.SaveImageAsync("dashscope", imageURL, base64Payload)
 				}
 			}
 			if text := strings.TrimSpace(content.Text); text != "" {

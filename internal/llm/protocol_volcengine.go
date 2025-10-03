@@ -7,6 +7,8 @@ import (
 	"io"
 	"strings"
 
+	"clothing/internal/utils"
+
 	"github.com/sirupsen/logrus"
 	"github.com/volcengine/volcengine-go-sdk/service/arkruntime"
 	volcModel "github.com/volcengine/volcengine-go-sdk/service/arkruntime/model"
@@ -64,6 +66,7 @@ func GenerateImagesByVolcengineProtocol(ctx context.Context, apiKey, model, prom
 				url := strings.TrimSpace(*recv.Url)
 				if url != "" {
 					imageDataURLs = append(imageDataURLs, url)
+					utils.SaveImageAsync("volcengine", url, "")
 					logrus.WithFields(logrus.Fields{
 						"url":  recv.Url,
 						"site": recv.Size,
