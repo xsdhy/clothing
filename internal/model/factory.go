@@ -86,7 +86,7 @@ func (f *RepositoryFactory) createMySQLRepository(cfg *config.Config) (Repositor
 func (f *RepositoryFactory) createSQLiteRepository(cfg *config.Config) (Repository, error) {
 	filePath := cfg.DBPath
 	if filePath == "" {
-		filePath = "clothing.db" // Default SQLite database file
+		filePath = "datas/clothing.db" // Default SQLite database file
 	}
 
 	db, err := f.openGormDB(sqlite.Open(filePath))
