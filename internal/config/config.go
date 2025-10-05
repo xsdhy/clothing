@@ -18,7 +18,7 @@ type Config struct {
 	DBPort     string `env:"DBPort" envDefault:"3306"`
 
 	StorageType          string `env:"STORAGE_TYPE" envDefault:"local"`
-	StorageLocalDir      string `env:"STORAGE_LOCAL_DIR" envDefault:"data/images"`
+	StorageLocalDir      string `env:"STORAGE_LOCAL_DIR" envDefault:"images"`
 	StoragePublicBaseURL string `env:"STORAGE_PUBLIC_BASE_URL" envDefault:"/files"`
 
 	OpenRouterAPIKey string `env:"OPENROUTER_API_KEY" envDefault:""`

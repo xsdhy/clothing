@@ -46,11 +46,6 @@ func (s *LocalStorage) Save(ctx context.Context, data []byte, opts SaveOptions) 
 	default:
 	}
 
-	provider := sanitizePathSegment(opts.ProviderID)
-	if provider == "" {
-		provider = "generic"
-	}
-
 	category := sanitizePathSegment(opts.Category)
 	if category == "" {
 		category = "misc"
@@ -63,7 +58,7 @@ func (s *LocalStorage) Save(ctx context.Context, data []byte, opts SaveOptions) 
 
 	now := time.Now().UTC()
 	datedir := fmt.Sprintf("%04d/%02d/%02d", now.Year(), now.Month(), now.Day())
-	relativeDir := path.Join(provider, category, datedir)
+	relativeDir := path.Join(category, datedir)
 	filename := fmt.Sprintf("%d.%s", now.UnixNano(), ext)
 	relativePath := path.Join(relativeDir, filename)
 

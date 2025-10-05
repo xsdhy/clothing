@@ -355,7 +355,6 @@ func (f *FalAI) extractImagesAndText(envelope *falGenerationEnvelope) ([]string,
 			}
 			seen[url] = struct{}{}
 			images = append(images, url)
-			utils.SaveImageAsync("fal.ai", url, "")
 		case base64Payload != "":
 			dataURL := base64Payload
 			if !strings.HasPrefix(base64Payload, "data:") {
@@ -366,7 +365,6 @@ func (f *FalAI) extractImagesAndText(envelope *falGenerationEnvelope) ([]string,
 			}
 			seen[dataURL] = struct{}{}
 			images = append(images, dataURL)
-			utils.SaveImageAsync("fal.ai", "", base64Payload)
 		}
 	}
 

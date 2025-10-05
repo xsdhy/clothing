@@ -12,8 +12,6 @@ import (
 	"fmt"
 	"net/http"
 
-	"clothing/internal/utils"
-
 	"github.com/sirupsen/logrus"
 )
 
@@ -161,7 +159,6 @@ func GenerateImagesByOpenaiProtocol(ctx context.Context, apiKey, baseURL, model,
 					}
 					seenImages[url] = struct{}{}
 					imageDataURLs = append(imageDataURLs, url)
-					utils.SaveImageAsync("openai", url, "")
 				}
 			}
 		}

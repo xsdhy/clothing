@@ -13,14 +13,13 @@ const (
 
 // SaveOptions controls how a file should be persisted by the storage backend.
 //
-// ProviderID and Category are used to organise files on disk, while Extension
+// Category are used to organise files on disk, while Extension
 // hints the preferred file extension (without the leading dot).
 // When Extension is empty the storage implementation should attempt to guess a
 // suitable extension.
 type SaveOptions struct {
-	ProviderID string
-	Category   string
-	Extension  string
+	Category  string
+	Extension string
 }
 
 // Storage is an abstraction that persists binary blobs and returns a storage

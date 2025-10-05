@@ -84,7 +84,7 @@ func (h *HTTPHandler) GenerateImage(c *gin.Context) {
 		var storageIssues []string
 
 		if len(request.Images) > 0 {
-			inputPaths, err := h.saveImagesToStorage(providerID, "inputs", request.Images)
+			inputPaths, err := h.saveImagesToStorage("inputs", request.Images)
 			if len(inputPaths) > 0 {
 				record.InputImages = entity.StringArray(inputPaths)
 			}
@@ -120,7 +120,7 @@ func (h *HTTPHandler) GenerateImage(c *gin.Context) {
 		record.OutputText = text
 
 		if len(images) > 0 {
-			outputPaths, err := h.saveImagesToStorage(providerID, "outputs", images)
+			outputPaths, err := h.saveImagesToStorage("outputs", images)
 			if len(outputPaths) > 0 {
 				record.OutputImages = entity.StringArray(outputPaths)
 			}
@@ -233,7 +233,7 @@ func (h *HTTPHandler) ListUsageRecords(c *gin.Context) {
 	c.JSON(http.StatusOK, entity.UsageRecordListResponse{Records: items, Meta: meta})
 }
 
-func (h *HTTPHandler) saveImagesToStorage(providerID, category string, payloads []string) ([]string, error) {
+func (h *HTTPHandler) saveImagesToStorage(category string, payloads []string) ([]string, error) {
 	if h.storage == nil || len(payloads) == 0 {
 		return nil, nil
 	}
@@ -258,7 +258,7 @@ func (h *HTTPHandler) saveImagesToStorage(providerID, category string, payloads 
 			continue
 		}
 
-		relPath, err := h.storage.Save(ctx, data, storage.SaveOptions{ProviderID: providerID, Category: category, Extension: ext})
+		relPath, err := h.storage.Save(ctx, data, storage.SaveOptions{Category: category, Extension: ext})
 		if err != nil {
 			errs = append(errs, fmt.Sprintf("%d: %v", idx, err))
 			continue

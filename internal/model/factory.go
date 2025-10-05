@@ -6,8 +6,6 @@ import (
 	"clothing/internal/model/sql"
 	"fmt"
 	"log"
-	"os"
-
 	"time"
 
 	"gorm.io/driver/mysql"
@@ -88,7 +86,7 @@ func (f *RepositoryFactory) createMySQLRepository(cfg *config.Config) (Repositor
 func (f *RepositoryFactory) createSQLiteRepository(cfg *config.Config) (Repository, error) {
 	filePath := cfg.DBPath
 	if filePath == "" {
-		filePath = "arke-api.db" // Default SQLite database file
+		filePath = "clothing.db" // Default SQLite database file
 	}
 
 	db, err := f.openGormDB(sqlite.Open(filePath))
@@ -164,13 +162,7 @@ func (f *RepositoryFactory) openGormDB(dialector gorm.Dialector) (*gorm.DB, erro
 
 // migrateSchema migrates the database schema
 func (f *RepositoryFactory) migrateSchema(db *gorm.DB) error {
-	// 读取环境变量，如果mode是PROD则不进行迁移
-	mode := os.Getenv("MODE")
-	if mode == "DEVM" {
-		return db.AutoMigrate(
-			&entity.DbDemo{},
-			&entity.DbUsageRecord{},
-		)
-	}
-	return nil
+	return db.AutoMigrate(
+		&entity.DbUsageRecord{},
+	)
 }
