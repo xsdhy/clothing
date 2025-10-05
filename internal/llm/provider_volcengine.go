@@ -29,7 +29,11 @@ func NewVolcengine(cfg config.Config) (*Volcengine, error) {
 			ID:          "doubao-seedream-4-0-250828",
 			Name:        "Doubao Seedream 4.0",
 			Description: "火山引擎图像生成模型",
-			ImageSizes:  []string{"1K", "2K", "4K"},
+			Inputs: entity.Inputs{
+				Modalities:     []entity.Modality{entity.ModText, entity.ModImage},
+				MaxImages:      9,
+				SupportedSizes: []string{"1K", "2K", "4K"},
+			},
 		},
 	}
 
@@ -90,13 +94,13 @@ func (v *Volcengine) GenerateImages(ctx context.Context, request entity.Generate
 	requestedSize := strings.TrimSpace(request.Size)
 	model, ok := v.modelByID[request.Model]
 	if requestedSize != "" {
-		if !ok || len(model.ImageSizes) == 0 {
+		if !ok || len(model.Inputs.SupportedSizes) == 0 {
 			err := fmt.Errorf("volcengine model %q does not allow custom size", request.Model)
 			logrus.WithError(err).Warn("llm_generate_images_invalid_size")
 			return nil, "", err
 		}
 		valid := false
-		for _, allowed := range model.ImageSizes {
+		for _, allowed := range model.Inputs.SupportedSizes {
 			if strings.EqualFold(allowed, requestedSize) {
 				valid = true
 				break

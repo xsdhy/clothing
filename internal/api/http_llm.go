@@ -84,10 +84,7 @@ func (h *HTTPHandler) GenerateImage(c *gin.Context) {
 		response := entity.GenerateImageResponse{
 			Text: text,
 		}
-		if len(images) > 0 {
-			response.Image = images[0]
-			response.Images = images
-		}
+		response.Images = images
 
 		messages <- sseMessage{event: "result", data: response}
 	}()

@@ -52,13 +52,13 @@ func NewFalAI(cfg config.Config) (*FalAI, error) {
 			ID:          "fal-ai/hunyuan-image/v3/text-to-image",
 			Name:        "Hunyuan Image v3",
 			Description: "Tencent Hunyuan 文生图",
-			ImageSizes:  []string{"1024x1024", "1280x720", "720x1280"},
+			Price:       "$0.1",
 		},
 		{
 			ID:          "fal-ai/qwen-image-edit/image-to-image",
 			Name:        "Qwen Image Edit",
 			Description: "Qwen 图像编辑",
-			ImageSizes:  []string{"1024x1024"},
+			Price:       "$0.03",
 		},
 	}
 
