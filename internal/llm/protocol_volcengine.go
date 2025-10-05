@@ -75,13 +75,15 @@ func GenerateImagesByVolcengineProtocol(ctx context.Context, apiKey, model, prom
 			}
 		}
 		if recv.Type == "image_generation.completed" {
-			if recv.Error == nil {
-				fmt.Printf("recv.Usage: %v", *recv.Usage)
-			}
+			logrus.WithFields(logrus.Fields{
+				"recvType": recv.Type,
+				"recvErr":  recv.Error,
+			}).Info("image generation complete")
+			break
 		}
 	}
 	if len(imageDataURLs) == 0 {
-		return nil, assistantText, errors.New("volcengine no image in streamed response")
+		return nil, assistantText, errors.New(assistantText)
 	}
 	return imageDataURLs, assistantText, nil
 }

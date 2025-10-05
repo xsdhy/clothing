@@ -8,6 +8,15 @@ import (
 type Config struct {
 	HTTPPort string `env:"HTTP_PORT" envDefault:"8080"`
 
+	DBType     string `env:"DBType" envDefault:"sqlite"`
+	DSNURL     string `env:"DSN_URL" envDefault:""`
+	DBUser     string `env:"DBUser" envDefault:""`
+	DBPassword string `env:"DBPassword" envDefault:""`
+	DBAddr     string `env:"DBAddr" envDefault:""`
+	DBName     string `env:"DBName" envDefault:"monitor"`
+	DBPath     string `env:"DBPath" envDefault:""`
+	DBPort     string `env:"DBPort" envDefault:"3306"`
+
 	OpenRouterAPIKey string `env:"OPENROUTER_API_KEY" envDefault:""`
 	GeminiAPIKey     string `env:"GEMINI_API_KEY" envDefault:""`
 	AiHubMixAPIKey   string `env:"AIHUBMIX_API_KEY" envDefault:""`

@@ -6,12 +6,22 @@ export interface GenerationRequest {
   provider: AIProvider;
   model: string;
   size?: string;
-  timeoutMs?: number;
 }
 
 export interface GenerationResult {
   images: string[];
   text?: string;
+}
+
+export interface BackendResponse {
+    images?: string[];
+    text?: string;
+    error?: string;
+}
+
+export interface ProvidersResponse {
+    providers?: AIProvider[];
+    error?: string;
 }
 
 export interface AIProvider {
@@ -24,7 +34,15 @@ export interface AIModel {
   id: string;
   name: string;
   description?: string;
-  image_sizes?: string[];
+
+  inputs?: AIModelInput;
+}
+
+
+export interface AIModelInput {
+    modalities?: string[]; // 支持的模态枚举，例: ["text"], ["image"], ["text","image"]
+    max_images: number;// 支持的最大输入图片数
+    supported_sizes?: string[];// 支持的图像尺寸，留空表示不限预设
 }
 
 

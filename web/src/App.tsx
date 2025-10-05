@@ -909,7 +909,7 @@ const ImageGenerator: React.FC<ImageGeneratorProps> = ({
   const [resultViewerIndex, setResultViewerIndex] = useState(0);
 
   useEffect(() => {
-    const sizes = selectedModel?.image_sizes ?? [];
+    const sizes = selectedModel?.inputs?.supported_sizes ?? [];
     if (sizes.length === 0) {
       setSelectedSize('');
       return;
@@ -977,7 +977,7 @@ const ImageGenerator: React.FC<ImageGeneratorProps> = ({
         images,
         provider: selectedProvider,
         model: selectedModel.id,
-        size: selectedModel?.image_sizes?.length ? selectedSize : undefined,
+        size: selectedModel?.inputs?.supported_sizes?.length ? selectedSize : undefined,
       };
 
       const result = await generateImage(request);
@@ -1061,7 +1061,7 @@ const ImageGenerator: React.FC<ImageGeneratorProps> = ({
                 }
                 setSelectedProvider(provider);
                 setSelectedModel(provider.models[0] ?? null);
-                setSelectedSize(provider.models[0]?.image_sizes?.[0] ?? '');
+                setSelectedSize(provider.models[0]?.inputs?.supported_sizes?.[0] ?? '');
               }}
             >
               {providersLoading && providers.length === 0 && (
@@ -1096,7 +1096,7 @@ const ImageGenerator: React.FC<ImageGeneratorProps> = ({
                   return;
                 }
                 setSelectedModel(model);
-                setSelectedSize(model.image_sizes?.[0] ?? '');
+                setSelectedSize(model.inputs?.supported_sizes?.[0] ?? '');
               }}
             >
               {(selectedProvider?.models ?? []).map((model) => (
@@ -1113,7 +1113,7 @@ const ImageGenerator: React.FC<ImageGeneratorProps> = ({
               ))}
             </Select>
           </FormControl>
-          {selectedModel?.image_sizes && selectedModel.image_sizes.length > 0 && (
+          {selectedModel?.inputs?.supported_sizes && selectedModel.inputs.supported_sizes.length > 0 && (
             <FormControl fullWidth size="small">
               <InputLabel>图片尺寸</InputLabel>
               <Select
@@ -1122,7 +1122,7 @@ const ImageGenerator: React.FC<ImageGeneratorProps> = ({
                 disabled={isGenerating}
                 onChange={(e) => setSelectedSize(e.target.value)}
               >
-                {selectedModel.image_sizes.map((sizeOption) => (
+                {selectedModel.inputs.supported_sizes.map((sizeOption) => (
                   <MenuItem key={sizeOption} value={sizeOption}>
                     {sizeOption}
                   </MenuItem>

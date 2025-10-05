@@ -80,16 +80,20 @@ func (h *HTTPHandler) GenerateImage(c *gin.Context) {
 			messages <- sseMessage{event: "error", data: gin.H{"error": err.Error()}}
 			return
 		}
+		logrus.WithFields(logrus.Fields{
+			"provider": providerID,
+			"model":    request.Model,
+		}).Info("generated image")
 
 		response := entity.GenerateImageResponse{
-			Text: text,
+			Text:   text,
+			Images: images,
 		}
-		response.Images = images
 
 		messages <- sseMessage{event: "result", data: response}
 	}()
 
-	heartbeatTicker := time.NewTicker(15 * time.Second)
+	heartbeatTicker := time.NewTicker(5 * time.Second)
 	defer heartbeatTicker.Stop()
 
 	c.Stream(func(w io.Writer) bool {
@@ -107,6 +111,10 @@ func (h *HTTPHandler) GenerateImage(c *gin.Context) {
 			if !ok {
 				return false
 			}
+			logrus.WithFields(logrus.Fields{
+				"event": msg.event,
+				"data":  msg.data,
+			}).Info("generate image request received")
 			c.SSEvent(msg.event, msg.data)
 			if msg.event == "result" || msg.event == "error" {
 				return false

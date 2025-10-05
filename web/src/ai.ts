@@ -1,21 +1,11 @@
-import type { AIProvider, GenerationRequest, GenerationResult } from './types';
+import type { AIProvider, GenerationRequest, GenerationResult,BackendResponse,ProvidersResponse } from './types';
 
 
 const LLM_GENERATE_ENDPOINT = '/api/llm';
 const LLM_PROVIDERS_ENDPOINT = `/api/llm/providers`;
 const DEFAULT_HTTP_TIMEOUT_MS = 120_000;
 
-interface BackendResponse {
-  image?: string;
-  images?: string[];
-  text?: string;
-  error?: string;
-}
 
-interface ProvidersResponse {
-  providers?: AIProvider[];
-  error?: string;
-}
 
 const sanitizeImages = (images: string[] = []): string[] =>
   images
@@ -117,7 +107,7 @@ export const generateImage = async (request: GenerationRequest): Promise<Generat
     payload.size = request.size.trim();
   }
 
-  const timeoutMs = request.timeoutMs ?? DEFAULT_HTTP_TIMEOUT_MS;
+  const timeoutMs = DEFAULT_HTTP_TIMEOUT_MS;
   const controller = new AbortController();
   let timeoutId: number | undefined;
   let timedOut = false;
@@ -199,12 +189,7 @@ export const generateImage = async (request: GenerationRequest): Promise<Generat
       });
     }
 
-    if (typeof body?.image === 'string') {
-      const trimmed = body.image.trim();
-      if (trimmed) {
-        imageSet.add(trimmed);
-      }
-    }
+
 
     if (imageSet.size === 0 && body?.text) {
       return { images: [], text: body.text };
@@ -337,12 +322,7 @@ export const generateImage = async (request: GenerationRequest): Promise<Generat
     });
   }
 
-  if (typeof backendResponse.image === 'string') {
-    const trimmed = backendResponse.image.trim();
-    if (trimmed) {
-      imageSet.add(trimmed);
-    }
-  }
+
 
   if (imageSet.size === 0 && backendResponse.text) {
     return { images: [], text: backendResponse.text };

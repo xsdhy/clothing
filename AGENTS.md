@@ -10,6 +10,10 @@
 - 前端 出包 时 运行 `npm run build`，随后 在 仓库 根 执行 `make web` 将 HTML 拷贝 入 `cmd/server/web/dist`；`make build` 交叉 编译 Linux/amd64 二进制 到 `./clothing`。
 - `docker build -t clothing:local .` 复现 GitHub Actions 中 的 构建 与 推送 流程。
 
+## 后端数据库说明
+- 通过internal/model/factory.go支持多个数据库
+- 所有操作数据库的方法首先定义到internal/model/repo.go中，然后再去internal/model/sql实现
+
 ## 编码风格与命名约定
 - Go 代码 目标 版本 为 1.24；提交 前 使用 `gofmt` 与 `goimports`；包 名 保持 lower_snake_case，导出 标识符 采用 PascalCase。
 - 控制器 保持 精简，结构化 日志 使用 `logrus.WithFields`，模型 Provider 逻辑 应 聚合 在 `internal/llm`。
