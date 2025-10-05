@@ -17,11 +17,17 @@ func NewGormRepository(db *gorm.DB) *GormRepository {
 }
 
 // calculatePagination calculates pagination metrics
-func (r *GormRepository) calculatePagination(totalCount int64, page, pageSize int) *dto.Meta {
-	meta := &entity.Meta{
-		Total:    totalCount,
-		PageSize: int64(pageSize),
+func (r *GormRepository) calculatePagination(totalCount int64, page, pageSize int) *entity.Meta {
+	if pageSize <= 0 {
+		pageSize = 20
+	}
+	if page <= 0 {
+		page = 1
 	}
 
-	return meta
+	return &entity.Meta{
+		Total:    totalCount,
+		Page:     int64(page),
+		PageSize: int64(pageSize),
+	}
 }

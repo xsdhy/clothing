@@ -45,4 +45,33 @@ export interface AIModelInput {
     supported_sizes?: string[];// 支持的图像尺寸，留空表示不限预设
 }
 
+export interface UsageImage {
+  path: string;
+  url: string;
+}
+
+export interface UsageRecord {
+  id: number;
+  provider_id: string;
+  model_id: string;
+  prompt: string;
+  size?: string;
+  output_text?: string;
+  error_message?: string;
+  created_at: string;
+  input_images: UsageImage[];
+  output_images: UsageImage[];
+}
+
+export interface PaginationMeta {
+  page: number;
+  page_size: number;
+  total: number;
+}
+
+export interface UsageRecordListResponse {
+  records: UsageRecord[];
+  meta: PaginationMeta;
+}
+
 

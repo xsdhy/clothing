@@ -4,25 +4,35 @@ import (
 	"clothing/internal/config"
 	"clothing/internal/entity"
 	"clothing/internal/llm"
+	"clothing/internal/model"
+	"clothing/internal/storage"
 	"strings"
 
 	"github.com/sirupsen/logrus"
 )
 
 type HTTPHandler struct {
-	cfg         config.Config
-	providers   []entity.LlmProvider
-	providerMap map[string]llm.AIService
+	cfg               config.Config
+	providers         []entity.LlmProvider
+	providerMap       map[string]llm.AIService
+	repo              model.Repository
+	storage           storage.Storage
+	storagePublicBase string
 }
 
-func NewHTTPHandler(cfg config.Config) *HTTPHandler {
+func NewHTTPHandler(cfg config.Config, repo model.Repository, store storage.Storage) *HTTPHandler {
 	providers, providerMap := NewProviderBundle(cfg)
 
-	return &HTTPHandler{
-		cfg:         cfg,
-		providers:   providers,
-		providerMap: providerMap,
+	handler := &HTTPHandler{
+		cfg:               cfg,
+		providers:         providers,
+		providerMap:       providerMap,
+		repo:              repo,
+		storage:           store,
+		storagePublicBase: normalisePublicBase(cfg.StoragePublicBaseURL),
 	}
+
+	return handler
 }
 
 func NewProviderBundle(cfg config.Config) ([]entity.LlmProvider, map[string]llm.AIService) {
@@ -78,4 +88,18 @@ func NewProviderBundle(cfg config.Config) ([]entity.LlmProvider, map[string]llm.
 	}
 
 	return providers, providerMap
+}
+
+func normalisePublicBase(value string) string {
+	trimmed := strings.TrimSpace(value)
+	if trimmed == "" {
+		trimmed = "/files"
+	}
+	if strings.HasPrefix(trimmed, "http://") || strings.HasPrefix(trimmed, "https://") {
+		return strings.TrimRight(trimmed, "/")
+	}
+	if !strings.HasPrefix(trimmed, "/") {
+		trimmed = "/" + trimmed
+	}
+	return strings.TrimRight(trimmed, "/")
 }

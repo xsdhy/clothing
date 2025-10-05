@@ -1,5 +1,7 @@
 package entity
 
+import "time"
+
 type GenerateImageRequest struct {
 	Prompt   string   `json:"prompt" binding:"required"`
 	Images   []string `json:"images"`
@@ -41,4 +43,33 @@ type LlmProvider struct {
 	Name        string     `json:"name"`                  //显示名称
 	Description string     `json:"description,omitempty"` //描述
 	Models      []LlmModel `json:"models"`
+}
+
+type UsageRecordQuery struct {
+	BaseParams
+	Provider string `json:"provider" form:"provider" query:"provider"`
+	Model    string `json:"model" form:"model" query:"model"`
+}
+
+type UsageImage struct {
+	Path string `json:"path"`
+	URL  string `json:"url"`
+}
+
+type UsageRecordItem struct {
+	ID           uint         `json:"id"`
+	ProviderID   string       `json:"provider_id"`
+	ModelID      string       `json:"model_id"`
+	Prompt       string       `json:"prompt"`
+	Size         string       `json:"size"`
+	OutputText   string       `json:"output_text"`
+	ErrorMessage string       `json:"error_message"`
+	CreatedAt    time.Time    `json:"created_at"`
+	InputImages  []UsageImage `json:"input_images"`
+	OutputImages []UsageImage `json:"output_images"`
+}
+
+type UsageRecordListResponse struct {
+	Records []UsageRecordItem `json:"records"`
+	Meta    *Meta             `json:"meta"`
 }
