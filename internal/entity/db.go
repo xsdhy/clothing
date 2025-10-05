@@ -1,6 +1,6 @@
 package entity
 
-// 模型表
+// demo表
 type DbDemo struct {
 	ID        uint  `gorm:"primarykey" json:"id"`
 	CreatedAt int64 `json:"created_at"`
