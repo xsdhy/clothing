@@ -13,6 +13,7 @@ import {
   Divider,
   Grid,
   IconButton,
+  Collapse,
   Pagination,
   Stack,
   Tooltip,
@@ -38,6 +39,7 @@ const GenerationHistoryPage: React.FC = () => {
   const [previewImage, setPreviewImage] = useState<{ url: string; alt: string } | null>(null);
   const [retryingRecordId, setRetryingRecordId] = useState<number | null>(null);
   const [preparingOutputAsInput, setPreparingOutputAsInput] = useState<{ recordId: number; index: number } | null>(null);
+  const [expandedRecords, setExpandedRecords] = useState<Record<number, boolean>>({});
   const navigate = useNavigate();
 
   const totalPages = useMemo(() => {
@@ -169,6 +171,13 @@ const GenerationHistoryPage: React.FC = () => {
     [loadImageAsDataUrl, navigate]
   );
 
+  const handleToggleDetails = useCallback((recordId: number) => {
+    setExpandedRecords((prev) => ({
+      ...prev,
+      [recordId]: !prev[recordId],
+    }));
+  }, []);
+
   return (
     <Box sx={{ py: 6 }}>
       <Container maxWidth="lg">
@@ -221,14 +230,12 @@ const GenerationHistoryPage: React.FC = () => {
               <Grid item xs={12} key={`${record.id}-${record.created_at}`}>
                 <Card elevation={1}>
                   <CardHeader
-                    title={
-                      <Typography variant="h6" component="div" sx={{ wordBreak: 'break-word' }}>
-                        {record.prompt || '（无提示词）'}
-                      </Typography>
-                    }
-                    subheader={`创建于 ${createdAt}`}
+                    title={`${record.provider_id}/${record.model_id}`}
                     action={
                       <Stack direction="row" spacing={1} alignItems="center">
+                        <Button variant="text" size="small" onClick={() => handleToggleDetails(record.id)}>
+                          {expandedRecords[record.id] ? '收起详情' : '查看详情'}
+                        </Button>
                         <Button
                           variant="outlined"
                           size="small"
@@ -256,32 +263,11 @@ const GenerationHistoryPage: React.FC = () => {
                   />
                   <CardContent>
                     <Stack spacing={2}>
-                      <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5} alignItems={{ xs: 'flex-start', sm: 'center' }}>
-                        <Chip label={`供应商：${record.provider_id}`} color="primary" variant="outlined" size="small" />
-                        <Chip label={`模型：${record.model_id}`} color="primary" variant="outlined" size="small" />
-                        {record.size && <Chip label={`尺寸：${record.size}`} variant="outlined" size="small" />}
-                      </Stack>
-
-                      {record.output_text && (
-                        <Box>
-                          <Typography variant="subtitle2" color="text.secondary" gutterBottom>
-                            输出文本
-                          </Typography>
-                          <Typography variant="body2" sx={{ whiteSpace: 'pre-wrap' }}>
-                            {record.output_text}
-                          </Typography>
-                        </Box>
-                      )}
-
-                      {hasError && (
-                        <Alert severity="warning">{record.error_message}</Alert>
-                      )}
-
                       {(record.input_images.length > 0 || record.output_images.length > 0) && (
                         <Box>
-                          <Typography variant="subtitle2" color="text.secondary">
-                            图片
-                          </Typography>
+                          {/* <Typography variant="subtitle2" color="text.primary">
+                            输入 / 输出图片
+                          </Typography> */}
                           <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, mt: 1 }}>
                             {record.input_images.map((image, index) => {
                               const alt = `输入图片 ${index + 1}`;
@@ -290,8 +276,8 @@ const GenerationHistoryPage: React.FC = () => {
                                   key={`${record.id}-in-${index}`}
                                   onClick={() => handleImageClick(image.url, alt)}
                                   sx={{
-                                    width: 112,
-                                    height: 112,
+                                    width: 140,
+                                    height: 140,
                                     borderRadius: 1,
                                     overflow: 'hidden',
                                     border: '1px solid',
@@ -308,13 +294,13 @@ const GenerationHistoryPage: React.FC = () => {
                                     sx={{ width: '100%', height: '100%', objectFit: 'cover' }}
                                   />
                                   <Chip
-                                    label={`输入 ${index + 1}`}
+                                    label={`${index + 1}`}
                                     size="small"
                                     color="default"
                                     sx={{
                                       position: 'absolute',
-                                      top: 4,
-                                      left: 4,
+                                      top: 6,
+                                      left: 6,
                                       bgcolor: 'rgba(0,0,0,0.6)',
                                       color: 'common.white',
                                     }}
@@ -329,8 +315,8 @@ const GenerationHistoryPage: React.FC = () => {
                                   key={`${record.id}-out-${index}`}
                                   onClick={() => handleImageClick(image.url, alt)}
                                   sx={{
-                                    width: 112,
-                                    height: 112,
+                                    width: 140,
+                                    height: 140,
                                     borderRadius: 1,
                                     overflow: 'hidden',
                                     border: '1px solid',
@@ -352,8 +338,8 @@ const GenerationHistoryPage: React.FC = () => {
                                     color="primary"
                                     sx={{
                                       position: 'absolute',
-                                      top: 4,
-                                      left: 4,
+                                      top: 6,
+                                      left: 6,
                                     }}
                                   />
                                   <Tooltip title="作为输入图片使用">
@@ -363,8 +349,8 @@ const GenerationHistoryPage: React.FC = () => {
                                         color="primary"
                                         sx={{
                                           position: 'absolute',
-                                          top: 4,
-                                          right: 4,
+                                          top: 6,
+                                          right: 6,
                                           bgcolor: 'rgba(255,255,255,0.85)',
                                           '&:hover': {
                                             bgcolor: 'rgba(255,255,255,0.95)',
@@ -395,11 +381,48 @@ const GenerationHistoryPage: React.FC = () => {
                         </Box>
                       )}
 
-                      <Divider sx={{ my: 1 }} />
+                      <Collapse in={expandedRecords[record.id] ?? false} timeout="auto" unmountOnExit>
+                        <Stack spacing={1.5} sx={{ mt: 1 }}>
+                          <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1} alignItems={{ xs: 'flex-start', sm: 'center' }}>
+                            <Chip label={`供应商：${record.provider_id}`} color="primary" variant="outlined" size="small" />
+                            <Chip label={`模型：${record.model_id}`} color="primary" variant="outlined" size="small" />
+                            {record.size && <Chip label={`尺寸：${record.size}`} variant="outlined" size="small" />}
+                          </Stack>
 
-                      <Typography variant="body2" color="text.secondary">
-                        记录 ID：{record.id}
-                      </Typography>
+                            {record.prompt && (
+                            <Box>
+                              <Typography variant="subtitle2" color="text.secondary" gutterBottom>
+                                输入文本
+                              </Typography>
+                              <Typography variant="body2" sx={{ whiteSpace: 'pre-wrap' }}>
+                                {record.prompt || '（无提示词）'}
+                              </Typography>
+                            </Box>
+                          )}
+
+                          {record.output_text && (
+                            <Box>
+                              <Typography variant="subtitle2" color="text.secondary" gutterBottom>
+                                输出文本
+                              </Typography>
+                              <Typography variant="body2" sx={{ whiteSpace: 'pre-wrap' }}>
+                                {record.output_text}
+                              </Typography>
+                            </Box>
+                          )}
+
+                          {hasError && (
+                            <Alert severity="warning">{record.error_message}</Alert>
+                          )}
+
+                          <Divider sx={{ my: 1 }} />
+
+                          <Typography variant="caption" color="text.secondary">
+                            记录 ID：{record.id} - {createdAt}
+                          </Typography>
+                        </Stack>
+                      </Collapse>
+
                     </Stack>
                   </CardContent>
                 </Card>
