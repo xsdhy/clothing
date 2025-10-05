@@ -1,90 +1,12 @@
-import type { AIProvider, GenerationRequest, GenerationResult,BackendResponse,ProvidersResponse } from './types';
-
+import type { AIProvider, GenerationRequest, GenerationResult, BackendResponse, ProvidersResponse } from './types';
+import type { SSEEventPayload } from './utils/sse';
+import { appendSanitizedImages, sanitizeImages } from './utils/images';
+import { DEFAULT_HTTP_TIMEOUT_MS, requestWithTimeout } from './utils/http';
+import { parseSSEEvent } from './utils/sse';
+import { safeParseJSON } from './utils/json';
 
 const LLM_GENERATE_ENDPOINT = '/api/llm';
 const LLM_PROVIDERS_ENDPOINT = `/api/llm/providers`;
-const DEFAULT_HTTP_TIMEOUT_MS = 120_000;
-
-
-
-const sanitizeImages = (images: string[] = []): string[] =>
-  images
-    .map((image) => (typeof image === 'string' ? image.trim() : ''))
-    .filter((image): image is string => image.length > 0);
-
-interface SSEEventPayload {
-  event: string;
-  data: string;
-}
-
-const parseSSEEvent = (chunk: string): SSEEventPayload | null => {
-  let eventName = 'message';
-  const dataLines: string[] = [];
-
-  const lines = chunk.split(/\r?\n/);
-  for (const rawLine of lines) {
-    const line = rawLine.trimEnd();
-    if (!line) {
-      continue;
-    }
-    if (line.startsWith(':')) {
-      continue;
-    }
-    if (line.startsWith('event:')) {
-      eventName = line.slice(6).trim();
-      continue;
-    }
-    if (line.startsWith('data:')) {
-      const value = line.slice(5);
-      dataLines.push(value.startsWith(' ') ? value.slice(1) : value);
-    }
-  }
-
-  return {
-    event: eventName || 'message',
-    data: dataLines.join('\n'),
-  };
-};
-
-const safeParseJSON = <T>(input: string): T | undefined => {
-  try {
-    return input ? (JSON.parse(input) as T) : undefined;
-  } catch {
-    return undefined;
-  }
-};
-
-const requestWithTimeout = async (
-  input: RequestInfo | URL,
-  init: RequestInit = {},
-  timeout = DEFAULT_HTTP_TIMEOUT_MS,
-): Promise<Response> => {
-  const controller = new AbortController();
-  const { signal, ...rest } = init;
-
-  let timedOut = false;
-  const timeoutId = window.setTimeout(() => {
-    timedOut = true;
-    controller.abort();
-  }, timeout);
-
-  const abortHandler = () => controller.abort();
-  signal?.addEventListener?.('abort', abortHandler);
-
-  try {
-    return await fetch(input, { ...rest, signal: controller.signal });
-  } catch (error) {
-    if (timedOut || (error instanceof DOMException && error.name === 'AbortError')) {
-      const timeoutError = new Error('请求超时，请稍后重试');
-      timeoutError.name = 'TimeoutError';
-      throw timeoutError;
-    }
-    throw error;
-  } finally {
-    clearTimeout(timeoutId);
-    signal?.removeEventListener?.('abort', abortHandler);
-  }
-};
 
 export const generateImage = async (request: GenerationRequest): Promise<GenerationResult> => {
   const prompt = request.prompt.trim();
@@ -181,13 +103,7 @@ export const generateImage = async (request: GenerationRequest): Promise<Generat
 
     const imageSet = new Set<string>();
 
-    if (Array.isArray(body?.images)) {
-      sanitizeImages(body.images).forEach((item) => {
-        if (!imageSet.has(item)) {
-          imageSet.add(item);
-        }
-      });
-    }
+    appendSanitizedImages(imageSet, body?.images);
 
 
 
@@ -314,15 +230,7 @@ export const generateImage = async (request: GenerationRequest): Promise<Generat
 
   const imageSet = new Set<string>();
 
-  if (Array.isArray(backendResponse.images)) {
-    sanitizeImages(backendResponse.images).forEach((item) => {
-      if (!imageSet.has(item)) {
-        imageSet.add(item);
-      }
-    });
-  }
-
-
+  appendSanitizedImages(imageSet, backendResponse.images);
 
   if (imageSet.size === 0 && backendResponse.text) {
     return { images: [], text: backendResponse.text };
