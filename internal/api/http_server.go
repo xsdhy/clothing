@@ -61,6 +61,14 @@ func NewProviderBundle(cfg config.Config) ([]entity.LlmProvider, map[string]llm.
 		logrus.WithError(err).Warn("failed to initialise Dashscope provider")
 	}
 
+	falai, err := llm.NewFalAI(cfg)
+	if err == nil && falai != nil {
+		providerMap[falai.ProviderID()] = falai
+		providers = append(providers, falai.Provider())
+	} else if err != nil && strings.TrimSpace(cfg.FalAPIKey) != "" {
+		logrus.WithError(err).Warn("failed to initialise fal.ai provider")
+	}
+
 	volcengine, err := llm.NewVolcengine(cfg)
 	if err == nil && volcengine != nil {
 		providerMap[volcengine.ProviderID()] = volcengine
