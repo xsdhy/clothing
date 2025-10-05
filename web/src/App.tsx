@@ -318,36 +318,103 @@ const ImageUpload: React.FC<ImageUploadProps> = ({
 
   const processFiles = useCallback((files: File[]) => {
     if (files.length === 0) return;
-    
+
+    const MAX_FILE_SIZE = 5 * 1024 * 1024;
+
     // 检查文件数量限制
     if (images.length + files.length > maxImages) {
       alert(`最多只能上传 ${maxImages} 张图片`);
       return;
     }
 
-    // 转换为base64
-    Promise.all(
-      files.map((file) => {
-        return new Promise<string>((resolve, reject) => {
-          // 检查文件类型
-          if (!file.type.startsWith('image/')) {
-            reject(new Error('请选择图片文件'));
-            return;
-          }
-          
-          // 检查文件大小（限制为5MB）
-          if (file.size > 5 * 1024 * 1024) {
-            reject(new Error('图片文件不能超过 5MB'));
+    const readFileAsDataURL = (file: File): Promise<string> =>
+      new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = (e) => {
+          resolve(e.target?.result as string);
+        };
+        reader.onerror = () => reject(new Error('文件读取失败'));
+        reader.readAsDataURL(file);
+      });
+
+    const getBase64Size = (dataUrl: string): number => {
+      const base64 = dataUrl.split(',')[1] || '';
+      return Math.ceil((base64.length * 3) / 4);
+    };
+
+    const compressImage = async (file: File): Promise<string> => {
+      const dataUrl = await readFileAsDataURL(file);
+      if (file.size <= MAX_FILE_SIZE) {
+        return dataUrl;
+      }
+
+      return new Promise((resolve, reject) => {
+        const img = new Image();
+        img.onload = () => {
+          const canvas = document.createElement('canvas');
+          const ctx = canvas.getContext('2d');
+          if (!ctx) {
+            reject(new Error('浏览器不支持图片压缩'));
             return;
           }
 
-          const reader = new FileReader();
-          reader.onload = (e) => {
-            resolve(e.target?.result as string);
+          let targetWidth = img.width;
+          let targetHeight = img.height;
+          let quality = 0.9;
+          const outputType = file.type === 'image/png' ? 'image/png' : 'image/jpeg';
+          let compressedDataUrl = dataUrl;
+          let attempts = 0;
+
+          const ratio = Math.sqrt(MAX_FILE_SIZE / file.size);
+          if (ratio < 1) {
+            targetWidth = Math.max(Math.floor(img.width * ratio), 1);
+            targetHeight = Math.max(Math.floor(img.height * ratio), 1);
+          }
+
+          const compressLoop = () => {
+            canvas.width = targetWidth;
+            canvas.height = targetHeight;
+            ctx.clearRect(0, 0, targetWidth, targetHeight);
+            ctx.drawImage(img, 0, 0, targetWidth, targetHeight);
+            compressedDataUrl = canvas.toDataURL(outputType, quality);
+
+            const size = getBase64Size(compressedDataUrl);
+            if (size <= MAX_FILE_SIZE) {
+              resolve(compressedDataUrl);
+              return;
+            }
+
+            if (attempts >= 20) {
+              reject(new Error('图片压缩失败，请选择更小的图片'));
+              return;
+            }
+
+            attempts += 1;
+
+            if (outputType === 'image/jpeg' && quality > 0.5) {
+              quality = Math.max(quality - 0.1, 0.5);
+            } else {
+              targetWidth = Math.max(Math.floor(targetWidth * 0.85), 1);
+              targetHeight = Math.max(Math.floor(targetHeight * 0.85), 1);
+            }
+
+            requestAnimationFrame(compressLoop);
           };
-          reader.onerror = () => reject(new Error('文件读取失败'));
-          reader.readAsDataURL(file);
-        });
+
+          compressLoop();
+        };
+        img.onerror = () => reject(new Error('图片加载失败，无法压缩'));
+        img.src = dataUrl;
+      });
+    };
+
+    Promise.all(
+      files.map((file) => {
+        if (!file.type.startsWith('image/')) {
+          return Promise.reject(new Error('请选择图片文件'));
+        }
+
+        return compressImage(file);
       })
     )
       .then((base64Images) => {
@@ -593,7 +660,7 @@ const ImageUpload: React.FC<ImageUploadProps> = ({
               拖拽图片到这里，或点击选择文件
             </Typography>
             <Typography variant="body2" color="text.secondary" gutterBottom>
-              支持 JPG、PNG 格式，单个文件不超过 5MB，最多上传 {maxImages} 张
+              支持 JPG、PNG 格式，单个文件将自动压缩至 5MB 内，最多上传 {maxImages} 张
             </Typography>
             <Typography variant="body2" color="text.secondary" sx={{ fontSize: '0.75rem' }}>
               💡 提示：也可以使用 Ctrl+V (Cmd+V) 粘贴图片
