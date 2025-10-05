@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   Container,
   Typography,
@@ -22,6 +22,7 @@ import {
   AutoAwesome,
   Image as ImageIcon,
 } from '@mui/icons-material';
+import { useLocation } from 'react-router-dom';
 
 import type { GenerationRequest, GenerationResult, AIProvider, AIModel } from '../types';
 import { generateImage, fetchProviders } from '../ai';
@@ -50,6 +51,18 @@ interface ImageGeneratorProps {
   onImagesChange: (images: string[]) => void;
   lastGeneratedImages?: string[];
   lastGenerationText?: string;
+  initialProviderId?: string;
+  initialModelId?: string;
+  initialSize?: string;
+  selectionKey?: string;
+}
+
+interface HistoryPrefillState {
+  prompt?: string;
+  inputImages?: string[];
+  providerId?: string;
+  modelId?: string;
+  size?: string;
 }
 
 const ImageGenerator: React.FC<ImageGeneratorProps> = ({
@@ -60,6 +73,10 @@ const ImageGenerator: React.FC<ImageGeneratorProps> = ({
   onImagesChange,
   lastGeneratedImages = [],
   lastGenerationText,
+  initialProviderId,
+  initialModelId,
+  initialSize,
+  selectionKey,
 }) => {
   const [isGenerating, setIsGenerating] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -71,6 +88,11 @@ const ImageGenerator: React.FC<ImageGeneratorProps> = ({
   const [selectedSize, setSelectedSize] = useState<string>('');
   const [resultViewerOpen, setResultViewerOpen] = useState(false);
   const [resultViewerIndex, setResultViewerIndex] = useState(0);
+  const [selectionInitialized, setSelectionInitialized] = useState(false);
+
+  useEffect(() => {
+    setSelectionInitialized(false);
+  }, [selectionKey]);
 
   useEffect(() => {
     const sizes = selectedModel?.inputs?.supported_sizes ?? [];
@@ -93,15 +115,12 @@ const ImageGenerator: React.FC<ImageGeneratorProps> = ({
           return;
         }
         setProviders(providerList);
-        if (providerList.length > 0) {
-          const provider = providerList[0];
-          setSelectedProvider(provider);
-          setSelectedModel(provider.models[0] ?? null);
-        } else {
+        if (providerList.length === 0) {
           setSelectedProvider(null);
           setSelectedModel(null);
           setSelectedSize('');
         }
+        setSelectionInitialized(false);
       } catch (err) {
         if (!cancelled) {
           const message = err instanceof Error ? err.message : '获取模型列表失败';
@@ -120,6 +139,40 @@ const ImageGenerator: React.FC<ImageGeneratorProps> = ({
       cancelled = true;
     };
   }, []);
+
+  useEffect(() => {
+    if (selectionInitialized || providers.length === 0) {
+      return;
+    }
+
+    const provider =
+      (initialProviderId ? providers.find((item) => item.id === initialProviderId) : undefined) ??
+      providers[0] ??
+      null;
+
+    setSelectedProvider(provider);
+
+    let model: AIModel | null = provider?.models?.[0] ?? null;
+    if (provider && initialModelId) {
+      const maybeModel = provider.models.find((item) => item.id === initialModelId);
+      if (maybeModel) {
+        model = maybeModel;
+      }
+    }
+
+    setSelectedModel(model);
+
+    let size = '';
+    if (model?.inputs?.supported_sizes && model.inputs.supported_sizes.length > 0) {
+      size = model.inputs.supported_sizes[0];
+      if (initialSize && model.inputs.supported_sizes.includes(initialSize)) {
+        size = initialSize;
+      }
+    }
+
+    setSelectedSize(size);
+    setSelectionInitialized(true);
+  }, [providers, initialProviderId, initialModelId, initialSize, selectionInitialized]);
 
   const handleGenerate = async () => {
     if (!prompt.trim()) {
@@ -432,10 +485,42 @@ const ImageGenerator: React.FC<ImageGeneratorProps> = ({
 };
 
 const CustomImageGenerationPage: React.FC = () => {
+  const location = useLocation();
   const [prompt, setPrompt] = useState('');
   const [images, setImages] = useState<string[]>([]);
   const [lastGeneratedImages, setLastGeneratedImages] = useState<string[]>([]);
   const [lastGenerationText, setLastGenerationText] = useState<string | null>(null);
+  const [initialSelection, setInitialSelection] = useState<{
+    providerId?: string;
+    modelId?: string;
+    size?: string;
+  }>({});
+  const [selectionKey, setSelectionKey] = useState<string>('');
+  const lastAppliedPrefillKeyRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    const state = location.state as HistoryPrefillState | null | undefined;
+
+    if (!state) {
+      return;
+    }
+
+    if (lastAppliedPrefillKeyRef.current === location.key) {
+      return;
+    }
+
+    setPrompt(state.prompt ?? '');
+    setImages(state.inputImages ?? []);
+    setInitialSelection({
+      providerId: state.providerId,
+      modelId: state.modelId,
+      size: state.size,
+    });
+    setSelectionKey(location.key);
+    setLastGeneratedImages([]);
+    setLastGenerationText(null);
+    lastAppliedPrefillKeyRef.current = location.key;
+  }, [location]);
 
   const handleGenerate = (result: GenerationResult) => {
     setLastGeneratedImages(result.images);
@@ -472,6 +557,10 @@ const CustomImageGenerationPage: React.FC = () => {
             onImagesChange={setImages}
             lastGeneratedImages={lastGeneratedImages}
             lastGenerationText={lastGenerationText ?? undefined}
+            initialProviderId={initialSelection.providerId}
+            initialModelId={initialSelection.modelId}
+            initialSize={initialSelection.size}
+            selectionKey={selectionKey}
           />
         </Box>
       </Container>

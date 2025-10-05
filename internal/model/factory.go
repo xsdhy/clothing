@@ -6,6 +6,8 @@ import (
 	"clothing/internal/model/sql"
 	"fmt"
 	"log"
+	"os"
+	"path/filepath"
 	"time"
 
 	"gorm.io/driver/mysql"
@@ -87,6 +89,14 @@ func (f *RepositoryFactory) createSQLiteRepository(cfg *config.Config) (Reposito
 	filePath := cfg.DBPath
 	if filePath == "" {
 		filePath = "datas/clothing.db" // Default SQLite database file
+	}
+
+	// 1) 在使用前确保多级目录存在
+	//    注：SQLite 会在连接时自动创建 .db 文件，但前提是目录已存在
+	if dir := filepath.Dir(filePath); dir != "" && dir != "." {
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			return nil, fmt.Errorf("failed to create directory %q: %w", dir, err)
+		}
 	}
 
 	db, err := f.openGormDB(sqlite.Open(filePath))

@@ -3,6 +3,7 @@ import {
   Alert,
   Box,
   Button,
+  ButtonBase,
   Card,
   CardContent,
   CardHeader,
@@ -11,13 +12,20 @@ import {
   Container,
   Divider,
   Grid,
+  IconButton,
   Pagination,
   Stack,
+  Tooltip,
   Typography,
 } from '@mui/material';
 
+import ReplayIcon from '@mui/icons-material/Replay';
+import AddPhotoAlternateIcon from '@mui/icons-material/AddPhotoAlternate';
+import { useNavigate } from 'react-router-dom';
+
 import { fetchUsageRecords, type UsageRecordsResult } from '../ai';
 import type { UsageRecord } from '../types';
+import ImageViewer from '../components/ImageViewer';
 
 const PAGE_SIZE = 10;
 
@@ -27,6 +35,10 @@ const GenerationHistoryPage: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [page, setPage] = useState(1);
   const [meta, setMeta] = useState<UsageRecordsResult['meta'] | null>(null);
+  const [previewImage, setPreviewImage] = useState<{ url: string; alt: string } | null>(null);
+  const [retryingRecordId, setRetryingRecordId] = useState<number | null>(null);
+  const [preparingOutputAsInput, setPreparingOutputAsInput] = useState<{ recordId: number; index: number } | null>(null);
+  const navigate = useNavigate();
 
   const totalPages = useMemo(() => {
     if (!meta || meta.page_size <= 0) {
@@ -60,6 +72,102 @@ const GenerationHistoryPage: React.FC = () => {
   const handlePageChange = useCallback((_event: React.ChangeEvent<unknown>, value: number) => {
     setPage(value);
   }, []);
+
+  const handleImageClick = useCallback((url: string, alt: string) => {
+    setPreviewImage({ url, alt });
+  }, []);
+
+  const handleClosePreview = useCallback(() => {
+    setPreviewImage(null);
+  }, []);
+
+  const handleDownloadPreview = useCallback(() => {
+    if (!previewImage) {
+      return;
+    }
+
+    const link = document.createElement('a');
+    link.href = previewImage.url;
+    link.download = previewImage.alt.replace(/\s+/g, '_');
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  }, [previewImage]);
+
+  const loadImageAsDataUrl = useCallback(async (url: string): Promise<string> => {
+    const response = await fetch(url);
+    if (!response.ok) {
+      throw new Error(`无法读取图片: ${response.status} ${response.statusText}`);
+    }
+
+    const blob = await response.blob();
+
+    return await new Promise<string>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => {
+        const result = reader.result;
+        if (typeof result === 'string') {
+          resolve(result);
+        } else {
+          reject(new Error('图片转换失败'));
+        }
+      };
+      reader.onerror = () => {
+        reject(new Error('图片读取失败'));
+      };
+      reader.readAsDataURL(blob);
+    });
+  }, []);
+
+  const handleRetry = useCallback(
+    async (record: UsageRecord) => {
+      try {
+        setRetryingRecordId(record.id);
+        const base64Images = await Promise.all(record.input_images.map((image) => loadImageAsDataUrl(image.url)));
+
+        const state = {
+          prompt: record.prompt,
+          inputImages: base64Images,
+          providerId: record.provider_id,
+          modelId: record.model_id,
+          size: record.size,
+        } as const;
+
+        navigate('/custom', { state });
+      } catch (err) {
+        const message = err instanceof Error ? err.message : '重新创建生成任务失败';
+        setError(message);
+      } finally {
+        setRetryingRecordId(null);
+      }
+    },
+    [loadImageAsDataUrl, navigate]
+  );
+
+  const handleUseOutputImage = useCallback(
+    async (record: UsageRecord, imageUrl: string, index: number) => {
+      try {
+        setPreparingOutputAsInput({ recordId: record.id, index });
+        const base64Image = await loadImageAsDataUrl(imageUrl);
+
+        const state = {
+          prompt: record.prompt,
+          inputImages: [base64Image],
+          providerId: record.provider_id,
+          modelId: record.model_id,
+          size: record.size,
+        } as const;
+
+        navigate('/custom', { state });
+      } catch (err) {
+        const message = err instanceof Error ? err.message : '无法将图片带入生成页面';
+        setError(message);
+      } finally {
+        setPreparingOutputAsInput(null);
+      }
+    },
+    [loadImageAsDataUrl, navigate]
+  );
 
   return (
     <Box sx={{ py: 6 }}>
@@ -120,11 +228,30 @@ const GenerationHistoryPage: React.FC = () => {
                     }
                     subheader={`创建于 ${createdAt}`}
                     action={
-                      <Chip
-                        color={hasError ? 'error' : 'success'}
-                        variant="outlined"
-                        label={hasError ? '生成异常' : '生成成功'}
-                      />
+                      <Stack direction="row" spacing={1} alignItems="center">
+                        <Button
+                          variant="outlined"
+                          size="small"
+                          startIcon={
+                            retryingRecordId === record.id ? (
+                              <CircularProgress size={16} color="inherit" />
+                            ) : (
+                              <ReplayIcon fontSize="small" />
+                            )
+                          }
+                          onClick={() => {
+                            void handleRetry(record);
+                          }}
+                          disabled={retryingRecordId === record.id}
+                        >
+                          再来一次
+                        </Button>
+                        <Chip
+                          color={hasError ? 'error' : 'success'}
+                          variant="outlined"
+                          label={hasError ? '生成异常' : '生成成功'}
+                        />
+                      </Stack>
                     }
                   />
                   <CardContent>
@@ -150,58 +277,120 @@ const GenerationHistoryPage: React.FC = () => {
                         <Alert severity="warning">{record.error_message}</Alert>
                       )}
 
-                      {record.input_images.length > 0 && (
+                      {(record.input_images.length > 0 || record.output_images.length > 0) && (
                         <Box>
                           <Typography variant="subtitle2" color="text.secondary">
-                            输入图片
+                            图片
                           </Typography>
                           <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, mt: 1 }}>
-                            {record.input_images.map((image, index) => (
-                              <Box
-                                component="img"
-                                key={`${record.id}-in-${index}`}
-                                src={image.url}
-                                alt={`输入图片 ${index + 1}`}
-                                loading="lazy"
-                                sx={{
-                                  width: 96,
-                                  height: 96,
-                                  objectFit: 'cover',
-                                  borderRadius: 1,
-                                  border: '1px solid',
-                                  borderColor: 'divider',
-                                  bgcolor: 'background.paper',
-                                }}
-                              />
-                            ))}
-                          </Box>
-                        </Box>
-                      )}
-
-                      {record.output_images.length > 0 && (
-                        <Box>
-                          <Typography variant="subtitle2" color="text.secondary">
-                            输出图片
-                          </Typography>
-                          <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, mt: 1 }}>
-                            {record.output_images.map((image, index) => (
-                              <Box
-                                component="img"
-                                key={`${record.id}-out-${index}`}
-                                src={image.url}
-                                alt={`输出图片 ${index + 1}`}
-                                loading="lazy"
-                                sx={{
-                                  width: 96,
-                                  height: 96,
-                                  objectFit: 'cover',
-                                  borderRadius: 1,
-                                  border: '1px solid',
-                                  borderColor: 'divider',
-                                  bgcolor: 'background.paper',
-                                }}
-                              />
-                            ))}
+                            {record.input_images.map((image, index) => {
+                              const alt = `输入图片 ${index + 1}`;
+                              return (
+                                <ButtonBase
+                                  key={`${record.id}-in-${index}`}
+                                  onClick={() => handleImageClick(image.url, alt)}
+                                  sx={{
+                                    width: 112,
+                                    height: 112,
+                                    borderRadius: 1,
+                                    overflow: 'hidden',
+                                    border: '1px solid',
+                                    borderColor: 'divider',
+                                    bgcolor: 'background.paper',
+                                    position: 'relative',
+                                  }}
+                                >
+                                  <Box
+                                    component="img"
+                                    src={image.url}
+                                    alt={alt}
+                                    loading="lazy"
+                                    sx={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                                  />
+                                  <Chip
+                                    label={`输入 ${index + 1}`}
+                                    size="small"
+                                    color="default"
+                                    sx={{
+                                      position: 'absolute',
+                                      top: 4,
+                                      left: 4,
+                                      bgcolor: 'rgba(0,0,0,0.6)',
+                                      color: 'common.white',
+                                    }}
+                                  />
+                                </ButtonBase>
+                              );
+                            })}
+                            {record.output_images.map((image, index) => {
+                              const alt = `输出图片 ${index + 1}`;
+                              return (
+                                <ButtonBase
+                                  key={`${record.id}-out-${index}`}
+                                  onClick={() => handleImageClick(image.url, alt)}
+                                  sx={{
+                                    width: 112,
+                                    height: 112,
+                                    borderRadius: 1,
+                                    overflow: 'hidden',
+                                    border: '1px solid',
+                                    borderColor: 'divider',
+                                    bgcolor: 'background.paper',
+                                    position: 'relative',
+                                  }}
+                                >
+                                  <Box
+                                    component="img"
+                                    src={image.url}
+                                    alt={alt}
+                                    loading="lazy"
+                                    sx={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                                  />
+                                  <Chip
+                                    label={`${index + 1}`}
+                                    size="small"
+                                    color="primary"
+                                    sx={{
+                                      position: 'absolute',
+                                      top: 4,
+                                      left: 4,
+                                    }}
+                                  />
+                                  <Tooltip title="作为输入图片使用">
+                                    <span>
+                                      <IconButton
+                                        size="small"
+                                        color="primary"
+                                        sx={{
+                                          position: 'absolute',
+                                          top: 4,
+                                          right: 4,
+                                          bgcolor: 'rgba(255,255,255,0.85)',
+                                          '&:hover': {
+                                            bgcolor: 'rgba(255,255,255,0.95)',
+                                          },
+                                        }}
+                                        onClick={(event) => {
+                                          event.stopPropagation();
+                                          void handleUseOutputImage(record, image.url, index);
+                                        }}
+                                        disabled={
+                                          preparingOutputAsInput?.recordId === record.id &&
+                                          preparingOutputAsInput?.index === index
+                                        }
+                                      >
+                                        {preparingOutputAsInput?.recordId === record.id &&
+                                        preparingOutputAsInput?.index === index ? (
+                                          <CircularProgress size={16} color="inherit" />
+                                        ) : (
+                                          <AddPhotoAlternateIcon fontSize="small" />
+                                        )}
+                                      </IconButton>
+                                    </span>
+                                  </Tooltip>
+                                </ButtonBase>
+                              );
+                            })}
                           </Box>
                         </Box>
                       )}
@@ -229,6 +418,15 @@ const GenerationHistoryPage: React.FC = () => {
             )}
           </Stack>
         )}
+
+        <ImageViewer
+          open={Boolean(previewImage)}
+          onClose={handleClosePreview}
+          imageUrl={previewImage?.url ?? ''}
+          title={previewImage?.alt}
+          showDownload
+          onDownload={handleDownloadPreview}
+        />
       </Container>
     </Box>
   );
