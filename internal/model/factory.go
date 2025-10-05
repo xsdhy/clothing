@@ -169,6 +169,7 @@ func (f *RepositoryFactory) migrateSchema(db *gorm.DB) error {
 	if mode == "DEVM" {
 		return db.AutoMigrate(
 			&entity.DbDemo{},
+			&entity.DbUsageRecord{},
 		)
 	}
 	return nil

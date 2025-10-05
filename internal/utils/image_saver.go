@@ -116,9 +116,9 @@ func persistImageLocally(provider, imageURL, base64Payload string) error {
 		mimeType = http.DetectContentType(data)
 	}
 
-	ext = extensionFromMime(mimeType)
+	ext = ExtensionFromMime(mimeType)
 	if ext == "" {
-		ext = extensionFromMime(http.DetectContentType(data))
+		ext = ExtensionFromMime(http.DetectContentType(data))
 	}
 	if ext == "" {
 		ext = "jpg"
@@ -144,7 +144,7 @@ func persistImageLocally(provider, imageURL, base64Payload string) error {
 	return nil
 }
 
-func extensionFromMime(mimeType string) string {
+func ExtensionFromMime(mimeType string) string {
 	if mimeType == "" {
 		return ""
 	}

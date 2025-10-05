@@ -3,9 +3,12 @@ package main
 import (
 	"clothing/internal/api"
 	"clothing/internal/config"
+	"clothing/internal/model"
+	"clothing/internal/storage"
 	_ "embed"
 	"fmt"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -28,7 +31,19 @@ func main() {
 	logger.SetFormatter(&logrus.JSONFormatter{})
 	logger.SetLevel(logrus.InfoLevel)
 
-	httpHandler := api.NewHTTPHandler(cfg)
+	repo, err := model.InitRepository(&cfg)
+	if err != nil {
+		logrus.WithError(err).Error("failed to initialise repository")
+		return
+	}
+
+	store, err := storage.NewStorage(cfg)
+	if err != nil {
+		logrus.WithError(err).Error("failed to initialise storage")
+		return
+	}
+
+	httpHandler := api.NewHTTPHandler(cfg, repo, store)
 
 	// 设置Gin模式
 	gin.SetMode(gin.ReleaseMode)
@@ -43,6 +58,20 @@ func main() {
 
 	r.GET("/api/llm/providers", httpHandler.ListProviders)
 	r.POST("/api/llm", httpHandler.GenerateImage)
+	r.GET("/api/usage-records", httpHandler.ListUsageRecords)
+
+	if localProvider, ok := store.(storage.LocalBaseDirProvider); ok {
+		publicPrefix := strings.TrimSpace(cfg.StoragePublicBaseURL)
+		if publicPrefix == "" {
+			publicPrefix = "/files"
+		}
+		if !strings.HasPrefix(publicPrefix, "http://") && !strings.HasPrefix(publicPrefix, "https://") {
+			if !strings.HasPrefix(publicPrefix, "/") {
+				publicPrefix = "/" + publicPrefix
+			}
+			r.Static(publicPrefix, localProvider.LocalBaseDir())
+		}
+	}
 
 	//前端资源
 	r.GET("/", func(c *gin.Context) {

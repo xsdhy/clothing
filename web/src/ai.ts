@@ -1,4 +1,13 @@
-import type { AIProvider, GenerationRequest, GenerationResult, BackendResponse, ProvidersResponse } from './types';
+import type {
+  AIProvider,
+  GenerationRequest,
+  GenerationResult,
+  BackendResponse,
+  ProvidersResponse,
+  UsageRecordListResponse,
+  UsageRecord,
+  PaginationMeta,
+} from './types';
 import type { SSEEventPayload } from './utils/sse';
 import { appendSanitizedImages, sanitizeImages } from './utils/images';
 import { DEFAULT_HTTP_TIMEOUT_MS, requestWithTimeout } from './utils/http';
@@ -7,6 +16,12 @@ import { safeParseJSON } from './utils/json';
 
 const LLM_GENERATE_ENDPOINT = '/api/llm';
 const LLM_PROVIDERS_ENDPOINT = `/api/llm/providers`;
+const USAGE_RECORDS_ENDPOINT = '/api/usage-records';
+
+export interface UsageRecordsResult {
+  records: UsageRecord[];
+  meta: PaginationMeta;
+}
 
 export const generateImage = async (request: GenerationRequest): Promise<GenerationResult> => {
   const prompt = request.prompt.trim();
@@ -268,4 +283,46 @@ export const fetchProviders = async (): Promise<AIProvider[]> => {
   }
 
   return body.providers;
+};
+
+export const fetchUsageRecords = async (page = 1, pageSize = 20): Promise<UsageRecordsResult> => {
+  const safePage = Number.isFinite(page) && page > 0 ? Math.floor(page) : 1;
+  const safePageSize = Number.isFinite(pageSize) && pageSize > 0 ? Math.min(Math.floor(pageSize), 100) : 20;
+
+  const params = new URLSearchParams({
+    page: String(safePage),
+    page_size: String(safePageSize),
+  });
+
+  let response: Response;
+  try {
+    response = await requestWithTimeout(`${USAGE_RECORDS_ENDPOINT}?${params.toString()}`, {
+      headers: {
+        Accept: 'application/json',
+      },
+    });
+  } catch (error) {
+    throw new Error(`获取生成记录失败: ${error instanceof Error ? error.message : '未知错误'}`);
+  }
+
+  let payload: Partial<UsageRecordListResponse> & { error?: string };
+  try {
+    payload = (await response.json()) as Partial<UsageRecordListResponse> & { error?: string };
+  } catch {
+    payload = {};
+  }
+
+  if (!response.ok) {
+    const message = payload?.error ?? `服务请求失败: ${response.status} ${response.statusText}`;
+    throw new Error(message);
+  }
+
+  const records = Array.isArray(payload.records) ? payload.records : [];
+  const meta = payload.meta ?? {
+    page: safePage,
+    page_size: safePageSize,
+    total: records.length,
+  };
+
+  return { records, meta };
 };
