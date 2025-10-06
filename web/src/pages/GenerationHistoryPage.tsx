@@ -11,36 +11,60 @@ import {
   CircularProgress,
   Container,
   Divider,
+  FormControl,
   Grid,
   IconButton,
+  InputLabel,
   Collapse,
+  MenuItem,
   Pagination,
+  Select,
   Stack,
   Tooltip,
   Typography,
 } from '@mui/material';
+import type { SelectChangeEvent } from '@mui/material/Select';
 
 import ReplayIcon from '@mui/icons-material/Replay';
 import AddPhotoAlternateIcon from '@mui/icons-material/AddPhotoAlternate';
+import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
 import { useNavigate } from 'react-router-dom';
 
-import { fetchUsageRecords, type UsageRecordsResult } from '../ai';
-import type { UsageRecord } from '../types';
+import {
+  fetchUsageRecords,
+  fetchProviders,
+  deleteUsageRecord,
+  type UsageRecordsResult,
+  type UsageRecordResultFilter,
+} from '../ai';
+import type { AIProvider, UsageRecord } from '../types';
 import ImageViewer from '../components/ImageViewer';
 
 const PAGE_SIZE = 10;
+const ALL_VALUE = 'all';
+const DEFAULT_RESULT_FILTER: UsageRecordResultFilter = 'success';
+
+type ModelOption = { id: string; name: string };
 
 const GenerationHistoryPage: React.FC = () => {
   const [records, setRecords] = useState<UsageRecord[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [filtersError, setFiltersError] = useState<string | null>(null);
+  const [providers, setProviders] = useState<AIProvider[]>([]);
+  const [providersLoading, setProvidersLoading] = useState(false);
+  const [providerFilter, setProviderFilter] = useState<string>(ALL_VALUE);
+  const [modelFilter, setModelFilter] = useState<string>(ALL_VALUE);
+  const [resultFilter, setResultFilter] = useState<UsageRecordResultFilter>(DEFAULT_RESULT_FILTER);
   const [page, setPage] = useState(1);
   const [meta, setMeta] = useState<UsageRecordsResult['meta'] | null>(null);
   const [previewImage, setPreviewImage] = useState<{ url: string; alt: string } | null>(null);
   const [retryingRecordId, setRetryingRecordId] = useState<number | null>(null);
   const [preparingOutputAsInput, setPreparingOutputAsInput] = useState<{ recordId: number; index: number } | null>(null);
   const [expandedRecords, setExpandedRecords] = useState<Record<number, boolean>>({});
+  const [deletingRecordId, setDeletingRecordId] = useState<number | null>(null);
   const navigate = useNavigate();
+  const recordCount = records.length;
 
   const totalPages = useMemo(() => {
     if (!meta || meta.page_size <= 0) {
@@ -49,27 +73,140 @@ const GenerationHistoryPage: React.FC = () => {
     return Math.max(1, Math.ceil(meta.total / meta.page_size));
   }, [meta]);
 
-  const loadRecords = useCallback(async (targetPage: number) => {
-    setLoading(true);
-    setError(null);
-    try {
-      const result = await fetchUsageRecords(targetPage, PAGE_SIZE);
-      setRecords(result.records);
-      setMeta(result.meta);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : '获取记录失败');
-    } finally {
-      setLoading(false);
+  const availableModels = useMemo<ModelOption[]>(() => {
+    if (providerFilter === ALL_VALUE) {
+      const result = new Map<string, string>();
+      providers.forEach((provider) => {
+        provider.models.forEach((model) => {
+          if (!result.has(model.id)) {
+            result.set(model.id, model.name ?? model.id);
+          }
+        });
+      });
+      return Array.from(result.entries()).map(([id, name]) => ({ id, name }));
     }
-  }, []);
+
+    const provider = providers.find((item) => item.id === providerFilter);
+    if (!provider) {
+      return [];
+    }
+
+    return provider.models.map((model) => ({ id: model.id, name: model.name ?? model.id }));
+  }, [providerFilter, providers]);
+
+  const loadRecords = useCallback(
+    async (targetPage: number) => {
+      setLoading(true);
+      setError(null);
+      try {
+        const result = await fetchUsageRecords(targetPage, PAGE_SIZE, {
+          provider: providerFilter !== ALL_VALUE ? providerFilter : undefined,
+          model: modelFilter !== ALL_VALUE ? modelFilter : undefined,
+          result: resultFilter,
+        });
+        setRecords(result.records);
+        setMeta(result.meta);
+
+        if (result.meta) {
+          if (result.meta.total === 0 && targetPage !== 1) {
+            setPage(1);
+          } else if (result.meta.page > 0 && result.meta.page !== targetPage) {
+            setPage(result.meta.page);
+          }
+        }
+      } catch (err) {
+        setError(err instanceof Error ? err.message : '获取记录失败');
+      } finally {
+        setLoading(false);
+      }
+    },
+    [modelFilter, providerFilter, resultFilter]
+  );
 
   useEffect(() => {
     void loadRecords(page);
   }, [loadRecords, page]);
 
+  useEffect(() => {
+    let cancelled = false;
+
+    const loadProviders = async () => {
+      setProvidersLoading(true);
+      setFiltersError(null);
+      try {
+        const list = await fetchProviders();
+        if (!cancelled) {
+          setProviders(list);
+        }
+      } catch (err) {
+        if (!cancelled) {
+          setFiltersError(err instanceof Error ? err.message : '获取模型提供商失败');
+        }
+      } finally {
+        if (!cancelled) {
+          setProvidersLoading(false);
+        }
+      }
+    };
+
+    void loadProviders();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   const handleRefresh = useCallback(() => {
     void loadRecords(page);
   }, [loadRecords, page]);
+
+  const handleProviderChange = useCallback(
+    (event: SelectChangeEvent<string>) => {
+      const value = event.target.value || ALL_VALUE;
+      setProviderFilter(value);
+      setModelFilter(ALL_VALUE);
+      setPage(1);
+    },
+    []
+  );
+
+  const handleModelChange = useCallback((event: SelectChangeEvent<string>) => {
+    const value = event.target.value || ALL_VALUE;
+    setModelFilter(value);
+    setPage(1);
+  }, []);
+
+  const handleResultChange = useCallback((event: SelectChangeEvent<string>) => {
+    const value = event.target.value as UsageRecordResultFilter;
+    const nextValue: UsageRecordResultFilter = value === 'failure' || value === 'all' ? value : DEFAULT_RESULT_FILTER;
+    setResultFilter(nextValue);
+    setPage(1);
+  }, []);
+
+  const handleDelete = useCallback(
+    async (record: UsageRecord) => {
+      if (!window.confirm('确认删除该生成记录吗？')) {
+        return;
+      }
+
+      try {
+        setDeletingRecordId(record.id);
+        const nextPage = recordCount === 1 && page > 1 ? page - 1 : page;
+        await deleteUsageRecord(record.id);
+
+        if (nextPage !== page) {
+          setPage(nextPage);
+        } else {
+          await loadRecords(page);
+        }
+      } catch (err) {
+        setError(err instanceof Error ? err.message : '删除生成记录失败');
+      } finally {
+        setDeletingRecordId(null);
+      }
+    },
+    [loadRecords, page, recordCount]
+  );
 
   const handlePageChange = useCallback((_event: React.ChangeEvent<unknown>, value: number) => {
     setPage(value);
@@ -195,6 +332,69 @@ const GenerationHistoryPage: React.FC = () => {
           </Button>
         </Stack>
 
+        <Card elevation={0} sx={{ mb: 3 }}>
+          <CardContent>
+            <Stack direction={{ xs: 'column', md: 'row' }} spacing={2} alignItems={{ xs: 'stretch', md: 'center' }}>
+              <FormControl size="small" sx={{ minWidth: 160 }} disabled={providersLoading && providers.length === 0}>
+                <InputLabel id="filter-provider-label">厂商</InputLabel>
+                <Select
+                  labelId="filter-provider-label"
+                  value={providerFilter}
+                  label="厂商"
+                  onChange={handleProviderChange}
+                >
+                  <MenuItem value={ALL_VALUE}>全部厂商</MenuItem>
+                  {providers.map((provider) => (
+                    <MenuItem key={provider.id} value={provider.id}>
+                      {provider.name ?? provider.id}
+                    </MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+
+              <FormControl
+                size="small"
+                sx={{ minWidth: 160 }}
+                disabled={providersLoading && providers.length === 0 && availableModels.length === 0}
+              >
+                <InputLabel id="filter-model-label">模型</InputLabel>
+                <Select labelId="filter-model-label" value={modelFilter} label="模型" onChange={handleModelChange}>
+                  <MenuItem value={ALL_VALUE}>全部模型</MenuItem>
+                  {availableModels.map((model) => (
+                    <MenuItem key={model.id} value={model.id}>
+                      {model.name}
+                    </MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+
+              <FormControl size="small" sx={{ minWidth: 160 }}>
+                <InputLabel id="filter-result-label">生成结果</InputLabel>
+                <Select labelId="filter-result-label" value={resultFilter} label="生成结果" onChange={handleResultChange}>
+                  <MenuItem value="success">成功</MenuItem>
+                  <MenuItem value="failure">失败</MenuItem>
+                  <MenuItem value="all">全部</MenuItem>
+                </Select>
+              </FormControl>
+
+              {providersLoading && (
+                <Stack direction="row" spacing={1} alignItems="center" sx={{ minHeight: 40 }}>
+                  <CircularProgress size={18} />
+                  <Typography variant="caption" color="text.secondary">
+                    正在加载可用厂商
+                  </Typography>
+                </Stack>
+              )}
+            </Stack>
+
+            {filtersError && (
+              <Alert severity="warning" sx={{ mt: 2 }}>
+                {filtersError}
+              </Alert>
+            )}
+          </CardContent>
+        </Card>
+
         {error && (
           <Alert severity="error" sx={{ mb: 3 }}>
             {error}
@@ -227,6 +427,7 @@ const GenerationHistoryPage: React.FC = () => {
             const hasError = Boolean(record.error_message);
 
             return (
+              <Grid item xs={12} key={record.id}>
                 <Card elevation={1}>
                   <CardHeader
                     title={`${record.provider_id}/${record.model_id}`}
@@ -252,6 +453,24 @@ const GenerationHistoryPage: React.FC = () => {
                         >
                           再来一次
                         </Button>
+                        <Tooltip title="删除记录">
+                          <span>
+                            <IconButton
+                              size="small"
+                              color="error"
+                              onClick={() => {
+                                void handleDelete(record);
+                              }}
+                              disabled={deletingRecordId === record.id}
+                            >
+                              {deletingRecordId === record.id ? (
+                                <CircularProgress size={16} color="inherit" />
+                              ) : (
+                                <DeleteOutlineIcon fontSize="small" />
+                              )}
+                            </IconButton>
+                          </span>
+                        </Tooltip>
                         <Chip
                           color={hasError ? 'error' : 'success'}
                           variant="outlined"
@@ -425,6 +644,7 @@ const GenerationHistoryPage: React.FC = () => {
                     </Stack>
                   </CardContent>
                 </Card>
+              </Grid>
             );
           })}
         </Grid>

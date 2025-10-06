@@ -5,6 +5,8 @@ import (
 	"context"
 	"fmt"
 	"strings"
+
+	"gorm.io/gorm"
 )
 
 // CreateUsageRecord inserts a new usage record into the database.
@@ -31,6 +33,14 @@ func (r *GormRepository) ListUsageRecords(ctx context.Context, params *entity.Us
 		}
 		if trimmed := strings.TrimSpace(params.Model); trimmed != "" {
 			query = query.Where("model_id = ?", trimmed)
+		}
+		if trimmed := strings.ToLower(strings.TrimSpace(params.Result)); trimmed != "" && trimmed != "all" {
+			switch trimmed {
+			case "success":
+				query = query.Where("(error_message IS NULL OR error_message = '')")
+			case "failure":
+				query = query.Where("error_message IS NOT NULL AND error_message <> ''")
+			}
 		}
 	}
 
@@ -62,4 +72,23 @@ func (r *GormRepository) ListUsageRecords(ctx context.Context, params *entity.Us
 
 	meta := r.calculatePagination(totalCount, page, pageSize)
 	return records, meta, nil
+}
+
+// DeleteUsageRecord removes a usage record by ID.
+func (r *GormRepository) DeleteUsageRecord(ctx context.Context, id uint) error {
+	if r == nil || r.db == nil {
+		return fmt.Errorf("repository not initialised")
+	}
+	if id == 0 {
+		return fmt.Errorf("invalid usage record id")
+	}
+
+	result := r.db.WithContext(ctx).Delete(&entity.DbUsageRecord{}, id)
+	if result.Error != nil {
+		return result.Error
+	}
+	if result.RowsAffected == 0 {
+		return gorm.ErrRecordNotFound
+	}
+	return nil
 }

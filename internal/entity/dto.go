@@ -49,6 +49,7 @@ type UsageRecordQuery struct {
 	BaseParams
 	Provider string `json:"provider" form:"provider" query:"provider"`
 	Model    string `json:"model" form:"model" query:"model"`
+	Result   string `json:"result" form:"result" query:"result"`
 }
 
 type UsageImage struct {

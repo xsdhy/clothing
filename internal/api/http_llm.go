@@ -178,61 +178,6 @@ func (h *HTTPHandler) GenerateImage(c *gin.Context) {
 	})
 }
 
-func (h *HTTPHandler) ListUsageRecords(c *gin.Context) {
-	if h.repo == nil {
-		c.JSON(http.StatusOK, entity.UsageRecordListResponse{Records: []entity.UsageRecordItem{}, Meta: &entity.Meta{Page: 1, PageSize: 0, Total: 0}})
-		return
-	}
-
-	var params entity.UsageRecordQuery
-	if err := c.ShouldBindQuery(&params); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid query parameters"})
-		return
-	}
-
-	if params.Page <= 0 {
-		params.Page = 1
-	}
-	if params.PageSize <= 0 {
-		params.PageSize = 20
-	}
-	if params.PageSize > 100 {
-		params.PageSize = 100
-	}
-
-	ctx, cancel := context.WithTimeout(c.Request.Context(), 10*time.Second)
-	defer cancel()
-
-	records, meta, err := h.repo.ListUsageRecords(ctx, &params)
-	if err != nil {
-		logrus.WithError(err).Error("failed to list usage records")
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to load usage records"})
-		return
-	}
-
-	items := make([]entity.UsageRecordItem, 0, len(records))
-	for _, record := range records {
-		items = append(items, entity.UsageRecordItem{
-			ID:           record.ID,
-			ProviderID:   record.ProviderID,
-			ModelID:      record.ModelID,
-			Prompt:       record.Prompt,
-			Size:         record.Size,
-			OutputText:   record.OutputText,
-			ErrorMessage: record.ErrorMessage,
-			CreatedAt:    record.CreatedAt,
-			InputImages:  h.makeUsageImages(record.InputImages.ToSlice()),
-			OutputImages: h.makeUsageImages(record.OutputImages.ToSlice()),
-		})
-	}
-
-	if meta == nil {
-		meta = &entity.Meta{Page: int64(params.Page), PageSize: int64(params.PageSize), Total: int64(len(items))}
-	}
-
-	c.JSON(http.StatusOK, entity.UsageRecordListResponse{Records: items, Meta: meta})
-}
-
 func (h *HTTPHandler) saveImagesToStorage(category string, payloads []string) ([]string, error) {
 	if h.storage == nil || len(payloads) == 0 {
 		return nil, nil
@@ -340,42 +285,6 @@ func (h *HTTPHandler) persistUsageRecord(record *entity.DbUsageRecord) {
 			"model":    record.ModelID,
 		}).Error("failed to persist usage record")
 	}
-}
-
-func (h *HTTPHandler) makeUsageImages(paths []string) []entity.UsageImage {
-	if len(paths) == 0 {
-		return []entity.UsageImage{}
-	}
-	items := make([]entity.UsageImage, 0, len(paths))
-	for _, p := range paths {
-		trimmed := strings.TrimSpace(p)
-		if trimmed == "" {
-			continue
-		}
-		items = append(items, entity.UsageImage{
-			Path: trimmed,
-			URL:  h.publicURL(trimmed),
-		})
-	}
-	if len(items) == 0 {
-		return []entity.UsageImage{}
-	}
-	return items
-}
-
-func (h *HTTPHandler) publicURL(path string) string {
-	trimmed := strings.TrimSpace(path)
-	if trimmed == "" {
-		return ""
-	}
-	if strings.HasPrefix(trimmed, "http://") || strings.HasPrefix(trimmed, "https://") {
-		return trimmed
-	}
-	base := h.storagePublicBase
-	if base == "" {
-		base = "/files"
-	}
-	return fmt.Sprintf("%s/%s", strings.TrimRight(base, "/"), strings.TrimLeft(trimmed, "/"))
 }
 
 func appendStorageNotes(existing string, notes []string) string {

@@ -59,6 +59,7 @@ func main() {
 	r.GET("/api/llm/providers", httpHandler.ListProviders)
 	r.POST("/api/llm", httpHandler.GenerateImage)
 	r.GET("/api/usage-records", httpHandler.ListUsageRecords)
+	r.DELETE("/api/usage-records/:id", httpHandler.DeleteUsageRecord)
 
 	if localProvider, ok := store.(storage.LocalBaseDirProvider); ok {
 		publicPrefix := strings.TrimSpace(cfg.StoragePublicBaseURL)

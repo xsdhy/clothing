@@ -23,6 +23,14 @@ export interface UsageRecordsResult {
   meta: PaginationMeta;
 }
 
+export type UsageRecordResultFilter = 'success' | 'failure' | 'all';
+
+export interface UsageRecordFilters {
+  provider?: string;
+  model?: string;
+  result?: UsageRecordResultFilter;
+}
+
 export const generateImage = async (request: GenerationRequest): Promise<GenerationResult> => {
   const prompt = request.prompt.trim();
   if (!prompt) {
@@ -285,7 +293,11 @@ export const fetchProviders = async (): Promise<AIProvider[]> => {
   return body.providers;
 };
 
-export const fetchUsageRecords = async (page = 1, pageSize = 20): Promise<UsageRecordsResult> => {
+export const fetchUsageRecords = async (
+  page = 1,
+  pageSize = 20,
+  filters?: UsageRecordFilters
+): Promise<UsageRecordsResult> => {
   const safePage = Number.isFinite(page) && page > 0 ? Math.floor(page) : 1;
   const safePageSize = Number.isFinite(pageSize) && pageSize > 0 ? Math.min(Math.floor(pageSize), 100) : 20;
 
@@ -293,6 +305,31 @@ export const fetchUsageRecords = async (page = 1, pageSize = 20): Promise<UsageR
     page: String(safePage),
     page_size: String(safePageSize),
   });
+
+  const normaliseFilterValue = (value?: string) => {
+    const trimmed = value?.trim();
+    return trimmed ? trimmed : undefined;
+  };
+
+  const resultFilter = (filters?.result ?? 'success').toLowerCase() as UsageRecordResultFilter;
+
+  const provider = normaliseFilterValue(filters?.provider);
+  const model = normaliseFilterValue(filters?.model);
+
+  if (provider) {
+    params.set('provider', provider);
+  }
+  if (model) {
+    params.set('model', model);
+  }
+
+  if (resultFilter === 'failure') {
+    params.set('result', 'failure');
+  } else if (resultFilter === 'all') {
+    params.set('result', 'all');
+  } else {
+    params.set('result', 'success');
+  }
 
   let response: Response;
   try {
@@ -325,4 +362,35 @@ export const fetchUsageRecords = async (page = 1, pageSize = 20): Promise<UsageR
   };
 
   return { records, meta };
+};
+
+export const deleteUsageRecord = async (id: number): Promise<void> => {
+  if (!Number.isFinite(id) || id <= 0) {
+    throw new Error('无效的记录 ID');
+  }
+
+  let response: Response;
+  try {
+    response = await requestWithTimeout(`${USAGE_RECORDS_ENDPOINT}/${id}`, {
+      method: 'DELETE',
+      headers: {
+        Accept: 'application/json',
+      },
+    });
+  } catch (error) {
+    throw new Error(`删除生成记录失败: ${error instanceof Error ? error.message : '未知错误'}`);
+  }
+
+  if (!response.ok) {
+    let message = `服务请求失败: ${response.status} ${response.statusText}`;
+    try {
+      const payload = (await response.json()) as { error?: string };
+      if (payload?.error) {
+        message = payload.error;
+      }
+    } catch {
+      // ignore invalid json
+    }
+    throw new Error(message);
+  }
 };
