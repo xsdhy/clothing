@@ -227,7 +227,6 @@ const GenerationHistoryPage: React.FC = () => {
             const hasError = Boolean(record.error_message);
 
             return (
-              <Grid item xs={12} key={`${record.id}-${record.created_at}`}>
                 <Card elevation={1}>
                   <CardHeader
                     title={`${record.provider_id}/${record.model_id}`}
@@ -426,7 +425,6 @@ const GenerationHistoryPage: React.FC = () => {
                     </Stack>
                   </CardContent>
                 </Card>
-              </Grid>
             );
           })}
         </Grid>
