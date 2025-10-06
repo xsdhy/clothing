@@ -5,6 +5,8 @@ import (
 	"clothing/internal/storage"
 	"clothing/internal/utils"
 	"context"
+	"crypto/md5"
+	"encoding/hex"
 	"fmt"
 	"io"
 	"net/http"
@@ -84,7 +86,7 @@ func (h *HTTPHandler) GenerateImage(c *gin.Context) {
 		var storageIssues []string
 
 		if len(request.Images) > 0 {
-			inputPaths, err := h.saveImagesToStorage("inputs", request.Images)
+			inputPaths, err := h.saveImagesToStorage("inputs", request.Images, request.Model)
 			if len(inputPaths) > 0 {
 				record.InputImages = entity.StringArray(inputPaths)
 			}
@@ -120,7 +122,7 @@ func (h *HTTPHandler) GenerateImage(c *gin.Context) {
 		record.OutputText = text
 
 		if len(images) > 0 {
-			outputPaths, err := h.saveImagesToStorage("outputs", images)
+			outputPaths, err := h.saveImagesToStorage("outputs", images, request.Model)
 			if len(outputPaths) > 0 {
 				record.OutputImages = entity.StringArray(outputPaths)
 			}
@@ -178,7 +180,7 @@ func (h *HTTPHandler) GenerateImage(c *gin.Context) {
 	})
 }
 
-func (h *HTTPHandler) saveImagesToStorage(category string, payloads []string) ([]string, error) {
+func (h *HTTPHandler) saveImagesToStorage(category string, payloads []string, model string) ([]string, error) {
 	if h.storage == nil || len(payloads) == 0 {
 		return nil, nil
 	}
@@ -203,7 +205,18 @@ func (h *HTTPHandler) saveImagesToStorage(category string, payloads []string) ([
 			continue
 		}
 
-		relPath, err := h.storage.Save(ctx, data, storage.SaveOptions{Category: category, Extension: ext})
+		saveOpts := storage.SaveOptions{Category: category, Extension: ext}
+		switch strings.ToLower(strings.TrimSpace(category)) {
+		case "inputs":
+			saveOpts.SkipIfExists = true
+			saveOpts.BaseName = computeInputBaseName(data)
+		case "outputs":
+			saveOpts.BaseName = buildOutputBaseName(model, idx)
+		default:
+			saveOpts.BaseName = ""
+		}
+
+		relPath, err := h.storage.Save(ctx, data, saveOpts)
 		if err != nil {
 			errs = append(errs, fmt.Sprintf("%d: %v", idx, err))
 			continue
@@ -212,7 +225,7 @@ func (h *HTTPHandler) saveImagesToStorage(category string, payloads []string) ([
 	}
 
 	if len(errs) > 0 {
-		return paths, fmt.Errorf(strings.Join(errs, "; "))
+		return paths, fmt.Errorf("%s", strings.Join(errs, "; "))
 	}
 
 	return paths, nil
@@ -296,4 +309,21 @@ func appendStorageNotes(existing string, notes []string) string {
 		return combined
 	}
 	return existing + "; " + combined
+}
+
+func computeInputBaseName(data []byte) string {
+	sum := md5.Sum(data)
+	return hex.EncodeToString(sum[:])
+}
+
+func buildOutputBaseName(model string, idx int) string {
+	token := storage.SanitizeToken(model)
+	if token == "" {
+		token = "model"
+	}
+	if len(token) > 32 {
+		token = token[:32]
+	}
+	suffix := time.Now().UTC().UnixNano()
+	return fmt.Sprintf("%s_%d_%d", token, suffix, idx)
 }

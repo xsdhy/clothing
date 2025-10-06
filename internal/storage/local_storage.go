@@ -5,10 +5,8 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"path"
 	"path/filepath"
 	"strings"
-	"time"
 )
 
 // LocalStorage persists files to the local filesystem.
@@ -46,54 +44,26 @@ func (s *LocalStorage) Save(ctx context.Context, data []byte, opts SaveOptions) 
 	default:
 	}
 
-	category := sanitizePathSegment(opts.Category)
-	if category == "" {
-		category = "misc"
-	}
-
-	ext := strings.TrimPrefix(strings.TrimSpace(opts.Extension), ".")
-	if ext == "" {
-		ext = "bin"
-	}
-
-	now := time.Now().UTC()
-	datedir := fmt.Sprintf("%04d/%02d/%02d", now.Year(), now.Month(), now.Day())
-	relativeDir := path.Join(category, datedir)
-	filename := fmt.Sprintf("%d.%s", now.UnixNano(), ext)
-	relativePath := path.Join(relativeDir, filename)
-
-	absDir := filepath.Join(s.baseDir, filepath.FromSlash(relativeDir))
+	relativePath := buildObjectPath(opts.Category, opts.BaseName, opts.Extension)
+	absPath := filepath.Join(s.baseDir, filepath.FromSlash(relativePath))
+	absDir := filepath.Dir(absPath)
 	if err := os.MkdirAll(absDir, 0o755); err != nil {
 		return "", fmt.Errorf("create dir: %w", err)
 	}
 
-	absPath := filepath.Join(s.baseDir, filepath.FromSlash(relativePath))
+	if opts.SkipIfExists {
+		if _, err := os.Stat(absPath); err == nil {
+			return relativePath, nil
+		} else if !errors.Is(err, os.ErrNotExist) {
+			return "", fmt.Errorf("stat existing file: %w", err)
+		}
+	}
+
 	if err := os.WriteFile(absPath, data, 0o644); err != nil {
 		return "", fmt.Errorf("write file: %w", err)
 	}
 
 	return relativePath, nil
-}
-
-func sanitizePathSegment(value string) string {
-	value = strings.TrimSpace(value)
-	if value == "" {
-		return ""
-	}
-	builder := strings.Builder{}
-	builder.Grow(len(value))
-	for i := 0; i < len(value); i++ {
-		ch := value[i]
-		switch {
-		case ch >= 'a' && ch <= 'z', ch >= '0' && ch <= '9':
-			builder.WriteByte(ch)
-		case ch >= 'A' && ch <= 'Z':
-			builder.WriteByte(ch + 32)
-		case ch == '-', ch == '_':
-			builder.WriteByte(ch)
-		}
-	}
-	return builder.String()
 }
 
 var _ Storage = (*LocalStorage)(nil)
