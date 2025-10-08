@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { Box, IconButton, Typography } from '@mui/material';
 import { Close, Download, ZoomIn, ZoomOut, ZoomOutMap } from '@mui/icons-material';
 import { PhotoSlider } from 'react-photo-view';
-import type { OverlayRenderProps } from 'react-photo-view/dist/types';
+import type { DataType, OverlayRenderProps } from 'react-photo-view/dist/types';
 import 'react-photo-view/dist/react-photo-view.css';
 
 export interface ImageViewerProps {
@@ -21,10 +21,12 @@ const MAX_SCALE = 5;
 
 export interface ImageViewerItem {
   src: string;
-  key?: string;
+  key?: string | number;
   title?: string;
   downloadName?: string;
 }
+
+type NormalizedImageViewerItem = ImageViewerItem & { key: string | number };
 
 const ImageViewer: React.FC<ImageViewerProps> = ({
   open,
@@ -36,7 +38,7 @@ const ImageViewer: React.FC<ImageViewerProps> = ({
   showDownload = false,
   onDownload,
 }) => {
-  const items = useMemo(() => {
+  const items = useMemo<NormalizedImageViewerItem[]>(() => {
     if (Array.isArray(images) && images.length > 0) {
       return images.map((item) => ({
         src: item.src,
@@ -46,7 +48,7 @@ const ImageViewer: React.FC<ImageViewerProps> = ({
       }));
     }
     if (!imageUrl) {
-      return [] as ImageViewerItem[];
+      return [];
     }
     return [{ src: imageUrl, key: imageUrl, title, downloadName: undefined }];
   }, [imageUrl, images, title]);
@@ -63,8 +65,9 @@ const ImageViewer: React.FC<ImageViewerProps> = ({
 
   const currentItem = items[currentIndex];
   const resolvedTitle = currentItem?.title ?? title;
+  const sliderImages = useMemo<DataType[]>(() => items.map(({ key, src }) => ({ key, src })), [items]);
 
-  const handleToolbarRender = ({ scale = 1, onScale, onClose: sliderClose }: OverlayRenderProps) => {
+  const renderOverlay = ({ scale = 1, onScale, onClose: sliderClose }: OverlayRenderProps) => {
     const applyScale = (next: number) => {
       if (!onScale) {
         return;
@@ -102,72 +105,96 @@ const ImageViewer: React.FC<ImageViewerProps> = ({
     };
 
     return (
-      <Box
-        sx={{
-          position: 'absolute',
-          top: 0,
-          left: 0,
-          right: 0,
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          p: 2,
-          gap: 2,
-          pointerEvents: 'none',
-          background: 'linear-gradient(180deg, rgba(0,0,0,0.8) 0%, transparent 100%)',
-        }}
-      >
-        <Box sx={{ flex: 1, minWidth: 0, pointerEvents: 'auto' }}>
-          {resolvedTitle && (
-            <Typography variant="h6" sx={{ color: 'white', opacity: 0.9 }} noWrap>
-              {resolvedTitle}
-            </Typography>
-          )}
-        </Box>
+      <>
+        <Box
+          sx={{
+            position: 'absolute',
+            top: 0,
+            left: 0,
+            right: 0,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            p: 2,
+            gap: 2,
+            pointerEvents: 'none',
+            background: 'linear-gradient(180deg, rgba(0,0,0,0.8) 0%, transparent 100%)',
+          }}
+        >
+          <Box sx={{ flex: 1, minWidth: 0, pointerEvents: 'auto' }}>
+            {resolvedTitle && (
+              <Typography variant="h6" sx={{ color: 'white', opacity: 0.9 }} noWrap>
+                {resolvedTitle}
+              </Typography>
+            )}
+          </Box>
 
-        <Box sx={{ display: 'flex', gap: 1, pointerEvents: 'auto' }}>
-          <IconButton onClick={handleZoomOut} sx={{ color: 'white', bgcolor: 'rgba(255,255,255,0.1)' }} size="small">
-            <ZoomOut />
-          </IconButton>
-          <IconButton onClick={handleReset} sx={{ color: 'white', bgcolor: 'rgba(255,255,255,0.1)' }} size="small">
-            <ZoomOutMap />
-          </IconButton>
-          <IconButton onClick={handleZoomIn} sx={{ color: 'white', bgcolor: 'rgba(255,255,255,0.1)' }} size="small">
-            <ZoomIn />
-          </IconButton>
-          {showDownload && onDownload && (
-            <IconButton onClick={handleDownload} sx={{ color: 'white', bgcolor: 'rgba(255,255,255,0.1)' }} size="small">
-              <Download />
+          <Box sx={{ display: 'flex', gap: 1, pointerEvents: 'auto' }}>
+            <IconButton
+              onClick={handleZoomOut}
+              sx={{ color: 'white', bgcolor: 'rgba(255,255,255,0.1)' }}
+              size="small"
+              aria-label="zoom-out"
+            >
+              <ZoomOut />
             </IconButton>
-          )}
-          <IconButton onClick={handleClose} sx={{ color: 'white', bgcolor: 'rgba(255,255,255,0.1)' }} size="small">
-            <Close />
-          </IconButton>
+            <IconButton
+              onClick={handleReset}
+              sx={{ color: 'white', bgcolor: 'rgba(255,255,255,0.1)' }}
+              size="small"
+              aria-label="reset-zoom"
+            >
+              <ZoomOutMap />
+            </IconButton>
+            <IconButton
+              onClick={handleZoomIn}
+              sx={{ color: 'white', bgcolor: 'rgba(255,255,255,0.1)' }}
+              size="small"
+              aria-label="zoom-in"
+            >
+              <ZoomIn />
+            </IconButton>
+            {showDownload && onDownload && (
+              <IconButton
+                onClick={handleDownload}
+                sx={{ color: 'white', bgcolor: 'rgba(255,255,255,0.1)' }}
+                size="small"
+                aria-label="download"
+              >
+                <Download />
+              </IconButton>
+            )}
+            <IconButton
+              onClick={handleClose}
+              sx={{ color: 'white', bgcolor: 'rgba(255,255,255,0.1)' }}
+              size="small"
+              aria-label="close"
+            >
+              <Close />
+            </IconButton>
+          </Box>
         </Box>
-      </Box>
+        <Box
+          sx={{
+            position: 'absolute',
+            bottom: 0,
+            left: 0,
+            right: 0,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            p: 2,
+            pointerEvents: 'none',
+            background: 'linear-gradient(0deg, rgba(0,0,0,0.8) 0%, transparent 100%)',
+          }}
+        >
+          <Typography variant="body2" sx={{ color: 'white', opacity: 0.7 }}>
+            缩放: {Math.round(scale * 100)}% | 滚轮缩放 | 拖拽移动
+          </Typography>
+        </Box>
+      </>
     );
   };
-
-  const handleOverlayRender = ({ scale = 1 }: OverlayRenderProps) => (
-    <Box
-      sx={{
-        position: 'absolute',
-        bottom: 0,
-        left: 0,
-        right: 0,
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        p: 2,
-        pointerEvents: 'none',
-        background: 'linear-gradient(0deg, rgba(0,0,0,0.8) 0%, transparent 100%)',
-      }}
-    >
-      <Typography variant="body2" sx={{ color: 'white', opacity: 0.7 }}>
-        缩放: {Math.round(scale * 100)}% | 滚轮缩放 | 拖拽移动
-      </Typography>
-    </Box>
-  );
 
   if (!open || items.length === 0) {
     return null;
@@ -177,7 +204,7 @@ const ImageViewer: React.FC<ImageViewerProps> = ({
     <PhotoSlider
       visible={open}
       photoClosable={true}
-      images={items.map((item) => ({ src: item.src, key: item.key }))}
+      images={sliderImages}
       index={currentIndex}
       onClose={() => {
         onClose();
@@ -188,9 +215,9 @@ const ImageViewer: React.FC<ImageViewerProps> = ({
         }
         setCurrentIndex(index);
       }}
-      toolbarRender={handleToolbarRender}
-      overlayRender={handleOverlayRender}
+      overlayRender={renderOverlay}
       maskOpacity={0.95}
+      bannerVisible={false}
     />
   );
 };
