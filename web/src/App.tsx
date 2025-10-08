@@ -14,6 +14,7 @@ import { NavLink, Navigate, Route, Routes } from 'react-router-dom';
 import AdvancedSettingsPage from './pages/AdvancedSettingsPage';
 import CustomImageGenerationPage from './pages/CustomImageGenerationPage';
 import GenerationHistoryPage from './pages/GenerationHistoryPage';
+import GeneratedImageGalleryPage from './pages/GeneratedImageGalleryPage';
 import SceneImageGenerationPage from './pages/SceneImageGenerationPage';
 
 const theme = createTheme({
@@ -72,6 +73,7 @@ const navItems = [
   { label: '自定义图片生成', path: '/custom' },
   { label: '场景图片生成', path: '/scene' },
   { label: '生成记录查看', path: '/history' },
+  { label: '生成图片查看', path: '/gallery' },
   { label: '高级设置', path: '/settings' },
 ];
 
@@ -114,6 +116,7 @@ const App: React.FC = () => (
           <Route path="/custom" element={<CustomImageGenerationPage />} />
           <Route path="/scene" element={<SceneImageGenerationPage />} />
           <Route path="/history" element={<GenerationHistoryPage />} />
+          <Route path="/gallery" element={<GeneratedImageGalleryPage />} />
           <Route path="/settings" element={<AdvancedSettingsPage />} />
           <Route path="*" element={<Navigate to="/custom" replace />} />
         </Routes>

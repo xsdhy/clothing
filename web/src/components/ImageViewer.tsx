@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Box, IconButton, Typography } from '@mui/material';
 import { Close, Download, ZoomIn, ZoomOut, ZoomOutMap } from '@mui/icons-material';
 import { PhotoSlider } from 'react-photo-view';
@@ -8,29 +8,61 @@ import 'react-photo-view/dist/react-photo-view.css';
 export interface ImageViewerProps {
   open: boolean;
   onClose: () => void;
-  imageUrl: string;
+  imageUrl?: string;
+  images?: ImageViewerItem[];
+  initialIndex?: number;
   title?: string;
   showDownload?: boolean;
-  onDownload?: () => void;
+  onDownload?: (index: number, item: ImageViewerItem) => void;
 }
 
 const MIN_SCALE = 0.2;
 const MAX_SCALE = 5;
 
+export interface ImageViewerItem {
+  src: string;
+  key?: string;
+  title?: string;
+  downloadName?: string;
+}
+
 const ImageViewer: React.FC<ImageViewerProps> = ({
   open,
   onClose,
   imageUrl,
+  images,
+  initialIndex = 0,
   title,
   showDownload = false,
   onDownload,
 }) => {
-  const images = useMemo(() => {
-    if (!imageUrl) {
-      return [];
+  const items = useMemo(() => {
+    if (Array.isArray(images) && images.length > 0) {
+      return images.map((item) => ({
+        src: item.src,
+        key: item.key ?? item.src,
+        title: item.title,
+        downloadName: item.downloadName,
+      }));
     }
-    return [{ src: imageUrl, key: imageUrl }];
-  }, [imageUrl]);
+    if (!imageUrl) {
+      return [] as ImageViewerItem[];
+    }
+    return [{ src: imageUrl, key: imageUrl, title, downloadName: undefined }];
+  }, [imageUrl, images, title]);
+
+  const [currentIndex, setCurrentIndex] = useState(initialIndex);
+
+  useEffect(() => {
+    if (!open) {
+      return;
+    }
+    const safeIndex = Number.isFinite(initialIndex) ? Math.max(0, Math.min(initialIndex, items.length - 1)) : 0;
+    setCurrentIndex(safeIndex);
+  }, [initialIndex, items.length, open]);
+
+  const currentItem = items[currentIndex];
+  const resolvedTitle = currentItem?.title ?? title;
 
   const handleToolbarRender = ({ scale = 1, onScale, onClose: sliderClose }: OverlayRenderProps) => {
     const applyScale = (next: number) => {
@@ -58,7 +90,10 @@ const ImageViewer: React.FC<ImageViewerProps> = ({
 
     const handleDownload = (event: React.MouseEvent) => {
       event.stopPropagation();
-      onDownload?.();
+      if (!onDownload || !currentItem) {
+        return;
+      }
+      onDownload(currentIndex, currentItem);
     };
 
     const handleClose = (event: React.MouseEvent) => {
@@ -83,9 +118,9 @@ const ImageViewer: React.FC<ImageViewerProps> = ({
         }}
       >
         <Box sx={{ flex: 1, minWidth: 0, pointerEvents: 'auto' }}>
-          {title && (
+          {resolvedTitle && (
             <Typography variant="h6" sx={{ color: 'white', opacity: 0.9 }} noWrap>
-              {title}
+              {resolvedTitle}
             </Typography>
           )}
         </Box>
@@ -134,17 +169,23 @@ const ImageViewer: React.FC<ImageViewerProps> = ({
     </Box>
   );
 
-  if (!open || images.length === 0) {
+  if (!open || items.length === 0) {
     return null;
   }
 
   return (
     <PhotoSlider
       visible={open}
-      images={images}
-      index={0}
+      images={items.map((item) => ({ src: item.src, key: item.key }))}
+      index={currentIndex}
       onClose={() => {
         onClose();
+      }}
+      onIndexChange={(index) => {
+        if (!Number.isFinite(index)) {
+          return;
+        }
+        setCurrentIndex(index);
       }}
       toolbarRender={handleToolbarRender}
       overlayRender={handleOverlayRender}
