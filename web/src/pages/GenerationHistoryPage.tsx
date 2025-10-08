@@ -220,18 +220,23 @@ const GenerationHistoryPage: React.FC = () => {
     setPreviewImage(null);
   }, []);
 
-  const handleDownloadPreview = useCallback(() => {
-    if (!previewImage) {
-      return;
-    }
+  const handleDownloadPreview = useCallback(
+    (_index: number, item: { src: string }) => {
+      const url = item?.src ?? previewImage?.url;
+      if (!url) {
+        return;
+      }
 
-    const link = document.createElement('a');
-    link.href = previewImage.url;
-    link.download = previewImage.alt.replace(/\s+/g, '_');
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-  }, [previewImage]);
+      const link = document.createElement('a');
+      link.href = url;
+      const fileName = (previewImage?.alt ?? 'image').replace(/\s+/g, '_');
+      link.download = fileName;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    },
+    [previewImage]
+  );
 
   const loadImageAsDataUrl = useCallback(async (url: string): Promise<string> => {
     const response = await fetch(url);
@@ -661,7 +666,7 @@ const GenerationHistoryPage: React.FC = () => {
         <ImageViewer
           open={Boolean(previewImage)}
           onClose={handleClosePreview}
-          imageUrl={previewImage?.url ?? ''}
+          imageUrl={previewImage?.url}
           title={previewImage?.alt}
           showDownload
           onDownload={handleDownloadPreview}
