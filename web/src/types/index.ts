@@ -74,4 +74,7 @@ export interface UsageRecordListResponse {
   meta: PaginationMeta;
 }
 
+export interface UsageRecordDetailResponse {
+  record: UsageRecord;
+}
 

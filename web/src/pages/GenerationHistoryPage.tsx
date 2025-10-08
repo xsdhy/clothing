@@ -10,12 +10,10 @@ import {
   Chip,
   CircularProgress,
   Container,
-  Divider,
   FormControl,
   Grid,
   IconButton,
   InputLabel,
-  Collapse,
   MenuItem,
   Pagination,
   Select,
@@ -39,6 +37,7 @@ import {
 } from '../ai';
 import type { AIProvider, UsageRecord } from '../types';
 import ImageViewer from '../components/ImageViewer';
+import UsageRecordDetailDialog from '../components/UsageRecordDetailDialog';
 
 const PAGE_SIZE = 10;
 const ALL_VALUE = 'all';
@@ -61,7 +60,7 @@ const GenerationHistoryPage: React.FC = () => {
   const [previewImage, setPreviewImage] = useState<{ url: string; alt: string } | null>(null);
   const [retryingRecordId, setRetryingRecordId] = useState<number | null>(null);
   const [preparingOutputAsInput, setPreparingOutputAsInput] = useState<{ recordId: number; index: number } | null>(null);
-  const [expandedRecords, setExpandedRecords] = useState<Record<number, boolean>>({});
+  const [selectedDetail, setSelectedDetail] = useState<{ recordId: number; imageIndex?: number } | null>(null);
   const [deletingRecordId, setDeletingRecordId] = useState<number | null>(null);
   const navigate = useNavigate();
   const recordCount = records.length;
@@ -126,6 +125,15 @@ const GenerationHistoryPage: React.FC = () => {
   useEffect(() => {
     void loadRecords(page);
   }, [loadRecords, page]);
+
+  useEffect(() => {
+    if (!selectedDetail) {
+      return;
+    }
+    if (!records.some((record) => record.id === selectedDetail.recordId)) {
+      setSelectedDetail(null);
+    }
+  }, [records, selectedDetail]);
 
   useEffect(() => {
     let cancelled = false;
@@ -193,6 +201,7 @@ const GenerationHistoryPage: React.FC = () => {
         setDeletingRecordId(record.id);
         const nextPage = recordCount === 1 && page > 1 ? page - 1 : page;
         await deleteUsageRecord(record.id);
+        setSelectedDetail((prev) => (prev?.recordId === record.id ? null : prev));
 
         if (nextPage !== page) {
           setPage(nextPage);
@@ -313,12 +322,21 @@ const GenerationHistoryPage: React.FC = () => {
     [loadImageAsDataUrl, navigate]
   );
 
-  const handleToggleDetails = useCallback((recordId: number) => {
-    setExpandedRecords((prev) => ({
-      ...prev,
-      [recordId]: !prev[recordId],
-    }));
+  const handleOpenDetails = useCallback((record: UsageRecord) => {
+    setSelectedDetail({
+      recordId: record.id,
+      imageIndex: record.output_images.length > 0 ? 0 : undefined,
+    });
   }, []);
+
+  const handleCloseDetail = useCallback(() => {
+    setSelectedDetail(null);
+  }, []);
+
+  const selectedRecordId = selectedDetail?.recordId ?? null;
+  const preparingMatch =
+    selectedRecordId !== null && preparingOutputAsInput?.recordId === selectedRecordId;
+  const preparingImageIndex = preparingMatch ? preparingOutputAsInput?.index : undefined;
 
   return (
     <Box sx={{ py: 6 }}>
@@ -428,7 +446,6 @@ const GenerationHistoryPage: React.FC = () => {
 
         <Grid container spacing={3} sx={{ opacity: loading ? 0.7 : 1 }}>
           {records.map((record) => {
-            const createdAt = new Date(record.created_at).toLocaleString();
             const hasError = Boolean(record.error_message);
 
             return (
@@ -437,8 +454,8 @@ const GenerationHistoryPage: React.FC = () => {
                     title={`${record.provider_id}/${record.model_id}`}
                     action={
                       <Stack direction="row" spacing={1} alignItems="center">
-                        <Button variant="text" size="small" onClick={() => handleToggleDetails(record.id)}>
-                          {expandedRecords[record.id] ? '收起详情' : '查看详情'}
+                        <Button variant="text" size="small" onClick={() => handleOpenDetails(record)}>
+                          查看详情
                         </Button>
                         <Button
                           variant="outlined"
@@ -603,48 +620,6 @@ const GenerationHistoryPage: React.FC = () => {
                         </Box>
                       )}
 
-                      <Collapse in={expandedRecords[record.id] ?? false} timeout="auto" unmountOnExit>
-                        <Stack spacing={1.5} sx={{ mt: 1 }}>
-                          <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1} alignItems={{ xs: 'flex-start', sm: 'center' }}>
-                            <Chip label={`供应商：${record.provider_id}`} color="primary" variant="outlined" size="small" />
-                            <Chip label={`模型：${record.model_id}`} color="primary" variant="outlined" size="small" />
-                            {record.size && <Chip label={`尺寸：${record.size}`} variant="outlined" size="small" />}
-                          </Stack>
-
-                            {record.prompt && (
-                            <Box>
-                              <Typography variant="subtitle2" color="text.secondary" gutterBottom>
-                                输入文本
-                              </Typography>
-                              <Typography variant="body2" sx={{ whiteSpace: 'pre-wrap' }}>
-                                {record.prompt || '（无提示词）'}
-                              </Typography>
-                            </Box>
-                          )}
-
-                          {record.output_text && (
-                            <Box>
-                              <Typography variant="subtitle2" color="text.secondary" gutterBottom>
-                                输出文本
-                              </Typography>
-                              <Typography variant="body2" sx={{ whiteSpace: 'pre-wrap' }}>
-                                {record.output_text}
-                              </Typography>
-                            </Box>
-                          )}
-
-                          {hasError && (
-                            <Alert severity="warning">{record.error_message}</Alert>
-                          )}
-
-                          <Divider sx={{ my: 1 }} />
-
-                          <Typography variant="caption" color="text.secondary">
-                            记录 ID：{record.id} - {createdAt}
-                          </Typography>
-                        </Stack>
-                      </Collapse>
-
                     </Stack>
                   </CardContent>
                 </Card>
@@ -662,6 +637,34 @@ const GenerationHistoryPage: React.FC = () => {
             )}
           </Stack>
         )}
+
+        <UsageRecordDetailDialog
+          open={Boolean(selectedDetail)}
+          recordId={selectedDetail?.recordId ?? null}
+          initialImageIndex={selectedDetail?.imageIndex}
+          onClose={handleCloseDetail}
+          onRetry={(record) => {
+            void handleRetry(record);
+          }}
+          onDelete={(record) => {
+            void handleDelete(record);
+          }}
+          onUseOutputImage={(record, imageUrl, imageIndex) => {
+            void handleUseOutputImage(record, imageUrl, imageIndex);
+          }}
+          onPreviewOutputImage={(record, imageIndex) => {
+            const image = record.output_images[imageIndex];
+            if (image?.url) {
+              setPreviewImage({ url: image.url, alt: `记录 #${record.id} 输出图片 ${imageIndex + 1}` });
+            }
+          }}
+          actionState={{
+            retrying: selectedRecordId !== null && retryingRecordId === selectedRecordId,
+            deleting: selectedRecordId !== null && deletingRecordId === selectedRecordId,
+            preparingOutput: typeof preparingImageIndex === 'number',
+            preparingOutputIndex: typeof preparingImageIndex === 'number' ? preparingImageIndex : undefined,
+          }}
+        />
 
         <ImageViewer
           open={Boolean(previewImage)}

@@ -53,18 +53,7 @@ func (h *HTTPHandler) ListUsageRecords(c *gin.Context) {
 
 	items := make([]entity.UsageRecordItem, 0, len(records))
 	for _, record := range records {
-		items = append(items, entity.UsageRecordItem{
-			ID:           record.ID,
-			ProviderID:   record.ProviderID,
-			ModelID:      record.ModelID,
-			Prompt:       record.Prompt,
-			Size:         record.Size,
-			OutputText:   record.OutputText,
-			ErrorMessage: record.ErrorMessage,
-			CreatedAt:    record.CreatedAt,
-			InputImages:  h.makeUsageImages(record.InputImages.ToSlice()),
-			OutputImages: h.makeUsageImages(record.OutputImages.ToSlice()),
-		})
+		items = append(items, h.makeUsageRecordItem(record))
 	}
 
 	if meta == nil {
@@ -93,6 +82,52 @@ func (h *HTTPHandler) makeUsageImages(paths []string) []entity.UsageImage {
 		return []entity.UsageImage{}
 	}
 	return items
+}
+
+func (h *HTTPHandler) makeUsageRecordItem(record entity.DbUsageRecord) entity.UsageRecordItem {
+	return entity.UsageRecordItem{
+		ID:           record.ID,
+		ProviderID:   record.ProviderID,
+		ModelID:      record.ModelID,
+		Prompt:       record.Prompt,
+		Size:         record.Size,
+		OutputText:   record.OutputText,
+		ErrorMessage: record.ErrorMessage,
+		CreatedAt:    record.CreatedAt,
+		InputImages:  h.makeUsageImages(record.InputImages.ToSlice()),
+		OutputImages: h.makeUsageImages(record.OutputImages.ToSlice()),
+	}
+}
+
+func (h *HTTPHandler) GetUsageRecord(c *gin.Context) {
+	if h.repo == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "usage record repository not available"})
+		return
+	}
+
+	idValue := strings.TrimSpace(c.Param("id"))
+	id, err := strconv.ParseUint(idValue, 10, 64)
+	if err != nil || id == 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid usage record id"})
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(c.Request.Context(), 5*time.Second)
+	defer cancel()
+
+	record, err := h.repo.GetUsageRecord(ctx, uint(id))
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			c.JSON(http.StatusNotFound, gin.H{"error": "usage record not found"})
+			return
+		}
+		logrus.WithError(err).WithField("id", id).Error("failed to load usage record")
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to load usage record"})
+		return
+	}
+
+	item := h.makeUsageRecordItem(*record)
+	c.JSON(http.StatusOK, entity.UsageRecordDetailResponse{Record: item})
 }
 
 func (h *HTTPHandler) DeleteUsageRecord(c *gin.Context) {

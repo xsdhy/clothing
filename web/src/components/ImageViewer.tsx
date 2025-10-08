@@ -176,6 +176,7 @@ const ImageViewer: React.FC<ImageViewerProps> = ({
   return (
     <PhotoSlider
       visible={open}
+      photoClosable={true}
       images={items.map((item) => ({ src: item.src, key: item.key }))}
       index={currentIndex}
       onClose={() => {

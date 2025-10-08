@@ -7,6 +7,7 @@ import type {
   UsageRecordListResponse,
   UsageRecord,
   PaginationMeta,
+  UsageRecordDetailResponse,
 } from './types';
 import type { SSEEventPayload } from './utils/sse';
 import { appendSanitizedImages, sanitizeImages } from './utils/images';
@@ -393,4 +394,39 @@ export const deleteUsageRecord = async (id: number): Promise<void> => {
     }
     throw new Error(message);
   }
+};
+
+export const fetchUsageRecordDetail = async (id: number): Promise<UsageRecord> => {
+  if (!Number.isFinite(id) || id <= 0) {
+    throw new Error('无效的记录 ID');
+  }
+
+  let response: Response;
+  try {
+    response = await requestWithTimeout(`${USAGE_RECORDS_ENDPOINT}/${id}`, {
+      headers: {
+        Accept: 'application/json',
+      },
+    });
+  } catch (error) {
+    throw new Error(`获取记录详情失败: ${error instanceof Error ? error.message : '未知错误'}`);
+  }
+
+  let payload: Partial<UsageRecordDetailResponse> & { error?: string };
+  try {
+    payload = (await response.json()) as Partial<UsageRecordDetailResponse> & { error?: string };
+  } catch {
+    payload = {};
+  }
+
+  if (!response.ok) {
+    const message = payload?.error ?? `服务请求失败: ${response.status} ${response.statusText}`;
+    throw new Error(message);
+  }
+
+  if (!payload?.record) {
+    throw new Error('后端未返回有效的记录详情');
+  }
+
+  return payload.record;
 };

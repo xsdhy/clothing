@@ -74,6 +74,25 @@ func (r *GormRepository) ListUsageRecords(ctx context.Context, params *entity.Us
 	return records, meta, nil
 }
 
+// GetUsageRecord retrieves a single usage record by ID.
+func (r *GormRepository) GetUsageRecord(ctx context.Context, id uint) (*entity.DbUsageRecord, error) {
+	if r == nil || r.db == nil {
+		return nil, fmt.Errorf("repository not initialised")
+	}
+	if id == 0 {
+		return nil, fmt.Errorf("invalid usage record id")
+	}
+
+	var record entity.DbUsageRecord
+	if err := r.db.WithContext(ctx).First(&record, id).Error; err != nil {
+		if err == gorm.ErrRecordNotFound {
+			return nil, err
+		}
+		return nil, fmt.Errorf("failed to load usage record: %w", err)
+	}
+	return &record, nil
+}
+
 // DeleteUsageRecord removes a usage record by ID.
 func (r *GormRepository) DeleteUsageRecord(ctx context.Context, id uint) error {
 	if r == nil || r.db == nil {

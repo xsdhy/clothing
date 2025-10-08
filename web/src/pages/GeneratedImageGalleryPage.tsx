@@ -1,35 +1,14 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import {
-  Alert,
-  Box,
-  Button,
-  ButtonBase,
-  Card,
-  CardActions,
-  CardContent,
-  Chip,
-  CircularProgress,
-  Container,
-  Dialog,
-  DialogActions,
-  DialogContent,
-  DialogTitle,
-  IconButton,
-  Stack,
-  Typography,
-} from '@mui/material';
+import { Alert, Box, Button, ButtonBase, Card, CardActions, CircularProgress, Container, Stack, Typography } from '@mui/material';
 import OpenInFullIcon from '@mui/icons-material/OpenInFull';
 import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
-import ReplayIcon from '@mui/icons-material/Replay';
-import InputIcon from '@mui/icons-material/Input';
-import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
 import RefreshIcon from '@mui/icons-material/Refresh';
-import CloseIcon from '@mui/icons-material/Close';
 import { useNavigate } from 'react-router-dom';
 
 import { deleteUsageRecord, fetchUsageRecords } from '../ai';
 import type { UsageRecord } from '../types';
 import ImageViewer, { type ImageViewerItem } from '../components/ImageViewer';
+import UsageRecordDetailDialog from '../components/UsageRecordDetailDialog';
 
 const PAGE_SIZE = 20;
 
@@ -47,14 +26,6 @@ interface SelectedDetail {
   recordId: number;
   imageIndex?: number;
 }
-
-const formatDateTime = (value: string): string => {
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) {
-    return value;
-  }
-  return date.toLocaleString();
-};
 
 const GeneratedImageGalleryPage: React.FC = () => {
   const navigate = useNavigate();
@@ -381,10 +352,10 @@ const GeneratedImageGalleryPage: React.FC = () => {
     setSelectedDetail(null);
   }, []);
 
-  const selectedRecord = selectedDetail ? recordMap.get(selectedDetail.recordId) ?? null : null;
-  const selectedImage = selectedRecord && selectedDetail?.imageIndex !== undefined
-    ? selectedRecord.output_images[selectedDetail.imageIndex] ?? null
-    : null;
+  const selectedRecordId = selectedDetail?.recordId ?? null;
+  const preparingMatch =
+    selectedRecordId !== null && preparingOutputAsInput?.recordId === selectedRecordId;
+  const preparingImageIndex = preparingMatch ? preparingOutputAsInput?.index : undefined;
 
   return (
     <Box sx={{ py: 6 }}>
@@ -449,21 +420,7 @@ const GeneratedImageGalleryPage: React.FC = () => {
                       sx={{ width: '100%', display: 'block' }}
                     />
                   </ButtonBase>
-                  <CardContent>
-                    <Stack spacing={1}>
-                      <Typography variant="subtitle2" title={item.prompt} sx={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                        {item.prompt || '（无提示词）'}
-                      </Typography>
-                      <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
-                        <Chip size="small" label={`记录 #${item.recordId}`} />
-                        <Chip size="small" label={item.providerId} />
-                        <Chip size="small" label={item.modelId} />
-                      </Stack>
-                      <Typography variant="caption" color="text.secondary">
-                        {formatDateTime(item.createdAt)}
-                      </Typography>
-                    </Stack>
-                  </CardContent>
+ 
                   <CardActions sx={{ justifyContent: 'space-between', flexWrap: 'wrap' }}>
                     <Button size="small" startIcon={<OpenInFullIcon fontSize="small" />} onClick={() => handleOpenViewer(index)}>
                       放大查看
@@ -518,149 +475,35 @@ const GeneratedImageGalleryPage: React.FC = () => {
           onDownload={handleDownloadViewerImage}
         />
 
-        <Dialog open={Boolean(selectedRecord)} onClose={handleCloseDetails} maxWidth="md" fullWidth>
-          <DialogTitle sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-            <Typography variant="h6">生成记录详情</Typography>
-            <IconButton onClick={handleCloseDetails} size="small">
-              <CloseIcon />
-            </IconButton>
-          </DialogTitle>
-          <DialogContent dividers>
-            {selectedRecord && (
-              <Stack spacing={3}>
-                {selectedImage && (
-                  <Box>
-                    <Typography variant="subtitle2" color="text.secondary" gutterBottom>
-                      当前选中图片
-                    </Typography>
-                    <ButtonBase
-                      onClick={() => {
-                        const index = galleryItems.findIndex(
-                          (item) => item.recordId === selectedRecord.id && item.imageIndex === (selectedDetail?.imageIndex ?? -1)
-                        );
-                        if (index !== -1) {
-                          handleOpenViewer(index);
-                        }
-                      }}
-                      sx={{
-                        borderRadius: 1,
-                        overflow: 'hidden',
-                        border: '1px solid',
-                        borderColor: 'divider',
-                        display: 'inline-block',
-                      }}
-                    >
-                      <Box component="img" src={selectedImage.url} alt={selectedRecord.prompt}
-                        sx={{ width: { xs: 200, sm: 260 }, display: 'block' }}
-                      />
-                    </ButtonBase>
-                  </Box>
-                )}
-
-                <Box>
-                  <Typography variant="subtitle2" color="text.secondary" gutterBottom>
-                    提示词
-                  </Typography>
-                  <Typography variant="body2" sx={{ whiteSpace: 'pre-wrap' }}>
-                    {selectedRecord.prompt || '（无提示词）'}
-                  </Typography>
-                </Box>
-
-                <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
-                  <Chip label={`记录 #${selectedRecord.id}`} />
-                  <Chip label={`厂商 ${selectedRecord.provider_id}`} />
-                  <Chip label={`模型 ${selectedRecord.model_id}`} />
-                  {selectedRecord.size && <Chip label={`尺寸 ${selectedRecord.size}`} />}
-                  <Chip label={formatDateTime(selectedRecord.created_at)} />
-                </Stack>
-
-                {selectedRecord.output_text && (
-                  <Box>
-                    <Typography variant="subtitle2" color="text.secondary" gutterBottom>
-                      输出文本
-                    </Typography>
-                    <Typography variant="body2" sx={{ whiteSpace: 'pre-wrap' }}>
-                      {selectedRecord.output_text}
-                    </Typography>
-                  </Box>
-                )}
-
-                {selectedRecord.input_images.length > 0 && (
-                  <Box>
-                    <Typography variant="subtitle2" color="text.secondary" gutterBottom>
-                      输入图片
-                    </Typography>
-                    <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
-                      {selectedRecord.input_images.map((image, index) => (
-                        <Box key={`${image.url}-${index}`} sx={{ width: 80, height: 80, borderRadius: 1, overflow: 'hidden', border: '1px solid', borderColor: 'divider' }}>
-                          <Box component="img" src={image.url} alt={`输入图片 ${index + 1}`}
-                            sx={{ width: '100%', height: '100%', objectFit: 'cover' }}
-                          />
-                        </Box>
-                      ))}
-                    </Stack>
-                  </Box>
-                )}
-
-                {selectedRecord.error_message && (
-                  <Alert severity="warning">{selectedRecord.error_message}</Alert>
-                )}
-              </Stack>
-            )}
-          </DialogContent>
-          {selectedRecord && (
-            <DialogActions sx={{ justifyContent: 'space-between', flexWrap: 'wrap', gap: 1 }}>
-              <Button onClick={handleCloseDetails}>关闭</Button>
-              <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1} alignItems="stretch">
-                <Button
-                  variant="outlined"
-                  startIcon={
-                    preparingOutputAsInput && preparingOutputAsInput.recordId === selectedRecord.id && selectedDetail?.imageIndex !== undefined &&
-                    preparingOutputAsInput.index === selectedDetail.imageIndex ? (
-                      <CircularProgress size={16} color="inherit" />
-                    ) : (
-                      <InputIcon />
-                    )
-                  }
-                  disabled={
-                    selectedDetail?.imageIndex === undefined ||
-                    preparingOutputAsInput?.recordId === selectedRecord.id && preparingOutputAsInput.index === selectedDetail.imageIndex
-                  }
-                  onClick={() => {
-                    if (selectedDetail?.imageIndex === undefined) {
-                      return;
-                    }
-                    const image = selectedRecord.output_images[selectedDetail.imageIndex];
-                    if (!image) {
-                      return;
-                    }
-                    void handleUseOutputImage(selectedRecord, image.url, selectedDetail.imageIndex);
-                  }}
-                >
-                  带入生成
-                </Button>
-                <Button
-                  variant="contained"
-                  color="primary"
-                  startIcon={retryingRecordId === selectedRecord.id ? <CircularProgress size={16} color="inherit" /> : <ReplayIcon />}
-                  disabled={retryingRecordId === selectedRecord.id}
-                  onClick={() => void handleRetry(selectedRecord)}
-                >
-                  再次生成
-                </Button>
-                <Button
-                  variant="outlined"
-                  color="error"
-                  startIcon={deletingRecordId === selectedRecord.id ? <CircularProgress size={16} color="inherit" /> : <DeleteOutlineIcon />}
-                  disabled={deletingRecordId === selectedRecord.id}
-                  onClick={() => void handleDeleteRecord(selectedRecord)}
-                >
-                  删除记录
-                </Button>
-              </Stack>
-            </DialogActions>
-          )}
-        </Dialog>
+        <UsageRecordDetailDialog
+          open={Boolean(selectedDetail)}
+          recordId={selectedDetail?.recordId ?? null}
+          initialImageIndex={selectedDetail?.imageIndex}
+          onClose={handleCloseDetails}
+          onRetry={(record) => {
+            void handleRetry(record);
+          }}
+          onDelete={(record) => {
+            void handleDeleteRecord(record);
+          }}
+          onUseOutputImage={(record, imageUrl, imageIndex) => {
+            void handleUseOutputImage(record, imageUrl, imageIndex);
+          }}
+          onPreviewOutputImage={(record, imageIndex) => {
+            const index = galleryItems.findIndex(
+              (item) => item.recordId === record.id && item.imageIndex === imageIndex
+            );
+            if (index !== -1) {
+              handleOpenViewer(index);
+            }
+          }}
+          actionState={{
+            retrying: selectedRecordId !== null && retryingRecordId === selectedRecordId,
+            deleting: selectedRecordId !== null && deletingRecordId === selectedRecordId,
+            preparingOutput: typeof preparingImageIndex === 'number',
+            preparingOutputIndex: typeof preparingImageIndex === 'number' ? preparingImageIndex : undefined,
+          }}
+        />
       </Container>
     </Box>
   );

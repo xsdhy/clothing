@@ -74,3 +74,7 @@ type UsageRecordListResponse struct {
 	Records []UsageRecordItem `json:"records"`
 	Meta    *Meta             `json:"meta"`
 }
+
+type UsageRecordDetailResponse struct {
+	Record UsageRecordItem `json:"record"`
+}

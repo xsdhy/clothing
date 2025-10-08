@@ -60,6 +60,7 @@ const inlineAssets = (): Plugin => ({
   }
 })
 
+
 export default defineConfig({
   plugins: [react(), inlineAssets()],
 
@@ -78,7 +79,7 @@ export default defineConfig({
         changeOrigin: true,
       },
         '/files': {
-            target: 'http://127.0.0.1:8080/',
+            target: 'http://192.168.10.53:6211/',
             changeOrigin: true,
         },
     },
