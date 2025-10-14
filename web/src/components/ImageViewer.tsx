@@ -101,7 +101,8 @@ const ImageViewer: React.FC<ImageViewerProps> = ({
 
     const handleClose = (event: React.MouseEvent) => {
       event.stopPropagation();
-      sliderClose?.(event);
+      sliderClose?.();
+      onClose();
     };
 
     return (
@@ -112,44 +113,68 @@ const ImageViewer: React.FC<ImageViewerProps> = ({
             top: 0,
             left: 0,
             right: 0,
-            display: 'flex',
+            display: 'grid',
+            gridTemplateColumns: { xs: '1fr', sm: 'minmax(0,1fr) auto' },
             alignItems: 'center',
-            justifyContent: 'space-between',
-            p: 2,
-            gap: 2,
+            rowGap: 1,
+            columnGap: 2,
             pointerEvents: 'none',
             background: 'linear-gradient(180deg, rgba(0,0,0,0.8) 0%, transparent 100%)',
           }}
         >
-          <Box sx={{ flex: 1, minWidth: 0, pointerEvents: 'auto' }}>
+          <Box sx={{ minWidth: 0, pointerEvents: 'auto' }}>
             {resolvedTitle && (
-              <Typography variant="h6" sx={{ color: 'white', opacity: 0.9 }} noWrap>
+              <Typography
+                variant="h6"
+                sx={{ color: 'white', opacity: 0.9, fontSize: { xs: '1rem', sm: '1.1rem' } }}
+                noWrap
+              >
                 {resolvedTitle}
               </Typography>
             )}
           </Box>
 
-          <Box sx={{ display: 'flex', gap: 1, pointerEvents: 'auto' }}>
+          <Box
+            sx={{
+              display: 'flex',
+              gap: 1,
+              pointerEvents: 'auto',
+              justifyContent: { xs: 'flex-start', sm: 'flex-end' },
+              flexWrap: 'wrap',
+            }}
+          >
             <IconButton
               onClick={handleZoomOut}
-              sx={{ color: 'white', bgcolor: 'rgba(255,255,255,0.1)' }}
-              size="small"
+              sx={{
+                color: 'white',
+                bgcolor: 'rgba(255,255,255,0.12)',
+                width: { xs: 40, sm: 42 },
+                height: { xs: 40, sm: 42 },
+              }}
               aria-label="zoom-out"
             >
               <ZoomOut />
             </IconButton>
             <IconButton
               onClick={handleReset}
-              sx={{ color: 'white', bgcolor: 'rgba(255,255,255,0.1)' }}
-              size="small"
+              sx={{
+                color: 'white',
+                bgcolor: 'rgba(255,255,255,0.12)',
+                width: { xs: 40, sm: 42 },
+                height: { xs: 40, sm: 42 },
+              }}
               aria-label="reset-zoom"
             >
               <ZoomOutMap />
             </IconButton>
             <IconButton
               onClick={handleZoomIn}
-              sx={{ color: 'white', bgcolor: 'rgba(255,255,255,0.1)' }}
-              size="small"
+              sx={{
+                color: 'white',
+                bgcolor: 'rgba(255,255,255,0.12)',
+                width: { xs: 40, sm: 42 },
+                height: { xs: 40, sm: 42 },
+              }}
               aria-label="zoom-in"
             >
               <ZoomIn />
@@ -157,8 +182,12 @@ const ImageViewer: React.FC<ImageViewerProps> = ({
             {showDownload && onDownload && (
               <IconButton
                 onClick={handleDownload}
-                sx={{ color: 'white', bgcolor: 'rgba(255,255,255,0.1)' }}
-                size="small"
+                sx={{
+                  color: 'white',
+                  bgcolor: 'rgba(255,255,255,0.12)',
+                  width: { xs: 40, sm: 42 },
+                  height: { xs: 40, sm: 42 },
+                }}
                 aria-label="download"
               >
                 <Download />
@@ -166,8 +195,12 @@ const ImageViewer: React.FC<ImageViewerProps> = ({
             )}
             <IconButton
               onClick={handleClose}
-              sx={{ color: 'white', bgcolor: 'rgba(255,255,255,0.1)' }}
-              size="small"
+              sx={{
+                color: 'white',
+                bgcolor: 'rgba(255,255,255,0.18)',
+                width: { xs: 40, sm: 42 },
+                height: { xs: 40, sm: 42 },
+              }}
               aria-label="close"
             >
               <Close />
@@ -183,12 +216,21 @@ const ImageViewer: React.FC<ImageViewerProps> = ({
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            p: 2,
+            px: { xs: 2, sm: 3 },
+            py: { xs: 1.5, sm: 2 },
             pointerEvents: 'none',
             background: 'linear-gradient(0deg, rgba(0,0,0,0.8) 0%, transparent 100%)',
           }}
         >
-          <Typography variant="body2" sx={{ color: 'white', opacity: 0.7 }}>
+          <Typography
+            variant="body2"
+            sx={{
+              color: 'white',
+              opacity: 0.7,
+              fontSize: { xs: '0.8rem', sm: '0.9rem' },
+              textAlign: 'center',
+            }}
+          >
             缩放: {Math.round(scale * 100)}% | 滚轮缩放 | 拖拽移动
           </Typography>
         </Box>
