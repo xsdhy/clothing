@@ -236,142 +236,205 @@ const ImageGenerator: React.FC<ImageGeneratorProps> = ({
   };
 
   return (
-    <Paper elevation={2} sx={{ p: 2 }}>
-      <Box sx={{ mb: 2 }}>
-        <Typography variant="h5" component="h2" gutterBottom sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+    <Paper
+      elevation={0}
+      sx={{
+        p: { xs: 2, sm: 3 },
+        borderRadius: { xs: 2, sm: 3 },
+        border: '1px solid',
+        borderColor: 'divider',
+        boxShadow: { xs: '0 12px 24px rgba(15,23,42,0.04)', sm: '0 18px 32px rgba(15,23,42,0.06)' },
+        bgcolor: 'background.paper',
+      }}
+    >
+      <Box
+        sx={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          mb: { xs: 2, sm: 3 },
+        }}
+      >
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
           <AutoAwesome color="primary" />
-          AI 图片生成器
-        </Typography>
+          <Typography variant="h6" component="h2" sx={{ fontWeight: 600 }}>
+            AI 图片生成器
+          </Typography>
+        </Box>
+        {providersLoading && <CircularProgress size={20} />}
       </Box>
 
-      <Box sx={{ mb: 2 }}>
-        <ImageUpload images={images} onImagesChange={onImagesChange} maxImages={5} />
-      </Box>
+      <Box
+        sx={{
+          display: 'grid',
+          gridTemplateColumns: { xs: '1fr', md: 'minmax(112px, 168px) minmax(0,1fr)' },
+          gap: { xs: 2, md: 3 },
+          alignItems: 'stretch',
+          mb: { xs: 2, sm: 3 },
+        }}
+      >
+        <ImageUpload images={images} onImagesChange={onImagesChange} maxImages={5} variant="inline" />
 
-      <Box sx={{ mb: 2 }}>
-        <Box sx={{ display: 'flex', gap: 2, flexDirection: { xs: 'column', sm: 'row' } }}>
-          <FormControl fullWidth size="small">
-            <InputLabel>AI 服务商</InputLabel>
-            <Select
-              value={selectedProvider?.id ?? ''}
-              label="AI 服务商"
-              disabled={isGenerating || providersLoading || providers.length === 0}
-              onChange={(e) => {
-                const provider = providers.find((p) => p.id === e.target.value);
-                if (!provider) {
-                  return;
-                }
-                setSelectedProvider(provider);
-                setSelectedModel(provider.models[0] ?? null);
-                setSelectedSize(provider.models[0]?.inputs?.supported_sizes?.[0] ?? '');
-              }}
-            >
-              {providersLoading && providers.length === 0 && (
-                <MenuItem value="" disabled>
-                  加载中...
-                </MenuItem>
-              )}
-              {providers.map((provider) => (
-                <MenuItem key={provider.id} value={provider.id}>
-                  {provider.name}
-                </MenuItem>
-              ))}
-            </Select>
-          </FormControl>
-          <FormControl fullWidth size="small">
-            <InputLabel>模型</InputLabel>
-            <Select
-              value={selectedModel?.id ?? ''}
-              label="模型"
-              disabled={
-                isGenerating ||
-                providersLoading ||
-                !selectedProvider ||
-                (selectedProvider?.models?.length ?? 0) === 0
-              }
-              onChange={(e) => {
-                if (!selectedProvider) {
-                  return;
-                }
-                const model = selectedProvider.models.find((m) => m.id === e.target.value);
-                if (!model) {
-                  return;
-                }
-                setSelectedModel(model);
-                setSelectedSize(model.inputs?.supported_sizes?.[0] ?? '');
-              }}
-            >
-              {(selectedProvider?.models ?? []).map((model) => (
-                <MenuItem key={model.id} value={model.id}>
-                  <Box>
-                    <Typography variant="body2">{model.name}</Typography>
-                    {model.description && (
-                      <Typography variant="caption" color="text.secondary">
-                        {model.description}
-                      </Typography>
-                    )}
-                  </Box>
-                </MenuItem>
-              ))}
-            </Select>
-          </FormControl>
-          {selectedModel?.inputs?.supported_sizes && selectedModel.inputs.supported_sizes.length > 0 && (
+        <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', gap: { xs: 1.5, sm: 2 } }}>
+          <TextField
+            fullWidth
+            multiline
+            minRows={4}
+            maxRows={12}
+            label="创意描述"
+            placeholder="详细描述你想要的图片..."
+            value={prompt}
+            onChange={(e) => onPromptChange(e.target.value)}
+            disabled={isGenerating}
+            InputProps={{
+              sx: {
+                alignItems: 'flex-start',
+                px: { xs: 1.25, sm: 1.5 },
+                py: { xs: 1.25, sm: 1.5 },
+                '& .MuiInputBase-inputMultiline': {
+                  fontSize: { xs: '0.95rem', sm: '1rem' },
+                  lineHeight: 1.7,
+                  minHeight: { xs: '6.5rem', sm: '7.5rem' },
+                },
+              },
+            }}
+            FormHelperTextProps={{
+              sx: { display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: 1, mt: 0.5 },
+            }}
+            helperText={
+              selectedProvider && selectedModel
+                ? `${prompt.length}/500 字符 · ${selectedProvider.name} · ${selectedModel.name}`
+                : `${prompt.length}/500 字符`
+            }
+          />
+
+          <Box
+            sx={{
+              display: 'grid',
+              gridTemplateColumns: {
+                xs: 'repeat(auto-fit, minmax(140px, 1fr))',
+                sm: 'repeat(auto-fit, minmax(180px, 1fr))',
+              },
+              gap: { xs: 1.5, sm: 1.5 },
+            }}
+          >
             <FormControl fullWidth size="small">
-              <InputLabel>图片尺寸</InputLabel>
+              <InputLabel>AI 服务商</InputLabel>
               <Select
-                value={selectedSize}
-                label="图片尺寸"
-                disabled={isGenerating}
-                onChange={(e) => setSelectedSize(e.target.value)}
+                value={selectedProvider?.id ?? ''}
+                label="AI 服务商"
+                disabled={isGenerating || providersLoading || providers.length === 0}
+                onChange={(e) => {
+                  const provider = providers.find((p) => p.id === e.target.value);
+                  if (!provider) {
+                    return;
+                  }
+                  setSelectedProvider(provider);
+                  setSelectedModel(provider.models[0] ?? null);
+                  setSelectedSize(provider.models[0]?.inputs?.supported_sizes?.[0] ?? '');
+                }}
               >
-                {selectedModel.inputs.supported_sizes.map((sizeOption) => (
-                  <MenuItem key={sizeOption} value={sizeOption}>
-                    {sizeOption}
+                {providersLoading && providers.length === 0 && (
+                  <MenuItem value="" disabled>
+                    加载中...
+                  </MenuItem>
+                )}
+                {providers.map((provider) => (
+                  <MenuItem key={provider.id} value={provider.id}>
+                    {provider.name}
                   </MenuItem>
                 ))}
               </Select>
             </FormControl>
+
+            <FormControl fullWidth size="small">
+              <InputLabel>模型</InputLabel>
+              <Select
+                value={selectedModel?.id ?? ''}
+                label="模型"
+                disabled={
+                  isGenerating ||
+                  providersLoading ||
+                  !selectedProvider ||
+                  (selectedProvider?.models?.length ?? 0) === 0
+                }
+                onChange={(e) => {
+                  if (!selectedProvider) {
+                    return;
+                  }
+                  const model = selectedProvider.models.find((m) => m.id === e.target.value);
+                  if (!model) {
+                    return;
+                  }
+                  setSelectedModel(model);
+                  setSelectedSize(model.inputs?.supported_sizes?.[0] ?? '');
+                }}
+              >
+                {(selectedProvider?.models ?? []).map((model) => (
+                  <MenuItem key={model.id} value={model.id}>
+                    <Box>
+                      <Typography variant="body2" sx={{ fontWeight: 500 }}>
+                        {model.name}
+                      </Typography>
+                      {model.description && (
+                        <Typography variant="caption" color="text.secondary">
+                          {model.description}
+                        </Typography>
+                      )}
+                    </Box>
+                  </MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+
+            {selectedModel?.inputs?.supported_sizes && selectedModel.inputs.supported_sizes.length > 0 && (
+              <FormControl fullWidth size="small">
+                <InputLabel>图片尺寸</InputLabel>
+                <Select
+                  value={selectedSize}
+                  label="图片尺寸"
+                  disabled={isGenerating}
+                  onChange={(e) => setSelectedSize(e.target.value)}
+                >
+                  {selectedModel.inputs.supported_sizes.map((sizeOption) => (
+                    <MenuItem key={sizeOption} value={sizeOption}>
+                      {sizeOption}
+                    </MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+            )}
+          </Box>
+
+          {providerError && (
+            <Alert severity="error" sx={{ m: 0 }}>
+              {providerError}
+            </Alert>
           )}
         </Box>
-        {providerError && (
-          <Alert severity="error" sx={{ mt: 1 }}>
-            {providerError}
-          </Alert>
-        )}
-      </Box>
-
-      <Box sx={{ mb: 2 }}>
-        <TextField
-          fullWidth
-          multiline
-          rows={3}
-          label="创意描述"
-          placeholder="详细描述你想要的图片..."
-          value={prompt}
-          onChange={(e) => onPromptChange(e.target.value)}
-          disabled={isGenerating}
-          helperText={
-            selectedProvider && selectedModel
-              ? `${prompt.length}/500 字符 | 使用 ${selectedProvider.name} - ${selectedModel.name}`
-              : `${prompt.length}/500 字符`
-          }
-          size="small"
-        />
       </Box>
 
       {error && (
-        <Alert severity="error" sx={{ mb: 2 }}>
+        <Alert severity="error" sx={{ mb: { xs: 2, sm: 3 } }}>
           <Box component="pre" sx={{ whiteSpace: 'pre-wrap', fontFamily: 'inherit', m: 0 }}>
             {error}
           </Box>
         </Alert>
       )}
 
-      <Box sx={{ display: 'flex', gap: 1, mb: 2 }}>
+      <Box
+        sx={{
+          display: 'flex',
+          flexDirection: { xs: 'column', sm: 'row' },
+          justifyContent: { xs: 'stretch', sm: 'flex-end' },
+          alignItems: { xs: 'stretch', sm: 'center' },
+          gap: 1,
+          mb: { xs: 2, sm: 3 },
+        }}
+      >
         <Button
           variant="contained"
           size="medium"
-          fullWidth
           onClick={handleGenerate}
           disabled={
             isGenerating ||
@@ -382,7 +445,11 @@ const ImageGenerator: React.FC<ImageGeneratorProps> = ({
           }
           startIcon={isGenerating ? <CircularProgress size={18} color="inherit" /> : <Send />}
           sx={{
-            py: 1.5,
+            width: { xs: '100%', sm: 'auto' },
+            minWidth: { sm: 200 },
+            py: 1.4,
+            fontWeight: 600,
+            borderRadius: 999,
             background: 'linear-gradient(45deg, #FF6B6B 30%, #4ECDC4 90%)',
             '&:hover': {
               background: 'linear-gradient(45deg, #FF5252 30%, #26A69A 90%)',
@@ -394,8 +461,23 @@ const ImageGenerator: React.FC<ImageGeneratorProps> = ({
       </Box>
 
       {lastGeneratedImages.length > 0 && (
-        <Card sx={{ mb: 2 }}>
-          <Box sx={{ p: 1.5, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <Card
+          sx={{
+            mb: { xs: 2, sm: 3 },
+            borderRadius: { xs: 2, sm: 3 },
+            boxShadow: '0 10px 28px rgba(15,23,42,0.08)',
+          }}
+        >
+          <Box
+            sx={{
+              p: { xs: 1.5, sm: 2 },
+              display: 'flex',
+              flexDirection: { xs: 'column', sm: 'row' },
+              gap: { xs: 1, sm: 2 },
+              alignItems: { xs: 'flex-start', sm: 'center' },
+              justifyContent: 'space-between',
+            }}
+          >
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
               <ImageIcon color="success" fontSize="small" />
               <Typography variant="body2" fontWeight="medium">
@@ -409,25 +491,31 @@ const ImageGenerator: React.FC<ImageGeneratorProps> = ({
               size="small"
               startIcon={<Download />}
               onClick={lastGeneratedImages.length > 1 ? handleDownloadAll : () => handleDownload(0)}
-              sx={{ borderRadius: 2 }}
+              sx={{ borderRadius: 999, px: 2.5 }}
             >
               {lastGeneratedImages.length > 1 ? '下载全部' : '下载'}
             </Button>
           </Box>
           {lastGenerationText && (
-            <Box sx={{ px: 2, pb: 1 }}>
+            <Box sx={{ px: { xs: 1.5, sm: 2 }, pb: { xs: 1.5, sm: 2 } }}>
               <Alert severity="info" sx={{ m: 0 }}>
                 {lastGenerationText}
               </Alert>
             </Box>
           )}
-          <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 2, px: 2, pb: 2 }}>
+          <Box
+            sx={{
+              display: 'grid',
+              gridTemplateColumns: { xs: 'repeat(auto-fit, minmax(160px, 1fr))', sm: 'repeat(auto-fit, minmax(220px, 1fr))' },
+              gap: { xs: 1.5, sm: 2 },
+              px: { xs: 1.5, sm: 2 },
+              pb: { xs: 1.5, sm: 2 },
+            }}
+          >
             {lastGeneratedImages.map((image, index) => (
               <Box
                 key={image + index}
                 sx={{
-                  flex: '1 1 240px',
-                  maxWidth: '100%',
                   display: 'flex',
                   flexDirection: 'column',
                   gap: 1,
@@ -439,11 +527,12 @@ const ImageGenerator: React.FC<ImageGeneratorProps> = ({
                   alt={`AI生成的图片 ${index + 1}`}
                   onClick={() => handleOpenResultViewer(index)}
                   sx={{
+                    width: '100%',
                     maxHeight: 420,
-                    objectFit: 'contain',
+                    objectFit: 'cover',
                     bgcolor: 'grey.100',
                     cursor: 'pointer',
-                    borderRadius: 1,
+                    borderRadius: 2,
                     transition: 'all 0.2s',
                     '&:hover': {
                       filter: 'brightness(1.05)',
@@ -533,22 +622,27 @@ const CustomImageGenerationPage: React.FC = () => {
         sx={{
           background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
           color: 'white',
-          py: 3,
+          py: { xs: 3, md: 5 },
           textAlign: 'center',
         }}
       >
         <Container maxWidth="md">
-          <Typography variant="h4" component="h2" gutterBottom sx={{ fontWeight: 700 }}>
+          <Typography
+            variant="h4"
+            component="h2"
+            gutterBottom
+            sx={{ fontWeight: 700, fontSize: { xs: '1.9rem', md: '2.5rem' } }}
+          >
             AI图片生成器
           </Typography>
-          <Typography variant="body1" sx={{ opacity: 0.9 }}>
+          <Typography variant="body1" sx={{ opacity: 0.9, fontSize: { xs: '0.95rem', md: '1.05rem' } }}>
             用文字描述你的想法，让AI为你创造精美的图片
           </Typography>
         </Container>
       </Box>
 
-      <Container maxWidth="lg" sx={{ py: 2, flex: 1 }}>
-        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+      <Container maxWidth="md" sx={{ py: { xs: 2, sm: 3 }, flex: 1 }}>
+        <Box sx={{ display: 'flex', flexDirection: 'column', gap: { xs: 2, sm: 3 } }}>
           <ImageGenerator
             prompt={prompt}
             images={images}

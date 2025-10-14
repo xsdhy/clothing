@@ -16,12 +16,14 @@ export interface ImageUploadProps {
   images: string[];
   onImagesChange: (images: string[]) => void;
   maxImages?: number;
+  variant?: 'panel' | 'inline';
 }
 
 const ImageUpload: React.FC<ImageUploadProps> = ({
   images,
   onImagesChange,
   maxImages = 5,
+  variant = 'panel',
 }) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isDragOver, setIsDragOver] = useState(false);
@@ -31,6 +33,7 @@ const ImageUpload: React.FC<ImageUploadProps> = ({
   const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
   const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
   const [isPasteActive, setIsPasteActive] = useState(false);
+  const isInline = variant === 'inline';
 
   const processFiles = useCallback(
     (files: File[]) => {
@@ -286,7 +289,116 @@ const ImageUpload: React.FC<ImageUploadProps> = ({
     };
   }, [handlePaste]);
 
-  return (
+  const panelThumbnailSize = 80;
+  const inlineThumbnailSize = 96;
+
+  const renderThumbnail = (image: string, index: number, size: number) => (
+    <Card
+      key={`${image}-${index}`}
+      draggable
+      onDragStart={(e) => handleImageDragStart(e, index)}
+      onDragOver={(e) => handleImageDragOver(e, index)}
+      onDragLeave={handleImageDragLeave}
+      onDrop={(e) => handleImageDrop(e, index)}
+      onDragEnd={handleImageDragEnd}
+      sx={{
+        position: 'relative',
+        width: size,
+        height: size,
+        cursor: draggedIndex === index ? 'grabbing' : 'grab',
+        opacity: draggedIndex === index ? 0.5 : 1,
+        transform: dragOverIndex === index ? 'scale(1.05)' : 'scale(1)',
+        border: dragOverIndex === index ? '2px solid' : '1px solid transparent',
+        borderColor: dragOverIndex === index ? 'primary.main' : 'transparent',
+        borderRadius: 2,
+        overflow: 'hidden',
+        flexShrink: 0,
+        transition: 'all 0.2s',
+        '&:hover .delete-btn': {
+          opacity: 1,
+        },
+        '&:hover .drag-indicator': {
+          opacity: 1,
+        },
+        '&:hover': {
+          transform: dragOverIndex === index ? 'scale(1.05)' : 'scale(1.03)',
+          boxShadow: 3,
+        },
+      }}
+      onClick={() => draggedIndex === null && handleImageClick(index)}
+    >
+      <CardMedia
+        component="img"
+        image={image}
+        alt={`参考图片 ${index + 1}`}
+        sx={{ width: '100%', height: '100%', objectFit: 'cover' }}
+      />
+      <Box
+        className="drag-indicator"
+        sx={{
+          position: 'absolute',
+          top: 4,
+          left: 4,
+          bgcolor: 'rgba(0,0,0,0.65)',
+          color: 'white',
+          borderRadius: 0.75,
+          width: 22,
+          height: 22,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          opacity: draggedIndex === index ? 1 : 0,
+          transition: 'opacity 0.2s',
+        }}
+      >
+        <DragIndicator sx={{ fontSize: 14 }} />
+      </Box>
+
+      <IconButton
+        className="delete-btn"
+        size="small"
+        color="error"
+        onClick={(e) => {
+          e.stopPropagation();
+          removeImage(index);
+        }}
+        sx={{
+          position: 'absolute',
+          top: 4,
+          right: 4,
+          bgcolor: 'error.main',
+          color: 'white',
+          opacity: 0,
+          transition: 'opacity 0.2s',
+          width: 22,
+          height: 22,
+          '&:hover': {
+            bgcolor: 'error.dark',
+          },
+        }}
+      >
+        <Delete sx={{ fontSize: 14 }} />
+      </IconButton>
+      <Box
+        sx={{
+          position: 'absolute',
+          bottom: 4,
+          left: 4,
+          bgcolor: 'rgba(0,0,0,0.65)',
+          color: 'white',
+          px: 0.75,
+          py: 0.25,
+          borderRadius: 0.75,
+          fontSize: '0.65rem',
+          lineHeight: 1,
+        }}
+      >
+        #{index + 1}
+      </Box>
+    </Card>
+  );
+
+  const panelContent = (
     <Paper sx={{ p: 2, borderRadius: 2 }} variant="outlined">
       <Typography variant="h6" sx={{ mb: 2 }}>
         参考图片上传
@@ -362,108 +474,8 @@ const ImageUpload: React.FC<ImageUploadProps> = ({
       {images.length > 0 && (
         <Box sx={{ display: 'flex', gap: 1, flexWrap: 'nowrap', overflowX: 'auto', pb: 1 }}>
           {images.map((image, index) => (
-            <Box key={index} sx={{ flexShrink: 0 }}>
-              <Card
-                draggable
-                onDragStart={(e) => handleImageDragStart(e, index)}
-                onDragOver={(e) => handleImageDragOver(e, index)}
-                onDragLeave={handleImageDragLeave}
-                onDrop={(e) => handleImageDrop(e, index)}
-                onDragEnd={handleImageDragEnd}
-                sx={{
-                  position: 'relative',
-                  width: '80px',
-                  height: '80px',
-                  cursor: draggedIndex === index ? 'grabbing' : 'grab',
-                  opacity: draggedIndex === index ? 0.5 : 1,
-                  transform: dragOverIndex === index ? 'scale(1.1)' : 'scale(1)',
-                  border: dragOverIndex === index ? '2px solid' : '1px solid transparent',
-                  borderColor: dragOverIndex === index ? 'primary.main' : 'transparent',
-                  '&:hover .delete-btn': {
-                    opacity: 1,
-                  },
-                  '&:hover .drag-indicator': {
-                    opacity: 1,
-                  },
-                  '&:hover': {
-                    transform: dragOverIndex === index ? 'scale(1.1)' : 'scale(1.05)',
-                    boxShadow: 2,
-                  },
-                  transition: 'all 0.2s',
-                }}
-                onClick={() => draggedIndex === null && handleImageClick(index)}
-              >
-                <CardMedia
-                  component="img"
-                  width="80"
-                  height="80"
-                  image={image}
-                  alt={`参考图片 ${index + 1}`}
-                  sx={{ objectFit: 'cover' }}
-                />
-                <Box
-                  className="drag-indicator"
-                  sx={{
-                    position: 'absolute',
-                    top: 2,
-                    left: 2,
-                    bgcolor: 'rgba(0,0,0,0.7)',
-                    color: 'white',
-                    borderRadius: 0.5,
-                    width: '20px',
-                    height: '20px',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    opacity: draggedIndex === index ? 1 : 0,
-                    transition: 'opacity 0.2s',
-                  }}
-                >
-                  <DragIndicator sx={{ fontSize: '12px' }} />
-                </Box>
-
-                <IconButton
-                  className="delete-btn"
-                  size="small"
-                  color="error"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    removeImage(index);
-                  }}
-                  sx={{
-                    position: 'absolute',
-                    top: 2,
-                    right: 2,
-                    bgcolor: 'error.main',
-                    color: 'white',
-                    opacity: 0,
-                    transition: 'opacity 0.2s',
-                    width: '20px',
-                    height: '20px',
-                    '&:hover': {
-                      bgcolor: 'error.dark',
-                    },
-                  }}
-                >
-                  <Delete sx={{ fontSize: '14px' }} />
-                </IconButton>
-                <Box
-                  sx={{
-                    position: 'absolute',
-                    bottom: 2,
-                    left: 2,
-                    bgcolor: 'rgba(0,0,0,0.7)',
-                    color: 'white',
-                    px: 0.5,
-                    py: 0.25,
-                    borderRadius: 0.5,
-                    fontSize: '0.65rem',
-                    lineHeight: 1,
-                  }}
-                >
-                  #{index + 1}
-                </Box>
-              </Card>
+            <Box key={`${image}-${index}`} sx={{ flexShrink: 0 }}>
+              {renderThumbnail(image, index, panelThumbnailSize)}
             </Box>
           ))}
 
@@ -473,8 +485,8 @@ const ImageUpload: React.FC<ImageUploadProps> = ({
                 border: '2px dashed',
                 borderColor: isDragOver ? 'primary.main' : 'grey.300',
                 borderRadius: 2,
-                width: '80px',
-                height: '80px',
+                width: panelThumbnailSize,
+                height: panelThumbnailSize,
                 textAlign: 'center',
                 cursor: 'pointer',
                 bgcolor: isDragOver ? 'primary.50' : 'grey.100',
@@ -540,14 +552,93 @@ const ImageUpload: React.FC<ImageUploadProps> = ({
           </Box>
         </Box>
       )}
+    </Paper>
+  );
 
+  const inlineContent = (
+    <Box
+      sx={{
+        display: 'flex',
+        gap: { xs: 1.5, sm: 2 },
+        alignItems: { xs: 'stretch', sm: 'flex-start' },
+        width: '100%',
+      }}
+    >
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="image/*"
+        multiple
+        style={{ display: 'none' }}
+        onChange={handleFileChange}
+      />
+      <Box
+        sx={{
+          border: '1px solid',
+          borderColor: isDragOver ? 'primary.main' : 'divider',
+          borderRadius: 3,
+          backgroundColor: isDragOver ? 'primary.50' : 'background.paper',
+          display: 'flex',
+          flexDirection: { xs: 'row', sm: 'column' },
+          gap: 1,
+          p: 1,
+          width: { xs: '100%', sm: inlineThumbnailSize + 20 },
+          minHeight: inlineThumbnailSize + 20,
+          overflowX: { xs: 'auto', sm: 'hidden' },
+          overflowY: { xs: 'hidden', sm: 'auto' },
+          transition: 'border-color 0.2s, background-color 0.2s',
+        }}
+        onDragOver={handleDragOver}
+        onDragLeave={handleDragLeave}
+        onDrop={handleDrop}
+      >
+        {images.map((image, index) => renderThumbnail(image, index, inlineThumbnailSize))}
+
+        {images.length < maxImages && (
+          <Box
+            sx={{
+              width: inlineThumbnailSize,
+              height: inlineThumbnailSize,
+              borderRadius: 2,
+              border: '2px dashed',
+              borderColor: isDragOver ? 'primary.main' : 'grey.300',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              color: 'primary.main',
+              cursor: 'pointer',
+              flexShrink: 0,
+              backgroundColor: isDragOver ? 'primary.50' : 'transparent',
+              transition: 'all 0.2s',
+              '&:hover': {
+                borderColor: 'primary.light',
+                backgroundColor: 'primary.50',
+              },
+            }}
+            onClick={() => fileInputRef.current?.click()}
+            onDragOver={handleDragOver}
+            onDragLeave={handleDragLeave}
+            onDrop={handleDrop}
+          >
+            <CloudUpload sx={{ fontSize: 26 }} />
+          </Box>
+        )}
+      </Box>
+
+
+    </Box>
+  );
+
+  return (
+    <>
+      {isInline ? inlineContent : panelContent}
       <ImageViewer
         open={viewerOpen}
         onClose={handleCloseViewer}
         imageUrl={images[currentImageIndex] || ''}
         title={`参考图片 ${currentImageIndex + 1}/${images.length}`}
       />
-    </Paper>
+    </>
   );
 };
 

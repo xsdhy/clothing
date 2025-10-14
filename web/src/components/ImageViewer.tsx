@@ -75,6 +75,9 @@ const ImageViewer: React.FC<ImageViewerProps> = ({
       const clamped = Math.max(MIN_SCALE, Math.min(MAX_SCALE, next));
       onScale(clamped);
     };
+    const stopEventPropagation = (event: React.SyntheticEvent) => {
+      event.stopPropagation();
+    };
 
     const handleZoomOut = (event: React.MouseEvent) => {
       event.stopPropagation();
@@ -118,9 +121,10 @@ const ImageViewer: React.FC<ImageViewerProps> = ({
             alignItems: 'center',
             rowGap: 1,
             columnGap: 2,
-            pointerEvents: 'none',
             background: 'linear-gradient(180deg, rgba(0,0,0,0.8) 0%, transparent 100%)',
           }}
+          onPointerDown={stopEventPropagation}
+          onClick={stopEventPropagation}
         >
           <Box sx={{ minWidth: 0, pointerEvents: 'auto' }}>
             {resolvedTitle && (
