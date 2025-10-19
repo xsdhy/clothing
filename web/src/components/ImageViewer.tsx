@@ -282,7 +282,7 @@ const ImageViewer: React.FC<ImageViewerProps> = ({
               textAlign: 'center',
             }}
           >
-            缩放: {Math.round(scale * 100)}% | 滚轮缩放 | 拖拽移动
+            缩放: {Math.round(scale * 100)}%
           </Typography>
         </Box>
       </Portal>

@@ -237,13 +237,7 @@ const UsageRecordDetailDialog: React.FC<UsageRecordDetailDialogProps> = ({
                           />
                         </ButtonBase>
                         <Stack direction="row" spacing={1} justifyContent="flex-end" sx={{ p: 1.5 }}>
-                          <Button
-                            size="small"
-                            startIcon={<OpenInFullIcon fontSize="small" />}
-                            onClick={handlePreview}
-                          >
-                            放大查看
-                          </Button>
+               
                           {canUse && (
                             <Button
                               size="small"

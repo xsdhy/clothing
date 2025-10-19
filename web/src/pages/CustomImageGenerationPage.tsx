@@ -290,11 +290,10 @@ const ImageGenerator: React.FC<ImageGeneratorProps> = ({
               sx: {
                 alignItems: 'flex-start',
                 px: { xs: 1.25, sm: 1.5 },
-                py: { xs: 1.25, sm: 1.5 },
+                py: { xs: 1, sm: 1.25 },
                 '& .MuiInputBase-inputMultiline': {
-                  fontSize: { xs: '0.95rem', sm: '1rem' },
-                  lineHeight: 1.7,
-                  minHeight: { xs: '6.5rem', sm: '7.5rem' },
+                  fontSize: { xs: '0.9rem', sm: '0.95rem' },
+                  lineHeight: 1.5,
                 },
               },
             }}
@@ -307,7 +306,6 @@ const ImageGenerator: React.FC<ImageGeneratorProps> = ({
                 : `${prompt.length}/500 字符`
             }
           />
-
           <Box
             sx={{
               display: 'grid',
