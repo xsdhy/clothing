@@ -22,6 +22,12 @@ func (h *HTTPHandler) ListProviders(c *gin.Context) {
 }
 
 func (h *HTTPHandler) GenerateImage(c *gin.Context) {
+	requestUser := CurrentUser(c)
+	if requestUser == nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "authentication required"})
+		return
+	}
+
 	var request entity.GenerateImageRequest
 	if err := c.ShouldBindJSON(&request); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request payload"})
@@ -72,11 +78,14 @@ func (h *HTTPHandler) GenerateImage(c *gin.Context) {
 
 	messages := make(chan sseMessage, 4)
 
+	userID := requestUser.ID
+
 	go func() {
 		defer close(messages)
 		messages <- sseMessage{event: "status", data: gin.H{"state": "processing"}}
 
 		record := entity.DbUsageRecord{
+			UserID:     userID,
 			ProviderID: providerID,
 			ModelID:    request.Model,
 			Prompt:     request.Prompt,

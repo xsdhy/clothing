@@ -26,13 +26,16 @@ func (r *GormRepository) ListUsageRecords(ctx context.Context, params *entity.Us
 		return nil, nil, fmt.Errorf("repository not initialised")
 	}
 
-	query := r.db.WithContext(ctx).Model(&entity.DbUsageRecord{})
+	query := r.db.WithContext(ctx).Model(&entity.DbUsageRecord{}).Preload("User")
 	if params != nil {
 		if trimmed := strings.TrimSpace(params.Provider); trimmed != "" {
 			query = query.Where("provider_id = ?", trimmed)
 		}
 		if trimmed := strings.TrimSpace(params.Model); trimmed != "" {
 			query = query.Where("model_id = ?", trimmed)
+		}
+		if !params.IncludeAll && params.UserID > 0 {
+			query = query.Where("user_id = ?", params.UserID)
 		}
 		if trimmed := strings.ToLower(strings.TrimSpace(params.Result)); trimmed != "" && trimmed != "all" {
 			switch trimmed {
@@ -84,7 +87,7 @@ func (r *GormRepository) GetUsageRecord(ctx context.Context, id uint) (*entity.D
 	}
 
 	var record entity.DbUsageRecord
-	if err := r.db.WithContext(ctx).First(&record, id).Error; err != nil {
+	if err := r.db.WithContext(ctx).Preload("User").First(&record, id).Error; err != nil {
 		if err == gorm.ErrRecordNotFound {
 			return nil, err
 		}

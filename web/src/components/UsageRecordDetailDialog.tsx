@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState } from "react";
 import {
   Alert,
   Box,
@@ -13,15 +13,15 @@ import {
   Stack,
   Typography,
   Chip,
-} from '@mui/material';
-import CloseIcon from '@mui/icons-material/Close';
-import InputIcon from '@mui/icons-material/Input';
-import ReplayIcon from '@mui/icons-material/Replay';
-import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
-import OpenInFullIcon from '@mui/icons-material/OpenInFull';
+} from "@mui/material";
+import CloseIcon from "@mui/icons-material/Close";
+import InputIcon from "@mui/icons-material/Input";
+import ReplayIcon from "@mui/icons-material/Replay";
+import DeleteOutlineIcon from "@mui/icons-material/DeleteOutline";
 
-import { fetchUsageRecordDetail } from '../ai';
-import type { UsageRecord } from '../types';
+
+import { fetchUsageRecordDetail } from "../ai";
+import type { UsageRecord } from "../types";
 
 const formatDateTime = (value: string): string => {
   const date = new Date(value);
@@ -38,7 +38,11 @@ export interface UsageRecordDetailDialogProps {
   onClose: () => void;
   onRetry?: (record: UsageRecord) => void | Promise<void>;
   onDelete?: (record: UsageRecord) => void | Promise<void>;
-  onUseOutputImage?: (record: UsageRecord, imageUrl: string, index: number) => void | Promise<void>;
+  onUseOutputImage?: (
+    record: UsageRecord,
+    imageUrl: string,
+    index: number,
+  ) => void | Promise<void>;
   onPreviewOutputImage?: (record: UsageRecord, index: number) => void;
   actionState?: {
     retrying?: boolean;
@@ -62,7 +66,9 @@ const UsageRecordDetailDialog: React.FC<UsageRecordDetailDialogProps> = ({
   const [record, setRecord] = useState<UsageRecord | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [selectedImageIndex, setSelectedImageIndex] = useState<number | undefined>(initialImageIndex);
+  const [selectedImageIndex, setSelectedImageIndex] = useState<
+    number | undefined
+  >(initialImageIndex);
 
   useEffect(() => {
     if (open) {
@@ -96,7 +102,8 @@ const UsageRecordDetailDialog: React.FC<UsageRecordDetailDialogProps> = ({
         }
       } catch (err) {
         if (!cancelled) {
-          const message = err instanceof Error ? err.message : '加载记录详情失败';
+          const message =
+            err instanceof Error ? err.message : "加载记录详情失败";
           setError(message);
           setRecord(null);
         }
@@ -149,7 +156,13 @@ const UsageRecordDetailDialog: React.FC<UsageRecordDetailDialogProps> = ({
 
   return (
     <Dialog open={open} onClose={onClose} maxWidth="md" fullWidth>
-      <DialogTitle sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+      <DialogTitle
+        sx={{
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+        }}
+      >
         <Typography variant="h6">生成记录详情</Typography>
         <IconButton onClick={onClose} size="small">
           <CloseIcon />
@@ -165,20 +178,22 @@ const UsageRecordDetailDialog: React.FC<UsageRecordDetailDialogProps> = ({
           </Stack>
         )}
 
-        {!loading && error && (
-          <Alert severity="error">{error}</Alert>
-        )}
+        {!loading && error && <Alert severity="error">{error}</Alert>}
 
         {!loading && !error && record && (
           <Stack spacing={3}>
             {record.output_images.length > 0 && (
               <Box>
-                <Typography variant="subtitle2" color="text.secondary" gutterBottom>
+                <Typography
+                  variant="subtitle2"
+                  color="text.secondary"
+                  gutterBottom
+                >
                   输出图片
                 </Typography>
                 <Stack
                   spacing={2}
-                  direction={{ xs: 'column', md: 'row' }}
+                  direction={{ xs: "column", md: "row" }}
                   useFlexGap
                   flexWrap="wrap"
                   alignItems="stretch"
@@ -186,7 +201,8 @@ const UsageRecordDetailDialog: React.FC<UsageRecordDetailDialogProps> = ({
                   {record.output_images.map((image, index) => {
                     const isSelected = selectedImageIndex === index;
                     const isPreparing = Boolean(
-                      actionState?.preparingOutput && actionState?.preparingOutputIndex === index
+                      actionState?.preparingOutput &&
+                        actionState?.preparingOutputIndex === index,
                     );
                     const canUse = Boolean(onUseOutputImage && image?.url);
 
@@ -202,24 +218,24 @@ const UsageRecordDetailDialog: React.FC<UsageRecordDetailDialogProps> = ({
                         key={`${image.url}-${index}`}
                         sx={{
                           borderRadius: 2,
-                          overflow: 'hidden',
-                          border: '2px solid',
-                          borderColor: isSelected ? 'primary.main' : 'divider',
+                          overflow: "hidden",
+                          border: "2px solid",
+                          borderColor: isSelected ? "primary.main" : "divider",
                           boxShadow: isSelected ? 4 : 0,
-                          bgcolor: 'background.paper',
+                          bgcolor: "background.paper",
                         }}
                       >
                         <ButtonBase
                           onClick={handlePreview}
                           sx={{
-                            display: 'block',
-                            width: { xs: '100%', md: 360 },
-                            bgcolor: 'background.default',
-                            '& img': {
-                              transition: 'transform 0.3s ease',
+                            display: "block",
+                            width: { xs: "100%", md: 360 },
+                            bgcolor: "background.default",
+                            "& img": {
+                              transition: "transform 0.3s ease",
                             },
-                            '&:hover img': {
-                              transform: 'scale(1.01)',
+                            "&:hover img": {
+                              transform: "scale(1.01)",
                             },
                           }}
                         >
@@ -228,22 +244,30 @@ const UsageRecordDetailDialog: React.FC<UsageRecordDetailDialogProps> = ({
                             src={image.url}
                             alt={`输出图片 ${index + 1}`}
                             sx={{
-                              width: '100%',
-                              display: 'block',
+                              width: "100%",
+                              display: "block",
                               maxHeight: 420,
-                              objectFit: 'contain',
-                              backgroundColor: 'background.default',
+                              objectFit: "contain",
+                              backgroundColor: "background.default",
                             }}
                           />
                         </ButtonBase>
-                        <Stack direction="row" spacing={1} justifyContent="flex-end" sx={{ p: 1.5 }}>
-               
+                        <Stack
+                          direction="row"
+                          spacing={1}
+                          justifyContent="flex-end"
+                          sx={{ p: 1.5 }}
+                        >
                           {canUse && (
                             <Button
                               size="small"
                               variant="outlined"
                               startIcon={
-                                isPreparing ? <CircularProgress size={16} color="inherit" /> : <InputIcon />
+                                isPreparing ? (
+                                  <CircularProgress size={16} color="inherit" />
+                                ) : (
+                                  <InputIcon />
+                                )
                               }
                               disabled={isPreparing}
                               onClick={() => {
@@ -265,11 +289,15 @@ const UsageRecordDetailDialog: React.FC<UsageRecordDetailDialogProps> = ({
             )}
 
             <Box>
-              <Typography variant="subtitle2" color="text.secondary" gutterBottom>
+              <Typography
+                variant="subtitle2"
+                color="text.secondary"
+                gutterBottom
+              >
                 提示词
               </Typography>
-              <Typography variant="body2" sx={{ whiteSpace: 'pre-wrap' }}>
-                {record.prompt || '（无提示词）'}
+              <Typography variant="body2" sx={{ whiteSpace: "pre-wrap" }}>
+                {record.prompt || "（无提示词）"}
               </Typography>
             </Box>
 
@@ -279,14 +307,25 @@ const UsageRecordDetailDialog: React.FC<UsageRecordDetailDialogProps> = ({
               <Chip label={`模型 ${record.model_id}`} />
               {record.size && <Chip label={`尺寸 ${record.size}`} />}
               <Chip label={formatDateTime(record.created_at)} />
+              {record.user && (
+                <Chip
+                  label={`提交人 ${record.user.display_name || record.user.email}`}
+                  color="primary"
+                  variant="outlined"
+                />
+              )}
             </Stack>
 
             {record.output_text && (
               <Box>
-                <Typography variant="subtitle2" color="text.secondary" gutterBottom>
+                <Typography
+                  variant="subtitle2"
+                  color="text.secondary"
+                  gutterBottom
+                >
                   输出文本
                 </Typography>
-                <Typography variant="body2" sx={{ whiteSpace: 'pre-wrap' }}>
+                <Typography variant="body2" sx={{ whiteSpace: "pre-wrap" }}>
                   {record.output_text}
                 </Typography>
               </Box>
@@ -294,20 +333,35 @@ const UsageRecordDetailDialog: React.FC<UsageRecordDetailDialogProps> = ({
 
             {record.input_images.length > 0 && (
               <Box>
-                <Typography variant="subtitle2" color="text.secondary" gutterBottom>
+                <Typography
+                  variant="subtitle2"
+                  color="text.secondary"
+                  gutterBottom
+                >
                   输入图片
                 </Typography>
                 <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
                   {record.input_images.map((image, index) => (
                     <Box
                       key={`${image.url}-${index}`}
-                      sx={{ width: 80, height: 80, borderRadius: 1, overflow: 'hidden', border: '1px solid', borderColor: 'divider' }}
+                      sx={{
+                        width: 80,
+                        height: 80,
+                        borderRadius: 1,
+                        overflow: "hidden",
+                        border: "1px solid",
+                        borderColor: "divider",
+                      }}
                     >
                       <Box
                         component="img"
                         src={image.url}
                         alt={`输入图片 ${index + 1}`}
-                        sx={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                        sx={{
+                          width: "100%",
+                          height: "100%",
+                          objectFit: "cover",
+                        }}
                       />
                     </Box>
                   ))}
@@ -321,9 +375,15 @@ const UsageRecordDetailDialog: React.FC<UsageRecordDetailDialogProps> = ({
           </Stack>
         )}
       </DialogContent>
-      <DialogActions sx={{ justifyContent: 'space-between', flexWrap: 'wrap', gap: 1 }}>
+      <DialogActions
+        sx={{ justifyContent: "space-between", flexWrap: "wrap", gap: 1 }}
+      >
         <Button onClick={onClose}>关闭</Button>
-        <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1} alignItems="stretch">
+        <Stack
+          direction={{ xs: "column", sm: "row" }}
+          spacing={1}
+          alignItems="stretch"
+        >
           {onRetry && (
             <Button
               variant="contained"

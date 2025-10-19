@@ -75,7 +75,8 @@ export default defineConfig({
     open: true,
     proxy: {
       '/api': {
-        target: 'http://192.168.10.53:6211/',
+        // target: 'http://192.168.10.53:6211/',
+        target: 'http://127.0.0.1:8080/',
         changeOrigin: true,
       },
         '/files': {

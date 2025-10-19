@@ -43,7 +43,11 @@ func main() {
 		return
 	}
 
-	httpHandler := api.NewHTTPHandler(cfg, repo, store)
+	httpHandler, err := api.NewHTTPHandler(cfg, repo, store)
+	if err != nil {
+		logrus.WithError(err).Error("failed to initialise http handler")
+		return
+	}
 
 	// 设置Gin模式
 	gin.SetMode(gin.ReleaseMode)
@@ -56,11 +60,28 @@ func main() {
 
 	r.GET("/health", func(c *gin.Context) { c.JSON(http.StatusOK, gin.H{"status": "ok"}) })
 
-	r.GET("/api/llm/providers", httpHandler.ListProviders)
-	r.POST("/api/llm", httpHandler.GenerateImage)
-	r.GET("/api/usage-records", httpHandler.ListUsageRecords)
-	r.GET("/api/usage-records/:id", httpHandler.GetUsageRecord)
-	r.DELETE("/api/usage-records/:id", httpHandler.DeleteUsageRecord)
+	apiGroup := r.Group("/api")
+
+	authGroup := apiGroup.Group("/auth")
+	authGroup.GET("/status", httpHandler.AuthStatus)
+	authGroup.POST("/register", httpHandler.Register)
+	authGroup.POST("/login", httpHandler.Login)
+	authGroup.GET("/me", httpHandler.AuthMiddleware(), httpHandler.Me)
+
+	protected := apiGroup.Group("")
+	protected.Use(httpHandler.AuthMiddleware())
+	protected.GET("/llm/providers", httpHandler.ListProviders)
+	protected.POST("/llm", httpHandler.GenerateImage)
+	protected.GET("/usage-records", httpHandler.ListUsageRecords)
+	protected.GET("/usage-records/:id", httpHandler.GetUsageRecord)
+	protected.DELETE("/usage-records/:id", httpHandler.DeleteUsageRecord)
+
+	userAdmin := protected.Group("/users")
+	userAdmin.Use(httpHandler.RequireAdmin())
+	userAdmin.GET("", httpHandler.ListUsers)
+	userAdmin.POST("", httpHandler.CreateUser)
+	userAdmin.PATCH(":id", httpHandler.UpdateUser)
+	userAdmin.DELETE(":id", httpHandler.DeleteUser)
 
 	if localProvider, ok := store.(storage.LocalBaseDirProvider); ok {
 		publicPrefix := strings.TrimSpace(cfg.StoragePublicBaseURL)

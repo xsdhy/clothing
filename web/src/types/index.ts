@@ -1,5 +1,3 @@
-
-
 export interface GenerationRequest {
   prompt: string;
   images: string[];
@@ -14,14 +12,14 @@ export interface GenerationResult {
 }
 
 export interface BackendResponse {
-    images?: string[];
-    text?: string;
-    error?: string;
+  images?: string[];
+  text?: string;
+  error?: string;
 }
 
 export interface ProvidersResponse {
-    providers?: AIProvider[];
-    error?: string;
+  providers?: AIProvider[];
+  error?: string;
 }
 
 export interface AIProvider {
@@ -38,11 +36,30 @@ export interface AIModel {
   inputs?: AIModelInput;
 }
 
-
 export interface AIModelInput {
-    modalities?: string[]; // 支持的模态枚举，例: ["text"], ["image"], ["text","image"]
-    max_images: number;// 支持的最大输入图片数
-    supported_sizes?: string[];// 支持的图像尺寸，留空表示不限预设
+  modalities?: string[]; // 支持的模态枚举，例: ["text"], ["image"], ["text","image"]
+  max_images: number; // 支持的最大输入图片数
+  supported_sizes?: string[]; // 支持的图像尺寸，留空表示不限预设
+}
+
+export interface UserSummary {
+  id: number;
+  email: string;
+  display_name?: string;
+  role: string;
+  is_active: boolean;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface AuthResponse {
+  token: string;
+  expires_at: string;
+  user: UserSummary;
+}
+
+export interface AuthStatusResponse {
+  has_user: boolean;
 }
 
 export interface UsageImage {
@@ -61,6 +78,7 @@ export interface UsageRecord {
   created_at: string;
   input_images: UsageImage[];
   output_images: UsageImage[];
+  user?: UserSummary;
 }
 
 export interface PaginationMeta {
@@ -78,3 +96,7 @@ export interface UsageRecordDetailResponse {
   record: UsageRecord;
 }
 
+export interface UserListResponse {
+  users: UserSummary[];
+  meta: PaginationMeta;
+}

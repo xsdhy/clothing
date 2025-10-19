@@ -47,9 +47,11 @@ type LlmProvider struct {
 
 type UsageRecordQuery struct {
 	BaseParams
-	Provider string `json:"provider" form:"provider" query:"provider"`
-	Model    string `json:"model" form:"model" query:"model"`
-	Result   string `json:"result" form:"result" query:"result"`
+	Provider   string `json:"provider" form:"provider" query:"provider"`
+	Model      string `json:"model" form:"model" query:"model"`
+	Result     string `json:"result" form:"result" query:"result"`
+	UserID     uint   `json:"-" form:"-" query:"-"`
+	IncludeAll bool   `json:"-" form:"-" query:"-"`
 }
 
 type UsageImage struct {
@@ -68,6 +70,7 @@ type UsageRecordItem struct {
 	CreatedAt    time.Time    `json:"created_at"`
 	InputImages  []UsageImage `json:"input_images"`
 	OutputImages []UsageImage `json:"output_images"`
+	User         UserSummary  `json:"user"`
 }
 
 type UsageRecordListResponse struct {

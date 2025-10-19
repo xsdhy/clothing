@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
   Alert,
   Box,
@@ -19,13 +19,13 @@ import {
   Stack,
   Tooltip,
   Typography,
-} from '@mui/material';
-import type { SelectChangeEvent } from '@mui/material/Select';
+} from "@mui/material";
+import type { SelectChangeEvent } from "@mui/material/Select";
 
-import ReplayIcon from '@mui/icons-material/Replay';
-import AddPhotoAlternateIcon from '@mui/icons-material/AddPhotoAlternate';
-import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
-import { useNavigate } from 'react-router-dom';
+import ReplayIcon from "@mui/icons-material/Replay";
+import AddPhotoAlternateIcon from "@mui/icons-material/AddPhotoAlternate";
+import DeleteOutlineIcon from "@mui/icons-material/DeleteOutline";
+import { useNavigate } from "react-router-dom";
 
 import {
   fetchUsageRecords,
@@ -33,18 +33,20 @@ import {
   deleteUsageRecord,
   type UsageRecordsResult,
   type UsageRecordResultFilter,
-} from '../ai';
-import type { AIProvider, UsageRecord } from '../types';
-import ImageViewer from '../components/ImageViewer';
-import UsageRecordDetailDialog from '../components/UsageRecordDetailDialog';
+} from "../ai";
+import type { AIProvider, UsageRecord } from "../types";
+import ImageViewer from "../components/ImageViewer";
+import UsageRecordDetailDialog from "../components/UsageRecordDetailDialog";
+import { useAuth } from "../contexts/AuthContext";
 
 const PAGE_SIZE = 10;
-const ALL_VALUE = 'all';
-const DEFAULT_RESULT_FILTER: UsageRecordResultFilter = 'success';
+const ALL_VALUE = "all";
+const DEFAULT_RESULT_FILTER: UsageRecordResultFilter = "success";
 
 type ModelOption = { id: string; name: string };
 
 const GenerationHistoryPage: React.FC = () => {
+  const { isAdmin } = useAuth();
   const [records, setRecords] = useState<UsageRecord[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -53,13 +55,24 @@ const GenerationHistoryPage: React.FC = () => {
   const [providersLoading, setProvidersLoading] = useState(false);
   const [providerFilter, setProviderFilter] = useState<string>(ALL_VALUE);
   const [modelFilter, setModelFilter] = useState<string>(ALL_VALUE);
-  const [resultFilter, setResultFilter] = useState<UsageRecordResultFilter>(DEFAULT_RESULT_FILTER);
+  const [resultFilter, setResultFilter] = useState<UsageRecordResultFilter>(
+    DEFAULT_RESULT_FILTER,
+  );
   const [page, setPage] = useState(1);
-  const [meta, setMeta] = useState<UsageRecordsResult['meta'] | null>(null);
-  const [previewImage, setPreviewImage] = useState<{ url: string; alt: string } | null>(null);
+  const [meta, setMeta] = useState<UsageRecordsResult["meta"] | null>(null);
+  const [previewImage, setPreviewImage] = useState<{
+    url: string;
+    alt: string;
+  } | null>(null);
   const [retryingRecordId, setRetryingRecordId] = useState<number | null>(null);
-  const [preparingOutputAsInput, setPreparingOutputAsInput] = useState<{ recordId: number; index: number } | null>(null);
-  const [selectedDetail, setSelectedDetail] = useState<{ recordId: number; imageIndex?: number } | null>(null);
+  const [preparingOutputAsInput, setPreparingOutputAsInput] = useState<{
+    recordId: number;
+    index: number;
+  } | null>(null);
+  const [selectedDetail, setSelectedDetail] = useState<{
+    recordId: number;
+    imageIndex?: number;
+  } | null>(null);
   const [deletingRecordId, setDeletingRecordId] = useState<number | null>(null);
   const navigate = useNavigate();
   const recordCount = records.length;
@@ -89,7 +102,10 @@ const GenerationHistoryPage: React.FC = () => {
       return [];
     }
 
-    return provider.models.map((model) => ({ id: model.id, name: model.name ?? model.id }));
+    return provider.models.map((model) => ({
+      id: model.id,
+      name: model.name ?? model.id,
+    }));
   }, [providerFilter, providers]);
 
   const loadRecords = useCallback(
@@ -113,12 +129,12 @@ const GenerationHistoryPage: React.FC = () => {
           }
         }
       } catch (err) {
-        setError(err instanceof Error ? err.message : '获取记录失败');
+        setError(err instanceof Error ? err.message : "获取记录失败");
       } finally {
         setLoading(false);
       }
     },
-    [modelFilter, providerFilter, resultFilter]
+    [modelFilter, providerFilter, resultFilter],
   );
 
   useEffect(() => {
@@ -147,7 +163,9 @@ const GenerationHistoryPage: React.FC = () => {
         }
       } catch (err) {
         if (!cancelled) {
-          setFiltersError(err instanceof Error ? err.message : '获取模型提供商失败');
+          setFiltersError(
+            err instanceof Error ? err.message : "获取模型提供商失败",
+          );
         }
       } finally {
         if (!cancelled) {
@@ -174,7 +192,7 @@ const GenerationHistoryPage: React.FC = () => {
       setModelFilter(ALL_VALUE);
       setPage(1);
     },
-    []
+    [],
   );
 
   const handleModelChange = useCallback((event: SelectChangeEvent<string>) => {
@@ -185,14 +203,15 @@ const GenerationHistoryPage: React.FC = () => {
 
   const handleResultChange = useCallback((event: SelectChangeEvent<string>) => {
     const value = event.target.value as UsageRecordResultFilter;
-    const nextValue: UsageRecordResultFilter = value === 'failure' || value === 'all' ? value : DEFAULT_RESULT_FILTER;
+    const nextValue: UsageRecordResultFilter =
+      value === "failure" || value === "all" ? value : DEFAULT_RESULT_FILTER;
     setResultFilter(nextValue);
     setPage(1);
   }, []);
 
   const handleDelete = useCallback(
     async (record: UsageRecord) => {
-      if (!window.confirm('确认删除该生成记录吗？')) {
+      if (!window.confirm("确认删除该生成记录吗？")) {
         return;
       }
 
@@ -200,7 +219,9 @@ const GenerationHistoryPage: React.FC = () => {
         setDeletingRecordId(record.id);
         const nextPage = recordCount === 1 && page > 1 ? page - 1 : page;
         await deleteUsageRecord(record.id);
-        setSelectedDetail((prev) => (prev?.recordId === record.id ? null : prev));
+        setSelectedDetail((prev) =>
+          prev?.recordId === record.id ? null : prev,
+        );
 
         if (nextPage !== page) {
           setPage(nextPage);
@@ -208,17 +229,20 @@ const GenerationHistoryPage: React.FC = () => {
           await loadRecords(page);
         }
       } catch (err) {
-        setError(err instanceof Error ? err.message : '删除生成记录失败');
+        setError(err instanceof Error ? err.message : "删除生成记录失败");
       } finally {
         setDeletingRecordId(null);
       }
     },
-    [loadRecords, page, recordCount]
+    [loadRecords, page, recordCount],
   );
 
-  const handlePageChange = useCallback((_event: React.ChangeEvent<unknown>, value: number) => {
-    setPage(value);
-  }, []);
+  const handlePageChange = useCallback(
+    (_event: React.ChangeEvent<unknown>, value: number) => {
+      setPage(value);
+    },
+    [],
+  );
 
   const handleImageClick = useCallback((url: string, alt: string) => {
     setPreviewImage({ url, alt });
@@ -235,47 +259,54 @@ const GenerationHistoryPage: React.FC = () => {
         return;
       }
 
-      const link = document.createElement('a');
+      const link = document.createElement("a");
       link.href = url;
-      const fileName = (previewImage?.alt ?? 'image').replace(/\s+/g, '_');
+      const fileName = (previewImage?.alt ?? "image").replace(/\s+/g, "_");
       link.download = fileName;
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
     },
-    [previewImage]
+    [previewImage],
   );
 
-  const loadImageAsDataUrl = useCallback(async (url: string): Promise<string> => {
-    const response = await fetch(url);
-    if (!response.ok) {
-      throw new Error(`无法读取图片: ${response.status} ${response.statusText}`);
-    }
+  const loadImageAsDataUrl = useCallback(
+    async (url: string): Promise<string> => {
+      const response = await fetch(url);
+      if (!response.ok) {
+        throw new Error(
+          `无法读取图片: ${response.status} ${response.statusText}`,
+        );
+      }
 
-    const blob = await response.blob();
+      const blob = await response.blob();
 
-    return await new Promise<string>((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = () => {
-        const result = reader.result;
-        if (typeof result === 'string') {
-          resolve(result);
-        } else {
-          reject(new Error('图片转换失败'));
-        }
-      };
-      reader.onerror = () => {
-        reject(new Error('图片读取失败'));
-      };
-      reader.readAsDataURL(blob);
-    });
-  }, []);
+      return await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => {
+          const result = reader.result;
+          if (typeof result === "string") {
+            resolve(result);
+          } else {
+            reject(new Error("图片转换失败"));
+          }
+        };
+        reader.onerror = () => {
+          reject(new Error("图片读取失败"));
+        };
+        reader.readAsDataURL(blob);
+      });
+    },
+    [],
+  );
 
   const handleRetry = useCallback(
     async (record: UsageRecord) => {
       try {
         setRetryingRecordId(record.id);
-        const base64Images = await Promise.all(record.input_images.map((image) => loadImageAsDataUrl(image.url)));
+        const base64Images = await Promise.all(
+          record.input_images.map((image) => loadImageAsDataUrl(image.url)),
+        );
 
         const state = {
           prompt: record.prompt,
@@ -285,15 +316,16 @@ const GenerationHistoryPage: React.FC = () => {
           size: record.size,
         } as const;
 
-        navigate('/custom', { state });
+        navigate("/custom", { state });
       } catch (err) {
-        const message = err instanceof Error ? err.message : '重新创建生成任务失败';
+        const message =
+          err instanceof Error ? err.message : "重新创建生成任务失败";
         setError(message);
       } finally {
         setRetryingRecordId(null);
       }
     },
-    [loadImageAsDataUrl, navigate]
+    [loadImageAsDataUrl, navigate],
   );
 
   const handleUseOutputImage = useCallback(
@@ -310,15 +342,16 @@ const GenerationHistoryPage: React.FC = () => {
           size: record.size,
         } as const;
 
-        navigate('/custom', { state });
+        navigate("/custom", { state });
       } catch (err) {
-        const message = err instanceof Error ? err.message : '无法将图片带入生成页面';
+        const message =
+          err instanceof Error ? err.message : "无法将图片带入生成页面";
         setError(message);
       } finally {
         setPreparingOutputAsInput(null);
       }
     },
-    [loadImageAsDataUrl, navigate]
+    [loadImageAsDataUrl, navigate],
   );
 
   const handleOpenDetails = useCallback((record: UsageRecord) => {
@@ -334,13 +367,22 @@ const GenerationHistoryPage: React.FC = () => {
 
   const selectedRecordId = selectedDetail?.recordId ?? null;
   const preparingMatch =
-    selectedRecordId !== null && preparingOutputAsInput?.recordId === selectedRecordId;
-  const preparingImageIndex = preparingMatch ? preparingOutputAsInput?.index : undefined;
+    selectedRecordId !== null &&
+    preparingOutputAsInput?.recordId === selectedRecordId;
+  const preparingImageIndex = preparingMatch
+    ? preparingOutputAsInput?.index
+    : undefined;
 
   return (
     <Box sx={{ py: 6 }}>
       <Container maxWidth="lg">
-        <Stack direction={{ xs: 'column', sm: 'row' }} alignItems={{ xs: 'flex-start', sm: 'center' }} justifyContent="space-between" spacing={2} sx={{ mb: 4 }}>
+        <Stack
+          direction={{ xs: "column", sm: "row" }}
+          alignItems={{ xs: "flex-start", sm: "center" }}
+          justifyContent="space-between"
+          spacing={2}
+          sx={{ mb: 4 }}
+        >
           <Box>
             <Typography variant="h4" gutterBottom>
               生成记录
@@ -349,15 +391,28 @@ const GenerationHistoryPage: React.FC = () => {
               查看每次调用模型的输入提示、生成结果与可能的错误信息。
             </Typography>
           </Box>
-          <Button variant="contained" color="primary" onClick={handleRefresh} disabled={loading}>
+          <Button
+            variant="contained"
+            color="primary"
+            onClick={handleRefresh}
+            disabled={loading}
+          >
             刷新
           </Button>
         </Stack>
 
         <Card elevation={0} sx={{ mb: 3 }}>
           <CardContent>
-            <Stack direction={{ xs: 'column', md: 'row' }} spacing={2} alignItems={{ xs: 'stretch', md: 'center' }}>
-              <FormControl size="small" sx={{ minWidth: 160 }} disabled={providersLoading && providers.length === 0}>
+            <Stack
+              direction={{ xs: "column", md: "row" }}
+              spacing={2}
+              alignItems={{ xs: "stretch", md: "center" }}
+            >
+              <FormControl
+                size="small"
+                sx={{ minWidth: 160 }}
+                disabled={providersLoading && providers.length === 0}
+              >
                 <InputLabel id="filter-provider-label">厂商</InputLabel>
                 <Select
                   labelId="filter-provider-label"
@@ -377,10 +432,19 @@ const GenerationHistoryPage: React.FC = () => {
               <FormControl
                 size="small"
                 sx={{ minWidth: 160 }}
-                disabled={providersLoading && providers.length === 0 && availableModels.length === 0}
+                disabled={
+                  providersLoading &&
+                  providers.length === 0 &&
+                  availableModels.length === 0
+                }
               >
                 <InputLabel id="filter-model-label">模型</InputLabel>
-                <Select labelId="filter-model-label" value={modelFilter} label="模型" onChange={handleModelChange}>
+                <Select
+                  labelId="filter-model-label"
+                  value={modelFilter}
+                  label="模型"
+                  onChange={handleModelChange}
+                >
                   <MenuItem value={ALL_VALUE}>全部模型</MenuItem>
                   {availableModels.map((model) => (
                     <MenuItem key={model.id} value={model.id}>
@@ -392,7 +456,12 @@ const GenerationHistoryPage: React.FC = () => {
 
               <FormControl size="small" sx={{ minWidth: 160 }}>
                 <InputLabel id="filter-result-label">生成结果</InputLabel>
-                <Select labelId="filter-result-label" value={resultFilter} label="生成结果" onChange={handleResultChange}>
+                <Select
+                  labelId="filter-result-label"
+                  value={resultFilter}
+                  label="生成结果"
+                  onChange={handleResultChange}
+                >
                   <MenuItem value="success">成功</MenuItem>
                   <MenuItem value="failure">失败</MenuItem>
                   <MenuItem value="all">全部</MenuItem>
@@ -400,7 +469,12 @@ const GenerationHistoryPage: React.FC = () => {
               </FormControl>
 
               {providersLoading && (
-                <Stack direction="row" spacing={1} alignItems="center" sx={{ minHeight: 40 }}>
+                <Stack
+                  direction="row"
+                  spacing={1}
+                  alignItems="center"
+                  sx={{ minHeight: 40 }}
+                >
                   <CircularProgress size={18} />
                   <Typography variant="caption" color="text.secondary">
                     正在加载可用厂商
@@ -424,7 +498,13 @@ const GenerationHistoryPage: React.FC = () => {
         )}
 
         {loading && (
-          <Stack direction="row" spacing={2} alignItems="center" justifyContent="center" sx={{ my: 6 }}>
+          <Stack
+            direction="row"
+            spacing={2}
+            alignItems="center"
+            justifyContent="center"
+            sx={{ my: 6 }}
+          >
             <CircularProgress size={28} />
             <Typography variant="body2" color="text.secondary">
               正在加载生成记录…
@@ -433,7 +513,7 @@ const GenerationHistoryPage: React.FC = () => {
         )}
 
         {!loading && records.length === 0 && !error && (
-          <Box sx={{ textAlign: 'center', py: 8 }}>
+          <Box sx={{ textAlign: "center", py: 8 }}>
             <Typography variant="h6" gutterBottom>
               暂无生成记录
             </Typography>
@@ -446,14 +526,21 @@ const GenerationHistoryPage: React.FC = () => {
         <Stack spacing={3} sx={{ opacity: loading ? 0.7 : 1 }}>
           {records.map((record) => {
             const hasError = Boolean(record.error_message);
+            const ownerName =
+              record.user?.display_name || record.user?.email || "未知用户";
 
             return (
               <Card key={record.id} elevation={1}>
                 <CardHeader
                   title={`${record.provider_id}/${record.model_id}`}
+                  subheader={isAdmin ? `提交人：${ownerName}` : undefined}
                   action={
                     <Stack direction="row" spacing={1} alignItems="center">
-                      <Button variant="text" size="small" onClick={() => handleOpenDetails(record)}>
+                      <Button
+                        variant="text"
+                        size="small"
+                        onClick={() => handleOpenDetails(record)}
+                      >
                         查看详情
                       </Button>
                       <Button
@@ -492,135 +579,160 @@ const GenerationHistoryPage: React.FC = () => {
                         </span>
                       </Tooltip>
                       <Chip
-                        color={hasError ? 'error' : 'success'}
+                        color={hasError ? "error" : "success"}
                         variant="outlined"
-                        label={hasError ? '生成异常' : '生成成功'}
+                        label={hasError ? "生成异常" : "生成成功"}
                       />
                     </Stack>
                   }
                 />
                 <CardContent>
                   <Stack spacing={2}>
-                      {(record.input_images.length > 0 || record.output_images.length > 0) && (
-                        <Box>
-                          {/* <Typography variant="subtitle2" color="text.primary">
+                    {(record.input_images.length > 0 ||
+                      record.output_images.length > 0) && (
+                      <Box>
+                        {/* <Typography variant="subtitle2" color="text.primary">
                             输入 / 输出图片
                           </Typography> */}
-                          <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, mt: 1 }}>
-                            {record.input_images.map((image, index) => {
-                              const alt = `输入图片 ${index + 1}`;
-                              return (
-                                <ButtonBase
-                                  key={`${record.id}-in-${index}`}
-                                  onClick={() => handleImageClick(image.url, alt)}
+                        <Box
+                          sx={{
+                            display: "flex",
+                            flexWrap: "wrap",
+                            gap: 1,
+                            mt: 1,
+                          }}
+                        >
+                          {record.input_images.map((image, index) => {
+                            const alt = `输入图片 ${index + 1}`;
+                            return (
+                              <ButtonBase
+                                key={`${record.id}-in-${index}`}
+                                onClick={() => handleImageClick(image.url, alt)}
+                                sx={{
+                                  width: 140,
+                                  height: 140,
+                                  borderRadius: 1,
+                                  overflow: "hidden",
+                                  border: "1px solid",
+                                  borderColor: "divider",
+                                  bgcolor: "background.paper",
+                                  position: "relative",
+                                }}
+                              >
+                                <Box
+                                  component="img"
+                                  src={image.url}
+                                  alt={alt}
+                                  loading="lazy"
                                   sx={{
-                                    width: 140,
-                                    height: 140,
-                                    borderRadius: 1,
-                                    overflow: 'hidden',
-                                    border: '1px solid',
-                                    borderColor: 'divider',
-                                    bgcolor: 'background.paper',
-                                    position: 'relative',
+                                    width: "100%",
+                                    height: "100%",
+                                    objectFit: "cover",
                                   }}
-                                >
-                                  <Box
-                                    component="img"
-                                    src={image.url}
-                                    alt={alt}
-                                    loading="lazy"
-                                    sx={{ width: '100%', height: '100%', objectFit: 'cover' }}
-                                  />
-                                  <Chip
-                                    label={`${index + 1}`}
-                                    size="small"
-                                    color="default"
-                                    sx={{
-                                      position: 'absolute',
-                                      top: 6,
-                                      left: 6,
-                                      bgcolor: 'rgba(0,0,0,0.6)',
-                                      color: 'common.white',
-                                    }}
-                                  />
-                                </ButtonBase>
-                              );
-                            })}
-                            {record.output_images.map((image, index) => {
-                              const alt = `输出图片 ${index + 1}`;
-                              return (
-                                <ButtonBase
-                                  key={`${record.id}-out-${index}`}
-                                  onClick={() => handleImageClick(image.url, alt)}
+                                />
+                                <Chip
+                                  label={`${index + 1}`}
+                                  size="small"
+                                  color="default"
                                   sx={{
-                                    width: 140,
-                                    height: 140,
-                                    borderRadius: 1,
-                                    overflow: 'hidden',
-                                    border: '1px solid',
-                                    borderColor: 'divider',
-                                    bgcolor: 'background.paper',
-                                    position: 'relative',
+                                    position: "absolute",
+                                    top: 6,
+                                    left: 6,
+                                    bgcolor: "rgba(0,0,0,0.6)",
+                                    color: "common.white",
                                   }}
-                                >
-                                  <Box
-                                    component="img"
-                                    src={image.url}
-                                    alt={alt}
-                                    loading="lazy"
-                                    sx={{ width: '100%', height: '100%', objectFit: 'cover' }}
-                                  />
-                                  <Chip
-                                    label={`${index + 1}`}
-                                    size="small"
-                                    color="primary"
-                                    sx={{
-                                      position: 'absolute',
-                                      top: 6,
-                                      left: 6,
-                                    }}
-                                  />
-                                  <Tooltip title="作为输入图片使用">
-                                    <span>
-                                      <IconButton
-                                        size="small"
-                                        color="primary"
-                                        sx={{
-                                          position: 'absolute',
-                                          top: 6,
-                                          right: 6,
-                                          bgcolor: 'rgba(255,255,255,0.85)',
-                                          '&:hover': {
-                                            bgcolor: 'rgba(255,255,255,0.95)',
-                                          },
-                                        }}
-                                        onClick={(event) => {
-                                          event.stopPropagation();
-                                          void handleUseOutputImage(record, image.url, index);
-                                        }}
-                                        disabled={
-                                          preparingOutputAsInput?.recordId === record.id &&
-                                          preparingOutputAsInput?.index === index
-                                        }
-                                      >
-                                        {preparingOutputAsInput?.recordId === record.id &&
-                                        preparingOutputAsInput?.index === index ? (
-                                          <CircularProgress size={16} color="inherit" />
-                                        ) : (
-                                          <AddPhotoAlternateIcon fontSize="small" />
-                                        )}
-                                      </IconButton>
-                                    </span>
-                                  </Tooltip>
-                                </ButtonBase>
-                              );
-                            })}
-                          </Box>
+                                />
+                              </ButtonBase>
+                            );
+                          })}
+                          {record.output_images.map((image, index) => {
+                            const alt = `输出图片 ${index + 1}`;
+                            return (
+                              <ButtonBase
+                                key={`${record.id}-out-${index}`}
+                                onClick={() => handleImageClick(image.url, alt)}
+                                sx={{
+                                  width: 140,
+                                  height: 140,
+                                  borderRadius: 1,
+                                  overflow: "hidden",
+                                  border: "1px solid",
+                                  borderColor: "divider",
+                                  bgcolor: "background.paper",
+                                  position: "relative",
+                                }}
+                              >
+                                <Box
+                                  component="img"
+                                  src={image.url}
+                                  alt={alt}
+                                  loading="lazy"
+                                  sx={{
+                                    width: "100%",
+                                    height: "100%",
+                                    objectFit: "cover",
+                                  }}
+                                />
+                                <Chip
+                                  label={`${index + 1}`}
+                                  size="small"
+                                  color="primary"
+                                  sx={{
+                                    position: "absolute",
+                                    top: 6,
+                                    left: 6,
+                                  }}
+                                />
+                                <Tooltip title="作为输入图片使用">
+                                  <span>
+                                    <IconButton
+                                      size="small"
+                                      color="primary"
+                                      sx={{
+                                        position: "absolute",
+                                        top: 6,
+                                        right: 6,
+                                        bgcolor: "rgba(255,255,255,0.85)",
+                                        "&:hover": {
+                                          bgcolor: "rgba(255,255,255,0.95)",
+                                        },
+                                      }}
+                                      onClick={(event) => {
+                                        event.stopPropagation();
+                                        void handleUseOutputImage(
+                                          record,
+                                          image.url,
+                                          index,
+                                        );
+                                      }}
+                                      disabled={
+                                        preparingOutputAsInput?.recordId ===
+                                          record.id &&
+                                        preparingOutputAsInput?.index === index
+                                      }
+                                    >
+                                      {preparingOutputAsInput?.recordId ===
+                                        record.id &&
+                                      preparingOutputAsInput?.index ===
+                                        index ? (
+                                        <CircularProgress
+                                          size={16}
+                                          color="inherit"
+                                        />
+                                      ) : (
+                                        <AddPhotoAlternateIcon fontSize="small" />
+                                      )}
+                                    </IconButton>
+                                  </span>
+                                </Tooltip>
+                              </ButtonBase>
+                            );
+                          })}
                         </Box>
-                      )}
-
-                    </Stack>
-                  </CardContent>
+                      </Box>
+                    )}
+                  </Stack>
+                </CardContent>
               </Card>
             );
           })}
@@ -628,9 +740,18 @@ const GenerationHistoryPage: React.FC = () => {
 
         {totalPages > 1 && (
           <Stack alignItems="center" sx={{ mt: 4 }}>
-            <Pagination count={totalPages} page={Math.min(page, totalPages)} onChange={handlePageChange} color="primary" />
+            <Pagination
+              count={totalPages}
+              page={Math.min(page, totalPages)}
+              onChange={handlePageChange}
+              color="primary"
+            />
             {meta && (
-              <Typography variant="caption" color="text.secondary" sx={{ mt: 1 }}>
+              <Typography
+                variant="caption"
+                color="text.secondary"
+                sx={{ mt: 1 }}
+              >
                 共 {meta.total} 条记录，每页 {meta.page_size} 条
               </Typography>
             )}
@@ -654,14 +775,24 @@ const GenerationHistoryPage: React.FC = () => {
           onPreviewOutputImage={(record, imageIndex) => {
             const image = record.output_images[imageIndex];
             if (image?.url) {
-              setPreviewImage({ url: image.url, alt: `记录 #${record.id} 输出图片 ${imageIndex + 1}` });
+              setPreviewImage({
+                url: image.url,
+                alt: `记录 #${record.id} 输出图片 ${imageIndex + 1}`,
+              });
             }
           }}
           actionState={{
-            retrying: selectedRecordId !== null && retryingRecordId === selectedRecordId,
-            deleting: selectedRecordId !== null && deletingRecordId === selectedRecordId,
-            preparingOutput: typeof preparingImageIndex === 'number',
-            preparingOutputIndex: typeof preparingImageIndex === 'number' ? preparingImageIndex : undefined,
+            retrying:
+              selectedRecordId !== null &&
+              retryingRecordId === selectedRecordId,
+            deleting:
+              selectedRecordId !== null &&
+              deletingRecordId === selectedRecordId,
+            preparingOutput: typeof preparingImageIndex === "number",
+            preparingOutputIndex:
+              typeof preparingImageIndex === "number"
+                ? preparingImageIndex
+                : undefined,
           }}
         />
 

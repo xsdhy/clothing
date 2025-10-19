@@ -8,23 +8,24 @@ import type {
   UsageRecord,
   PaginationMeta,
   UsageRecordDetailResponse,
-} from './types';
-import type { SSEEventPayload } from './utils/sse';
-import { appendSanitizedImages, sanitizeImages } from './utils/images';
-import { DEFAULT_HTTP_TIMEOUT_MS, requestWithTimeout } from './utils/http';
-import { parseSSEEvent } from './utils/sse';
-import { safeParseJSON } from './utils/json';
+} from "./types";
+import type { SSEEventPayload } from "./utils/sse";
+import { appendSanitizedImages, sanitizeImages } from "./utils/images";
+import { DEFAULT_HTTP_TIMEOUT_MS, requestWithTimeout } from "./utils/http";
+import { emitUnauthorized, getStoredToken } from "./utils/authStorage";
+import { parseSSEEvent } from "./utils/sse";
+import { safeParseJSON } from "./utils/json";
 
-const LLM_GENERATE_ENDPOINT = '/api/llm';
+const LLM_GENERATE_ENDPOINT = "/api/llm";
 const LLM_PROVIDERS_ENDPOINT = `/api/llm/providers`;
-const USAGE_RECORDS_ENDPOINT = '/api/usage-records';
+const USAGE_RECORDS_ENDPOINT = "/api/usage-records";
 
 export interface UsageRecordsResult {
   records: UsageRecord[];
   meta: PaginationMeta;
 }
 
-export type UsageRecordResultFilter = 'success' | 'failure' | 'all';
+export type UsageRecordResultFilter = "success" | "failure" | "all";
 
 export interface UsageRecordFilters {
   provider?: string;
@@ -32,14 +33,16 @@ export interface UsageRecordFilters {
   result?: UsageRecordResultFilter;
 }
 
-export const generateImage = async (request: GenerationRequest): Promise<GenerationResult> => {
+export const generateImage = async (
+  request: GenerationRequest,
+): Promise<GenerationResult> => {
   const prompt = request.prompt.trim();
   if (!prompt) {
-    throw new Error('请输入图片描述');
+    throw new Error("请输入图片描述");
   }
 
   if (!request.provider?.id) {
-    throw new Error('请选择服务商');
+    throw new Error("请选择服务商");
   }
 
   const payload: Record<string, unknown> = {
@@ -49,7 +52,7 @@ export const generateImage = async (request: GenerationRequest): Promise<Generat
     model: request.model,
   };
 
-  if (typeof request.size === 'string' && request.size.trim()) {
+  if (typeof request.size === "string" && request.size.trim()) {
     payload.size = request.size.trim();
   }
 
@@ -82,31 +85,42 @@ export const generateImage = async (request: GenerationRequest): Promise<Generat
 
   let response: Response;
   try {
+    const token = getStoredToken();
+    const headers: Record<string, string> = {
+      "Content-Type": "application/json",
+      Accept: "text/event-stream",
+    };
+    if (token) {
+      headers.Authorization = `Bearer ${token}`;
+    }
     response = await fetch(LLM_GENERATE_ENDPOINT, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Accept: 'text/event-stream',
-      },
+      method: "POST",
+      headers,
       body: JSON.stringify(payload),
       signal: controller.signal,
     });
   } catch (error) {
     clearTimer();
-    const isAbortError = error instanceof DOMException && error.name === 'AbortError';
+    const isAbortError =
+      error instanceof DOMException && error.name === "AbortError";
     if (timedOut || isAbortError) {
-      const timeoutError = new Error('请求超时，请稍后重试');
-      timeoutError.name = 'TimeoutError';
+      const timeoutError = new Error("请求超时，请稍后重试");
+      timeoutError.name = "TimeoutError";
       throw timeoutError;
     }
-    throw new Error(`请求后端服务失败: ${error instanceof Error ? error.message : '未知错误'}`);
+    throw new Error(
+      `请求后端服务失败: ${error instanceof Error ? error.message : "未知错误"}`,
+    );
   }
-
   resetTimer();
 
-  const contentType = response.headers.get('Content-Type')?.toLowerCase() ?? '';
+  const contentType = response.headers.get("Content-Type")?.toLowerCase() ?? "";
 
-  if (!contentType.includes('text/event-stream')) {
+  if (response.status === 401) {
+    emitUnauthorized();
+  }
+
+  if (!contentType.includes("text/event-stream")) {
     clearTimer();
 
     let body: BackendResponse | undefined;
@@ -117,7 +131,9 @@ export const generateImage = async (request: GenerationRequest): Promise<Generat
     }
 
     if (!response.ok) {
-      const message = body?.error ?? `服务请求失败: ${response.status} ${response.statusText}`;
+      const message =
+        body?.error ??
+        `服务请求失败: ${response.status} ${response.statusText}`;
       throw new Error(message);
     }
 
@@ -129,14 +145,12 @@ export const generateImage = async (request: GenerationRequest): Promise<Generat
 
     appendSanitizedImages(imageSet, body?.images);
 
-
-
     if (imageSet.size === 0 && body?.text) {
       return { images: [], text: body.text };
     }
 
     if (imageSet.size === 0) {
-      throw new Error('后端未返回有效的图片数据');
+      throw new Error("后端未返回有效的图片数据");
     }
 
     return { images: Array.from(imageSet), text: body?.text };
@@ -150,31 +164,37 @@ export const generateImage = async (request: GenerationRequest): Promise<Generat
   const reader = response.body?.getReader();
   if (!reader) {
     clearTimer();
-    throw new Error('当前环境不支持流式响应');
+    throw new Error("当前环境不支持流式响应");
   }
 
   const decoder = new TextDecoder();
-  let buffer = '';
+  let buffer = "";
   let backendResponse: BackendResponse | undefined;
 
-  const processEvent = (event: SSEEventPayload): BackendResponse | undefined => {
-    const eventName = event.event || 'message';
+  const processEvent = (
+    event: SSEEventPayload,
+  ): BackendResponse | undefined => {
+    const eventName = event.event || "message";
     const data = event.data;
 
-    if (eventName === 'ping' || eventName === 'status' || eventName === 'message') {
+    if (
+      eventName === "ping" ||
+      eventName === "status" ||
+      eventName === "message"
+    ) {
       return undefined;
     }
 
-    if (eventName === 'error') {
+    if (eventName === "error") {
       const payload = safeParseJSON<BackendResponse>(data);
-      const message = payload?.error ?? data ?? '流式请求失败';
+      const message = payload?.error ?? data ?? "流式请求失败";
       throw new Error(message);
     }
 
-    if (eventName === 'result') {
+    if (eventName === "result") {
       const payload = safeParseJSON<BackendResponse>(data);
       if (!payload) {
-        throw new Error('流式响应解析失败');
+        throw new Error("流式响应解析失败");
       }
       return payload;
     }
@@ -193,7 +213,7 @@ export const generateImage = async (request: GenerationRequest): Promise<Generat
       buffer += decoder.decode(value, { stream: true });
 
       let delimiter: number;
-      while ((delimiter = buffer.indexOf('\n\n')) !== -1) {
+      while ((delimiter = buffer.indexOf("\n\n")) !== -1) {
         const rawEvent = buffer.slice(0, delimiter);
         buffer = buffer.slice(delimiter + 2);
 
@@ -225,16 +245,16 @@ export const generateImage = async (request: GenerationRequest): Promise<Generat
       }
     }
   } catch (error) {
-    if (error instanceof DOMException && error.name === 'AbortError') {
+    if (error instanceof DOMException && error.name === "AbortError") {
       if (timedOut) {
-        const timeoutError = new Error('请求超时，请稍后重试');
-        timeoutError.name = 'TimeoutError';
+        const timeoutError = new Error("请求超时，请稍后重试");
+        timeoutError.name = "TimeoutError";
         throw timeoutError;
       }
-      throw new Error('请求被中断，请重试');
+      throw new Error("请求被中断，请重试");
     }
 
-    if (error instanceof Error && error.name === 'TimeoutError') {
+    if (error instanceof Error && error.name === "TimeoutError") {
       throw error;
     }
 
@@ -245,7 +265,7 @@ export const generateImage = async (request: GenerationRequest): Promise<Generat
   }
 
   if (!backendResponse) {
-    throw new Error('流式响应未返回结果');
+    throw new Error("流式响应未返回结果");
   }
 
   if (backendResponse.error) {
@@ -261,7 +281,7 @@ export const generateImage = async (request: GenerationRequest): Promise<Generat
   }
 
   if (imageSet.size === 0) {
-    throw new Error('后端未返回有效的图片数据');
+    throw new Error("后端未返回有效的图片数据");
   }
 
   return { images: Array.from(imageSet), text: backendResponse.text };
@@ -272,7 +292,9 @@ export const fetchProviders = async (): Promise<AIProvider[]> => {
   try {
     response = await requestWithTimeout(LLM_PROVIDERS_ENDPOINT);
   } catch (error) {
-    throw new Error(`请求模型列表失败: ${error instanceof Error ? error.message : '未知错误'}`);
+    throw new Error(
+      `请求模型列表失败: ${error instanceof Error ? error.message : "未知错误"}`,
+    );
   }
 
   let body: ProvidersResponse | undefined;
@@ -283,12 +305,13 @@ export const fetchProviders = async (): Promise<AIProvider[]> => {
   }
 
   if (!response.ok) {
-    const message = body?.error ?? `服务请求失败: ${response.status} ${response.statusText}`;
+    const message =
+      body?.error ?? `服务请求失败: ${response.status} ${response.statusText}`;
     throw new Error(message);
   }
 
   if (!body?.providers || !Array.isArray(body.providers)) {
-    throw new Error('后端未返回有效的模型列表');
+    throw new Error("后端未返回有效的模型列表");
   }
 
   return body.providers;
@@ -297,10 +320,13 @@ export const fetchProviders = async (): Promise<AIProvider[]> => {
 export const fetchUsageRecords = async (
   page = 1,
   pageSize = 20,
-  filters?: UsageRecordFilters
+  filters?: UsageRecordFilters,
 ): Promise<UsageRecordsResult> => {
   const safePage = Number.isFinite(page) && page > 0 ? Math.floor(page) : 1;
-  const safePageSize = Number.isFinite(pageSize) && pageSize > 0 ? Math.min(Math.floor(pageSize), 100) : 20;
+  const safePageSize =
+    Number.isFinite(pageSize) && pageSize > 0
+      ? Math.min(Math.floor(pageSize), 100)
+      : 20;
 
   const params = new URLSearchParams({
     page: String(safePage),
@@ -312,46 +338,57 @@ export const fetchUsageRecords = async (
     return trimmed ? trimmed : undefined;
   };
 
-  const resultFilter = (filters?.result ?? 'success').toLowerCase() as UsageRecordResultFilter;
+  const resultFilter = (
+    filters?.result ?? "success"
+  ).toLowerCase() as UsageRecordResultFilter;
 
   const provider = normaliseFilterValue(filters?.provider);
   const model = normaliseFilterValue(filters?.model);
 
   if (provider) {
-    params.set('provider', provider);
+    params.set("provider", provider);
   }
   if (model) {
-    params.set('model', model);
+    params.set("model", model);
   }
 
-  if (resultFilter === 'failure') {
-    params.set('result', 'failure');
-  } else if (resultFilter === 'all') {
-    params.set('result', 'all');
+  if (resultFilter === "failure") {
+    params.set("result", "failure");
+  } else if (resultFilter === "all") {
+    params.set("result", "all");
   } else {
-    params.set('result', 'success');
+    params.set("result", "success");
   }
 
   let response: Response;
   try {
-    response = await requestWithTimeout(`${USAGE_RECORDS_ENDPOINT}?${params.toString()}`, {
-      headers: {
-        Accept: 'application/json',
+    response = await requestWithTimeout(
+      `${USAGE_RECORDS_ENDPOINT}?${params.toString()}`,
+      {
+        headers: {
+          Accept: "application/json",
+        },
       },
-    });
+    );
   } catch (error) {
-    throw new Error(`获取生成记录失败: ${error instanceof Error ? error.message : '未知错误'}`);
+    throw new Error(
+      `获取生成记录失败: ${error instanceof Error ? error.message : "未知错误"}`,
+    );
   }
 
   let payload: Partial<UsageRecordListResponse> & { error?: string };
   try {
-    payload = (await response.json()) as Partial<UsageRecordListResponse> & { error?: string };
+    payload = (await response.json()) as Partial<UsageRecordListResponse> & {
+      error?: string;
+    };
   } catch {
     payload = {};
   }
 
   if (!response.ok) {
-    const message = payload?.error ?? `服务请求失败: ${response.status} ${response.statusText}`;
+    const message =
+      payload?.error ??
+      `服务请求失败: ${response.status} ${response.statusText}`;
     throw new Error(message);
   }
 
@@ -367,19 +404,21 @@ export const fetchUsageRecords = async (
 
 export const deleteUsageRecord = async (id: number): Promise<void> => {
   if (!Number.isFinite(id) || id <= 0) {
-    throw new Error('无效的记录 ID');
+    throw new Error("无效的记录 ID");
   }
 
   let response: Response;
   try {
     response = await requestWithTimeout(`${USAGE_RECORDS_ENDPOINT}/${id}`, {
-      method: 'DELETE',
+      method: "DELETE",
       headers: {
-        Accept: 'application/json',
+        Accept: "application/json",
       },
     });
   } catch (error) {
-    throw new Error(`删除生成记录失败: ${error instanceof Error ? error.message : '未知错误'}`);
+    throw new Error(
+      `删除生成记录失败: ${error instanceof Error ? error.message : "未知错误"}`,
+    );
   }
 
   if (!response.ok) {
@@ -396,36 +435,44 @@ export const deleteUsageRecord = async (id: number): Promise<void> => {
   }
 };
 
-export const fetchUsageRecordDetail = async (id: number): Promise<UsageRecord> => {
+export const fetchUsageRecordDetail = async (
+  id: number,
+): Promise<UsageRecord> => {
   if (!Number.isFinite(id) || id <= 0) {
-    throw new Error('无效的记录 ID');
+    throw new Error("无效的记录 ID");
   }
 
   let response: Response;
   try {
     response = await requestWithTimeout(`${USAGE_RECORDS_ENDPOINT}/${id}`, {
       headers: {
-        Accept: 'application/json',
+        Accept: "application/json",
       },
     });
   } catch (error) {
-    throw new Error(`获取记录详情失败: ${error instanceof Error ? error.message : '未知错误'}`);
+    throw new Error(
+      `获取记录详情失败: ${error instanceof Error ? error.message : "未知错误"}`,
+    );
   }
 
   let payload: Partial<UsageRecordDetailResponse> & { error?: string };
   try {
-    payload = (await response.json()) as Partial<UsageRecordDetailResponse> & { error?: string };
+    payload = (await response.json()) as Partial<UsageRecordDetailResponse> & {
+      error?: string;
+    };
   } catch {
     payload = {};
   }
 
   if (!response.ok) {
-    const message = payload?.error ?? `服务请求失败: ${response.status} ${response.statusText}`;
+    const message =
+      payload?.error ??
+      `服务请求失败: ${response.status} ${response.statusText}`;
     throw new Error(message);
   }
 
   if (!payload?.record) {
-    throw new Error('后端未返回有效的记录详情');
+    throw new Error("后端未返回有效的记录详情");
   }
 
   return payload.record;

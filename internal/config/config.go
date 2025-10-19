@@ -59,6 +59,10 @@ type Config struct {
 	DashscopeAPIKey  string `env:"DASHSCOPE_API_KEY" envDefault:""`
 	VolcengineAPIKey string `env:"VOLCENGINE_API_KEY" envDefault:""`
 	FalAPIKey        string `env:"FAL_KEY" envDefault:""`
+
+	JWTSecret            string `env:"JWT_SECRET" envDefault:"dev-secret-change-me"`
+	JWTIssuer            string `env:"JWT_ISSUER" envDefault:"clothing-app"`
+	JWTExpirationMinutes int    `env:"JWT_EXPIRATION_MINUTES" envDefault:"1440"`
 }
 
 func ParseConfig() (Config, error) {

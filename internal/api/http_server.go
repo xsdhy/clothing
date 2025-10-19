@@ -1,12 +1,14 @@
 package api
 
 import (
+	"clothing/internal/auth"
 	"clothing/internal/config"
 	"clothing/internal/entity"
 	"clothing/internal/llm"
 	"clothing/internal/model"
 	"clothing/internal/storage"
 	"strings"
+	"time"
 
 	"github.com/sirupsen/logrus"
 )
@@ -18,10 +20,17 @@ type HTTPHandler struct {
 	repo              model.Repository
 	storage           storage.Storage
 	storagePublicBase string
+	authManager       *auth.Manager
 }
 
-func NewHTTPHandler(cfg config.Config, repo model.Repository, store storage.Storage) *HTTPHandler {
+func NewHTTPHandler(cfg config.Config, repo model.Repository, store storage.Storage) (*HTTPHandler, error) {
 	providers, providerMap := NewProviderBundle(cfg)
+
+	expiry := time.Duration(cfg.JWTExpirationMinutes) * time.Minute
+	authManager, err := auth.NewManager(cfg.JWTSecret, cfg.JWTIssuer, expiry)
+	if err != nil {
+		return nil, err
+	}
 
 	handler := &HTTPHandler{
 		cfg:               cfg,
@@ -30,9 +39,10 @@ func NewHTTPHandler(cfg config.Config, repo model.Repository, store storage.Stor
 		repo:              repo,
 		storage:           store,
 		storagePublicBase: normalisePublicBase(cfg.StoragePublicBaseURL),
+		authManager:       authManager,
 	}
 
-	return handler
+	return handler, nil
 }
 
 func NewProviderBundle(cfg config.Config) ([]entity.LlmProvider, map[string]llm.AIService) {

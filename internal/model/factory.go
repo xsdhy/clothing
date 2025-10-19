@@ -173,6 +173,7 @@ func (f *RepositoryFactory) openGormDB(dialector gorm.Dialector) (*gorm.DB, erro
 // migrateSchema migrates the database schema
 func (f *RepositoryFactory) migrateSchema(db *gorm.DB) error {
 	return db.AutoMigrate(
+		&entity.DbUser{},
 		&entity.DbUsageRecord{},
 	)
 }

@@ -1,12 +1,20 @@
 export const DEFAULT_HTTP_TIMEOUT_MS = 120_000;
 
+import { emitUnauthorized, getStoredToken } from "./authStorage";
+
 export const requestWithTimeout = async (
   input: RequestInfo | URL,
   init: RequestInit = {},
   timeout = DEFAULT_HTTP_TIMEOUT_MS,
 ): Promise<Response> => {
   const controller = new AbortController();
-  const { signal, ...rest } = init;
+  const { signal, headers, ...rest } = init;
+
+  const requestHeaders = new Headers(headers ?? {});
+  const token = getStoredToken();
+  if (token && !requestHeaders.has("Authorization")) {
+    requestHeaders.set("Authorization", `Bearer ${token}`);
+  }
 
   let timedOut = false;
   const timeoutId = window.setTimeout(() => {
@@ -15,19 +23,30 @@ export const requestWithTimeout = async (
   }, timeout);
 
   const abortHandler = () => controller.abort();
-  signal?.addEventListener?.('abort', abortHandler);
+  signal?.addEventListener?.("abort", abortHandler);
 
   try {
-    return await fetch(input, { ...rest, signal: controller.signal });
+    const response = await fetch(input, {
+      ...rest,
+      headers: requestHeaders,
+      signal: controller.signal,
+    });
+    if (response.status === 401) {
+      emitUnauthorized();
+    }
+    return response;
   } catch (error) {
-    if (timedOut || (error instanceof DOMException && error.name === 'AbortError')) {
-      const timeoutError = new Error('请求超时，请稍后重试');
-      timeoutError.name = 'TimeoutError';
+    if (
+      timedOut ||
+      (error instanceof DOMException && error.name === "AbortError")
+    ) {
+      const timeoutError = new Error("请求超时，请稍后重试");
+      timeoutError.name = "TimeoutError";
       throw timeoutError;
     }
     throw error;
   } finally {
     clearTimeout(timeoutId);
-    signal?.removeEventListener?.('abort', abortHandler);
+    signal?.removeEventListener?.("abort", abortHandler);
   }
 };

@@ -63,6 +63,9 @@ type DbUsageRecord struct {
 	CreatedAt time.Time `json:"created_at"`
 	UpdatedAt time.Time `json:"updated_at"`
 
+	UserID uint    `gorm:"column:user_id;index" json:"user_id"`
+	User   *DbUser `gorm:"foreignKey:UserID" json:"-"`
+
 	ProviderID string `gorm:"column:provider_id;type:varchar(255);index" json:"provider_id"`
 	ModelID    string `gorm:"column:model_id;type:varchar(255);index" json:"model_id"`
 	Prompt     string `gorm:"column:prompt;type:text" json:"prompt"`
