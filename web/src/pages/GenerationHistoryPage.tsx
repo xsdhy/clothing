@@ -11,7 +11,6 @@ import {
   CircularProgress,
   Container,
   FormControl,
-  Grid,
   IconButton,
   InputLabel,
   MenuItem,
@@ -444,64 +443,64 @@ const GenerationHistoryPage: React.FC = () => {
           </Box>
         )}
 
-        <Grid container spacing={3} sx={{ opacity: loading ? 0.7 : 1 }}>
+        <Stack spacing={3} sx={{ opacity: loading ? 0.7 : 1 }}>
           {records.map((record) => {
             const hasError = Boolean(record.error_message);
 
             return (
-             <Card elevation={1}>
-                  <CardHeader
-                    title={`${record.provider_id}/${record.model_id}`}
-                    action={
-                      <Stack direction="row" spacing={1} alignItems="center">
-                        <Button variant="text" size="small" onClick={() => handleOpenDetails(record)}>
-                          查看详情
-                        </Button>
-                        <Button
-                          variant="outlined"
-                          size="small"
-                          startIcon={
-                            retryingRecordId === record.id ? (
+              <Card key={record.id} elevation={1}>
+                <CardHeader
+                  title={`${record.provider_id}/${record.model_id}`}
+                  action={
+                    <Stack direction="row" spacing={1} alignItems="center">
+                      <Button variant="text" size="small" onClick={() => handleOpenDetails(record)}>
+                        查看详情
+                      </Button>
+                      <Button
+                        variant="outlined"
+                        size="small"
+                        startIcon={
+                          retryingRecordId === record.id ? (
+                            <CircularProgress size={16} color="inherit" />
+                          ) : (
+                            <ReplayIcon fontSize="small" />
+                          )
+                        }
+                        onClick={() => {
+                          void handleRetry(record);
+                        }}
+                        disabled={retryingRecordId === record.id}
+                      >
+                        再来一次
+                      </Button>
+                      <Tooltip title="删除记录">
+                        <span>
+                          <IconButton
+                            size="small"
+                            color="error"
+                            onClick={() => {
+                              void handleDelete(record);
+                            }}
+                            disabled={deletingRecordId === record.id}
+                          >
+                            {deletingRecordId === record.id ? (
                               <CircularProgress size={16} color="inherit" />
                             ) : (
-                              <ReplayIcon fontSize="small" />
-                            )
-                          }
-                          onClick={() => {
-                            void handleRetry(record);
-                          }}
-                          disabled={retryingRecordId === record.id}
-                        >
-                          再来一次
-                        </Button>
-                        <Tooltip title="删除记录">
-                          <span>
-                            <IconButton
-                              size="small"
-                              color="error"
-                              onClick={() => {
-                                void handleDelete(record);
-                              }}
-                              disabled={deletingRecordId === record.id}
-                            >
-                              {deletingRecordId === record.id ? (
-                                <CircularProgress size={16} color="inherit" />
-                              ) : (
-                                <DeleteOutlineIcon fontSize="small" />
-                              )}
-                            </IconButton>
-                          </span>
-                        </Tooltip>
-                        <Chip
-                          color={hasError ? 'error' : 'success'}
-                          variant="outlined"
-                          label={hasError ? '生成异常' : '生成成功'}
-                        />
-                      </Stack>
-                    }
-                  />
-                  <CardContent>
-                    <Stack spacing={2}>
+                              <DeleteOutlineIcon fontSize="small" />
+                            )}
+                          </IconButton>
+                        </span>
+                      </Tooltip>
+                      <Chip
+                        color={hasError ? 'error' : 'success'}
+                        variant="outlined"
+                        label={hasError ? '生成异常' : '生成成功'}
+                      />
+                    </Stack>
+                  }
+                />
+                <CardContent>
+                  <Stack spacing={2}>
                       {(record.input_images.length > 0 || record.output_images.length > 0) && (
                         <Box>
                           {/* <Typography variant="subtitle2" color="text.primary">
@@ -622,10 +621,10 @@ const GenerationHistoryPage: React.FC = () => {
 
                     </Stack>
                   </CardContent>
-                </Card>
+              </Card>
             );
           })}
-        </Grid>
+        </Stack>
 
         {totalPages > 1 && (
           <Stack alignItems="center" sx={{ mt: 4 }}>

@@ -8,6 +8,7 @@ import {
   Paper,
   Typography,
 } from '@mui/material';
+import { alpha, useTheme } from '@mui/material/styles';
 import { CloudUpload, Delete, DragIndicator } from '@mui/icons-material';
 
 import ImageViewer from './ImageViewer';
@@ -34,6 +35,7 @@ const ImageUpload: React.FC<ImageUploadProps> = ({
   const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
   const [isPasteActive, setIsPasteActive] = useState(false);
   const isInline = variant === 'inline';
+  const theme = useTheme();
 
   const processFiles = useCallback(
     (files: File[]) => {
@@ -292,117 +294,167 @@ const ImageUpload: React.FC<ImageUploadProps> = ({
   const panelThumbnailSize = 80;
   const inlineThumbnailSize = 96;
 
-  const renderThumbnail = (image: string, index: number, size: number) => (
-    <Card
-      key={`${image}-${index}`}
-      draggable
-      onDragStart={(e) => handleImageDragStart(e, index)}
-      onDragOver={(e) => handleImageDragOver(e, index)}
-      onDragLeave={handleImageDragLeave}
-      onDrop={(e) => handleImageDrop(e, index)}
-      onDragEnd={handleImageDragEnd}
-      sx={{
-        position: 'relative',
-        width: size,
-        height: size,
-        cursor: draggedIndex === index ? 'grabbing' : 'grab',
-        opacity: draggedIndex === index ? 0.5 : 1,
-        transform: dragOverIndex === index ? 'scale(1.05)' : 'scale(1)',
-        border: dragOverIndex === index ? '2px solid' : '1px solid transparent',
-        borderColor: dragOverIndex === index ? 'primary.main' : 'transparent',
-        borderRadius: 2,
-        overflow: 'hidden',
-        flexShrink: 0,
-        transition: 'all 0.2s',
-        '&:hover .delete-btn': {
-          opacity: 1,
-        },
-        '&:hover .drag-indicator': {
-          opacity: 1,
-        },
-        '&:hover': {
-          transform: dragOverIndex === index ? 'scale(1.05)' : 'scale(1.03)',
-          boxShadow: 3,
-        },
-      }}
-      onClick={() => draggedIndex === null && handleImageClick(index)}
-    >
-      <CardMedia
-        component="img"
-        image={image}
-        alt={`参考图片 ${index + 1}`}
-        sx={{ width: '100%', height: '100%', objectFit: 'cover' }}
-      />
-      <Box
-        className="drag-indicator"
-        sx={{
-          position: 'absolute',
-          top: 4,
-          left: 4,
-          bgcolor: 'rgba(0,0,0,0.65)',
-          color: 'white',
-          borderRadius: 0.75,
-          width: 22,
-          height: 22,
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          opacity: draggedIndex === index ? 1 : 0,
-          transition: 'opacity 0.2s',
-        }}
-      >
-        <DragIndicator sx={{ fontSize: 14 }} />
-      </Box>
+  const renderThumbnail = (image: string, index: number, size: number) => {
+    const isDragged = draggedIndex === index;
+    const isDropTarget = dragOverIndex === index;
 
-      <IconButton
-        className="delete-btn"
-        size="small"
-        color="error"
-        onClick={(e) => {
-          e.stopPropagation();
-          removeImage(index);
-        }}
+    return (
+      <Card
+        key={`${image}-${index}`}
+        draggable
+        onDragStart={(e) => handleImageDragStart(e, index)}
+        onDragOver={(e) => handleImageDragOver(e, index)}
+        onDragLeave={handleImageDragLeave}
+        onDrop={(e) => handleImageDrop(e, index)}
+        onDragEnd={handleImageDragEnd}
         sx={{
-          position: 'absolute',
-          top: 4,
-          right: 4,
-          bgcolor: 'error.main',
-          color: 'white',
-          opacity: 0,
-          transition: 'opacity 0.2s',
-          width: 22,
-          height: 22,
+          position: 'relative',
+          width: size,
+          height: size,
+          cursor: isDragged ? 'grabbing' : 'grab',
+          opacity: isDragged ? 0.55 : 1,
+          transform: isDragged ? 'scale(0.96)' : isDropTarget ? 'scale(1.04)' : 'scale(1)',
+          borderRadius: 3,
+          overflow: 'hidden',
+          flexShrink: 0,
+          border: '1px solid',
+          borderColor: isDropTarget ? theme.palette.primary.main : alpha('#0F172A', 0.08),
+          transition: 'all 0.24s ease',
+          boxShadow: isDropTarget
+            ? '0 18px 38px rgba(99,102,241,0.25)'
+            : '0 14px 32px rgba(15,23,42,0.12)',
+          background: 'linear-gradient(135deg, rgba(99,102,241,0.08) 0%, rgba(255,255,255,1) 100%)',
+          '&:hover .delete-btn': {
+            opacity: 1,
+          },
+          '&:hover .drag-indicator': {
+            opacity: 1,
+          },
           '&:hover': {
-            bgcolor: 'error.dark',
+            transform: isDragged ? 'scale(0.96)' : 'scale(1.05)',
+            boxShadow: '0 24px 45px rgba(15,23,42,0.18)',
           },
         }}
+        onClick={() => !isDragged && handleImageClick(index)}
       >
-        <Delete sx={{ fontSize: 14 }} />
-      </IconButton>
-      <Box
-        sx={{
-          position: 'absolute',
-          bottom: 4,
-          left: 4,
-          bgcolor: 'rgba(0,0,0,0.65)',
-          color: 'white',
-          px: 0.75,
-          py: 0.25,
-          borderRadius: 0.75,
-          fontSize: '0.65rem',
-          lineHeight: 1,
-        }}
-      >
-        #{index + 1}
-      </Box>
-    </Card>
-  );
+        <CardMedia
+          component="img"
+          image={image}
+          alt={`参考图片 ${index + 1}`}
+          sx={{ width: '100%', height: '100%', objectFit: 'cover' }}
+        />
+        <Box
+          className="drag-indicator"
+          sx={{
+            position: 'absolute',
+            top: 6,
+            left: 6,
+            bgcolor: alpha('#0F172A', 0.68),
+            color: '#FFFFFF',
+            borderRadius: 1,
+            width: 24,
+            height: 24,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            opacity: isDragged ? 1 : 0,
+            transition: 'opacity 0.2s',
+            boxShadow: '0 8px 14px rgba(15,23,42,0.25)',
+          }}
+        >
+          <DragIndicator sx={{ fontSize: 15 }} />
+        </Box>
+
+        <IconButton
+          className="delete-btn"
+          size="small"
+          onClick={(e) => {
+            e.stopPropagation();
+            removeImage(index);
+          }}
+          sx={{
+            position: 'absolute',
+            top: 6,
+            right: 6,
+            bgcolor: alpha(theme.palette.error.main, 0.92),
+            color: '#FFFFFF',
+            opacity: 0,
+            transition: 'opacity 0.2s',
+            width: 24,
+            height: 24,
+            '&:hover': {
+              bgcolor: alpha(theme.palette.error.main, 1),
+            },
+            boxShadow: '0 10px 18px rgba(239,68,68,0.25)',
+          }}
+        >
+          <Delete sx={{ fontSize: 16 }} />
+        </IconButton>
+        <Box
+          sx={{
+            position: 'absolute',
+            bottom: 6,
+            left: 6,
+            bgcolor: alpha('#0F172A', 0.72),
+            color: '#FFFFFF',
+            px: 1,
+            py: 0.25,
+            borderRadius: 1,
+            fontSize: '0.7rem',
+            lineHeight: 1,
+            letterSpacing: 0.4,
+            boxShadow: '0 8px 16px rgba(15,23,42,0.25)',
+          }}
+        >
+          #{index + 1}
+        </Box>
+      </Card>
+    );
+  };
 
   const panelContent = (
-    <Paper sx={{ p: 2, borderRadius: 2 }} variant="outlined">
-      <Typography variant="h6" sx={{ mb: 2 }}>
-        参考图片上传
-      </Typography>
+    <Paper
+      variant="outlined"
+      sx={{
+        p: { xs: 3, md: 3.5 },
+        borderRadius: 3,
+        borderColor: alpha(theme.palette.primary.main, 0.08),
+        background: 'linear-gradient(180deg, rgba(255,255,255,1) 0%, rgba(244,246,255,0.88) 100%)',
+        boxShadow: '0 24px 60px rgba(99,102,241,0.12)',
+      }}
+    >
+      <Box
+        sx={{
+          display: 'flex',
+          alignItems: { xs: 'flex-start', sm: 'center' },
+          justifyContent: 'space-between',
+          flexDirection: { xs: 'column', sm: 'row' },
+          gap: 1.5,
+          mb: 3,
+        }}
+      >
+        <Box>
+          <Typography variant="h6" sx={{ fontWeight: 700, color: 'text.primary' }}>
+            参考图片上传
+          </Typography>
+          <Typography variant="body2" color="text.secondary">
+            上传参考图可帮助模型理解构图、色彩与细节
+          </Typography>
+        </Box>
+        <Chip
+          label="支持拖拽 / 点击 / 粘贴"
+          variant="outlined"
+          sx={{
+            borderColor: 'transparent',
+            backgroundColor: alpha(theme.palette.primary.main, 0.12),
+            color: theme.palette.primary.main,
+            fontWeight: 600,
+            borderRadius: '999px',
+            px: 1.5,
+            height: 28,
+          }}
+        />
+      </Box>
 
       <input
         ref={fileInputRef}
@@ -415,64 +467,91 @@ const ImageUpload: React.FC<ImageUploadProps> = ({
 
       <Box
         sx={{
-          border: '2px dashed',
-          borderColor: isDragOver ? 'primary.main' : 'grey.300',
-          borderRadius: 2,
-          height: 160,
+          position: 'relative',
+          borderRadius: 3,
+          border: '1.5px dashed',
+          borderColor: isDragOver ? theme.palette.primary.main : alpha(theme.palette.primary.main, 0.24),
+          background: isDragOver
+            ? `linear-gradient(135deg, ${alpha(theme.palette.primary.main, 0.16)} 0%, ${alpha(theme.palette.primary.main, 0.04)} 100%)`
+            : 'linear-gradient(135deg, rgba(99,102,241,0.05) 0%, rgba(255,255,255,1) 100%)',
+          minHeight: { xs: 180, md: 200 },
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
           textAlign: 'center',
-          p: 2,
-          mb: 2,
-          position: 'relative',
-          overflow: 'hidden',
-          bgcolor: isDragOver ? 'primary.50' : 'background.default',
-          transition: 'all 0.3s',
+          p: { xs: 3, md: 4 },
+          mb: 3,
           cursor: 'pointer',
+          boxShadow: isDragOver ? '0 32px 68px rgba(99,102,241,0.24)' : 'inset 0 0 0 1px rgba(255,255,255,0.6)',
+          overflow: 'hidden',
+          transition: 'all 0.35s ease',
         }}
         onDragOver={handleDragOver}
         onDragLeave={handleDragLeave}
         onDrop={handleDrop}
         onClick={() => fileInputRef.current?.click()}
       >
-        {isDragOver && (
+        <Box
+          sx={{
+            position: 'absolute',
+            inset: 0,
+            pointerEvents: 'none',
+            opacity: isDragOver ? 1 : 0,
+            transition: 'opacity 0.25s ease',
+            background: `radial-gradient(circle at center, ${alpha(theme.palette.primary.main, 0.2)} 0%, transparent 70%)`,
+          }}
+        />
+        <Box
+          sx={{
+            position: 'relative',
+            zIndex: 1,
+            maxWidth: 360,
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            gap: 1.5,
+          }}
+        >
           <Box
             sx={{
-              position: 'absolute',
-              inset: 0,
-              bgcolor: 'rgba(63,81,181,0.1)',
-              border: '2px dashed',
-              borderColor: 'primary.main',
-              borderRadius: 2,
+              width: 68,
+              height: 68,
+              borderRadius: 2.5,
+              background: 'linear-gradient(135deg, rgba(99,102,241,1) 0%, rgba(129,140,248,1) 100%)',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              zIndex: 1,
+              color: '#FFFFFF',
+              boxShadow: '0 24px 45px rgba(99,102,241,0.32)',
             }}
           >
-            <Typography variant="subtitle1" color="primary">
-              松开鼠标上传图片
+            <CloudUpload sx={{ fontSize: 32 }} />
+          </Box>
+          <Box>
+            <Typography variant="h6" component="div" sx={{ fontWeight: 700, mb: 1 }}>
+              将图片拖拽到这里，或点击上传
+            </Typography>
+            <Typography variant="body2" color="text.secondary" sx={{ mb: 0.5 }}>
+              支持 JPG / PNG / WebP，单张图片不超过 5MB
+            </Typography>
+            <Typography variant="caption" color="text.secondary">
+              Tip: 使用 Ctrl / Cmd + V 直接粘贴剪贴板图片
             </Typography>
           </Box>
-        )}
-
-        <Box sx={{ position: 'relative', zIndex: 2 }}>
-          <CloudUpload sx={{ fontSize: 36, color: 'primary.main', mb: 1 }} />
-          <Typography variant="h6" component="div" gutterBottom>
-            拖拽图片到这里，或点击上传
-          </Typography>
-          <Typography variant="body2" color="text.secondary">
-            支持 JPG / PNG / WebP，单张图片不超过 5MB
-          </Typography>
-          <Typography variant="caption" color="text.secondary">
-            可按 CTRL+V 粘贴剪贴板中的图片
-          </Typography>
         </Box>
       </Box>
 
       {images.length > 0 && (
-        <Box sx={{ display: 'flex', gap: 1, flexWrap: 'nowrap', overflowX: 'auto', pb: 1 }}>
+        <Box
+          sx={{
+            display: 'flex',
+            gap: 1.5,
+            flexWrap: 'nowrap',
+            overflowX: 'auto',
+            pb: 1,
+            px: 0.5,
+          }}
+        >
           {images.map((image, index) => (
             <Box key={`${image}-${index}`} sx={{ flexShrink: 0 }}>
               {renderThumbnail(image, index, panelThumbnailSize)}
@@ -482,23 +561,24 @@ const ImageUpload: React.FC<ImageUploadProps> = ({
           {images.length < maxImages && (
             <Box
               sx={{
-                border: '2px dashed',
-                borderColor: isDragOver ? 'primary.main' : 'grey.300',
-                borderRadius: 2,
                 width: panelThumbnailSize,
                 height: panelThumbnailSize,
-                textAlign: 'center',
-                cursor: 'pointer',
-                bgcolor: isDragOver ? 'primary.50' : 'grey.100',
-                transition: 'all 0.3s',
-                position: 'relative',
+                borderRadius: 3,
+                border: '1.5px dashed',
+                borderColor: isDragOver ? theme.palette.primary.main : alpha(theme.palette.primary.main, 0.28),
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
+                color: theme.palette.primary.main,
+                cursor: 'pointer',
                 flexShrink: 0,
+                background: 'linear-gradient(135deg, rgba(99,102,241,0.05) 0%, rgba(255,255,255,1) 100%)',
+                transition: 'all 0.25s ease',
+                boxShadow: '0 16px 32px rgba(99,102,241,0.15)',
                 '&:hover': {
-                  borderColor: 'primary.light',
-                  bgcolor: 'primary.50',
+                  borderColor: theme.palette.primary.main,
+                  background: 'linear-gradient(135deg, rgba(99,102,241,0.12) 0%, rgba(255,255,255,1) 100%)',
+                  transform: 'translateY(-2px)',
                 },
               }}
               onDragOver={handleDragOver}
@@ -506,26 +586,7 @@ const ImageUpload: React.FC<ImageUploadProps> = ({
               onDrop={handleDrop}
               onClick={() => fileInputRef.current?.click()}
             >
-              {isDragOver && (
-                <Box
-                  sx={{
-                    position: 'absolute',
-                    inset: 0,
-                    bgcolor: 'primary.100',
-                    border: '2px dashed',
-                    borderColor: 'primary.main',
-                    borderRadius: 2,
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    zIndex: 1,
-                  }}
-                >
-                  <DragIndicator sx={{ fontSize: 20, color: 'primary.dark' }} />
-                </Box>
-              )}
-
-              <CloudUpload sx={{ fontSize: 24, color: 'primary.main' }} />
+              <CloudUpload sx={{ fontSize: 28 }} />
             </Box>
           )}
 
@@ -533,20 +594,40 @@ const ImageUpload: React.FC<ImageUploadProps> = ({
             sx={{
               display: 'flex',
               flexDirection: 'column',
-              alignItems: 'flex-start',
-              ml: 1,
-              gap: 0.5,
+              justifyContent: 'center',
+              gap: 0.75,
+              minWidth: 120,
             }}
           >
             {images.length >= maxImages ? (
-              <Chip label={`${images.length}/${maxImages} 已满`} size="small" color="success" sx={{ fontSize: '0.75rem' }} />
+              <Chip
+                label={`${images.length}/${maxImages} 已满`}
+                sx={{
+                  borderColor: 'transparent',
+                  backgroundColor: alpha(theme.palette.success.main, 0.2),
+                  color: theme.palette.success.dark,
+                  fontWeight: 600,
+                  borderRadius: '999px',
+                  height: 28,
+                }}
+              />
             ) : (
-              <Chip label={`${images.length}/${maxImages}`} size="small" color="primary" sx={{ fontSize: '0.75rem' }} />
+              <Chip
+                label={`${images.length}/${maxImages}`}
+                sx={{
+                  borderColor: 'transparent',
+                  backgroundColor: alpha(theme.palette.primary.main, 0.12),
+                  color: theme.palette.primary.main,
+                  fontWeight: 600,
+                  borderRadius: '999px',
+                  height: 28,
+                }}
+              />
             )}
 
             {images.length < maxImages && (
-              <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.65rem', lineHeight: 1.2 }}>
-                💡 可按 Ctrl+V 粘贴
+              <Typography variant="caption" color="text.secondary">
+                💡 可再添加 {maxImages - images.length} 张参考图片
               </Typography>
             )}
           </Box>
@@ -574,19 +655,22 @@ const ImageUpload: React.FC<ImageUploadProps> = ({
       />
       <Box
         sx={{
-          border: '1px solid',
-          borderColor: isDragOver ? 'primary.main' : 'divider',
           borderRadius: 3,
-          backgroundColor: isDragOver ? 'primary.50' : 'background.paper',
+          border: '1.5px dashed',
+          borderColor: isDragOver ? theme.palette.primary.main : alpha(theme.palette.primary.main, 0.24),
+          background: isDragOver
+            ? `linear-gradient(135deg, ${alpha(theme.palette.primary.main, 0.18)} 0%, ${alpha(theme.palette.primary.main, 0.06)} 100%)`
+            : 'linear-gradient(135deg, rgba(99,102,241,0.04) 0%, rgba(255,255,255,0.85) 100%)',
           display: 'flex',
           flexDirection: { xs: 'row', sm: 'column' },
           gap: 1,
           p: 1,
-          width: { xs: '100%', sm: inlineThumbnailSize + 20 },
-          minHeight: inlineThumbnailSize + 20,
+          width: { xs: '100%', sm: inlineThumbnailSize + 28 },
+          minHeight: inlineThumbnailSize + 28,
           overflowX: { xs: 'auto', sm: 'hidden' },
           overflowY: { xs: 'hidden', sm: 'auto' },
-          transition: 'border-color 0.2s, background-color 0.2s',
+          boxShadow: isDragOver ? '0 24px 55px rgba(99,102,241,0.2)' : 'inset 0 0 0 1px rgba(255,255,255,0.5)',
+          transition: 'all 0.3s ease',
         }}
         onDragOver={handleDragOver}
         onDragLeave={handleDragLeave}
@@ -599,23 +683,28 @@ const ImageUpload: React.FC<ImageUploadProps> = ({
             sx={{
               width: inlineThumbnailSize,
               height: inlineThumbnailSize,
-              borderRadius: 2,
-              border: '2px dashed',
-              borderColor: isDragOver ? 'primary.main' : 'grey.300',
+              borderRadius: 3,
+              border: '1.5px dashed',
+              borderColor: isDragOver ? theme.palette.primary.main : alpha(theme.palette.primary.main, 0.28),
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              color: 'primary.main',
+              color: theme.palette.primary.main,
               cursor: 'pointer',
               flexShrink: 0,
-              backgroundColor: isDragOver ? 'primary.50' : 'transparent',
-              transition: 'all 0.2s',
+              background: 'linear-gradient(135deg, rgba(99,102,241,0.05) 0%, rgba(255,255,255,1) 100%)',
+              transition: 'all 0.25s ease',
+              boxShadow: '0 14px 28px rgba(99,102,241,0.12)',
               '&:hover': {
-                borderColor: 'primary.light',
-                backgroundColor: 'primary.50',
+                borderColor: theme.palette.primary.main,
+                background: 'linear-gradient(135deg, rgba(99,102,241,0.12) 0%, rgba(255,255,255,1) 100%)',
+                transform: 'translateY(-2px)',
               },
             }}
-            onClick={() => fileInputRef.current?.click()}
+            onClick={(event) => {
+              event.stopPropagation();
+              fileInputRef.current?.click();
+            }}
             onDragOver={handleDragOver}
             onDragLeave={handleDragLeave}
             onDrop={handleDrop}
@@ -624,8 +713,6 @@ const ImageUpload: React.FC<ImageUploadProps> = ({
           </Box>
         )}
       </Box>
-
-
     </Box>
   );
 

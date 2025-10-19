@@ -1,5 +1,5 @@
-import React, { useEffect, useMemo, useState } from 'react';
-import { Box, IconButton, Typography } from '@mui/material';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { Box, IconButton, Typography, Portal } from '@mui/material';
 import { Close, Download, ZoomIn, ZoomOut, ZoomOutMap } from '@mui/icons-material';
 import { PhotoSlider } from 'react-photo-view';
 import type { DataType, OverlayRenderProps } from 'react-photo-view/dist/types';
@@ -54,6 +54,8 @@ const ImageViewer: React.FC<ImageViewerProps> = ({
   }, [imageUrl, images, title]);
 
   const [currentIndex, setCurrentIndex] = useState(initialIndex);
+  const [scale, setScale] = useState(1);
+  const scaleCallbackRef = useRef<((scale: number) => void) | null>(null);
 
   useEffect(() => {
     if (!open) {
@@ -61,70 +63,97 @@ const ImageViewer: React.FC<ImageViewerProps> = ({
     }
     const safeIndex = Number.isFinite(initialIndex) ? Math.max(0, Math.min(initialIndex, items.length - 1)) : 0;
     setCurrentIndex(safeIndex);
+    setScale(1);
   }, [initialIndex, items.length, open]);
 
   const currentItem = items[currentIndex];
   const resolvedTitle = currentItem?.title ?? title;
   const sliderImages = useMemo<DataType[]>(() => items.map(({ key, src }) => ({ key, src })), [items]);
 
-  const renderOverlay = ({ scale = 1, onScale, onClose: sliderClose }: OverlayRenderProps) => {
-    const applyScale = (next: number) => {
-      if (!onScale) {
-        return;
-      }
-      const clamped = Math.max(MIN_SCALE, Math.min(MAX_SCALE, next));
-      onScale(clamped);
-    };
-    const stopEventPropagation = (event: React.SyntheticEvent) => {
-      event.stopPropagation();
-    };
+  const handleZoomOut = () => {
+    const newScale = Math.max(MIN_SCALE, scale / 1.2);
+    setScale(newScale);
+    scaleCallbackRef.current?.(newScale);
+  };
 
-    const handleZoomOut = (event: React.MouseEvent) => {
-      event.stopPropagation();
-      applyScale(scale / 1.2);
-    };
+  const handleReset = () => {
+    setScale(1);
+    scaleCallbackRef.current?.(1);
+  };
 
-    const handleReset = (event: React.MouseEvent) => {
-      event.stopPropagation();
-      applyScale(1);
-    };
+  const handleZoomIn = () => {
+    const newScale = Math.min(MAX_SCALE, scale * 1.2);
+    setScale(newScale);
+    scaleCallbackRef.current?.(newScale);
+  };
 
-    const handleZoomIn = (event: React.MouseEvent) => {
-      event.stopPropagation();
-      applyScale(scale * 1.2);
-    };
+  const handleDownload = () => {
+    if (!onDownload || !currentItem) {
+      return;
+    }
+    onDownload(currentIndex, currentItem);
+  };
 
-    const handleDownload = (event: React.MouseEvent) => {
-      event.stopPropagation();
-      if (!onDownload || !currentItem) {
-        return;
-      }
-      onDownload(currentIndex, currentItem);
-    };
+  const handleClose = () => {
+    onClose();
+  };
 
-    const handleClose = (event: React.MouseEvent) => {
-      event.stopPropagation();
-      sliderClose?.();
-      onClose();
-    };
+  const renderOverlay = ({ scale: photoScale, onScale }: OverlayRenderProps) => {
+    // 保存 onScale 回调引用
+    scaleCallbackRef.current = onScale || null;
+    
+    // 同步 PhotoSlider 的 scale 到我们的 state
+    if (photoScale !== scale) {
+      setScale(photoScale);
+    }
+    
+    return null;
+  };
 
-    return (
-      <>
+  if (!open || items.length === 0) {
+    return null;
+  }
+
+  return (
+    <>
+      <PhotoSlider
+        visible={open}
+        photoClosable={true}
+        images={sliderImages}
+        index={currentIndex}
+        onClose={onClose}
+        onIndexChange={(index) => {
+          if (!Number.isFinite(index)) {
+            return;
+          }
+          setCurrentIndex(index);
+          setScale(1);
+        }}
+        overlayRender={renderOverlay}
+        maskOpacity={0.95}
+        bannerVisible={false}
+        speed={() => 400}
+        easing={() => 'cubic-bezier(0.4, 0, 0.2, 1)'}
+      />
+      
+      {/* 独立的工具栏 Portal */}
+      <Portal>
         <Box
           sx={{
-            position: 'absolute',
+            position: 'fixed',
             top: 0,
             left: 0,
             right: 0,
-            display: 'grid',
+            zIndex: 2000,
+            display: open ? 'grid' : 'none',
             gridTemplateColumns: { xs: '1fr', sm: 'minmax(0,1fr) auto' },
             alignItems: 'center',
             rowGap: 1,
             columnGap: 2,
+            padding: 2,
             background: 'linear-gradient(180deg, rgba(0,0,0,0.8) 0%, transparent 100%)',
+            pointerEvents: 'none',
           }}
-          onPointerDown={stopEventPropagation}
-          onClick={stopEventPropagation}
         >
           <Box sx={{ minWidth: 0, pointerEvents: 'auto' }}>
             {resolvedTitle && (
@@ -154,6 +183,9 @@ const ImageViewer: React.FC<ImageViewerProps> = ({
                 bgcolor: 'rgba(255,255,255,0.12)',
                 width: { xs: 40, sm: 42 },
                 height: { xs: 40, sm: 42 },
+                '&:hover': {
+                  bgcolor: 'rgba(255,255,255,0.2)',
+                },
               }}
               aria-label="zoom-out"
             >
@@ -166,6 +198,9 @@ const ImageViewer: React.FC<ImageViewerProps> = ({
                 bgcolor: 'rgba(255,255,255,0.12)',
                 width: { xs: 40, sm: 42 },
                 height: { xs: 40, sm: 42 },
+                '&:hover': {
+                  bgcolor: 'rgba(255,255,255,0.2)',
+                },
               }}
               aria-label="reset-zoom"
             >
@@ -178,6 +213,9 @@ const ImageViewer: React.FC<ImageViewerProps> = ({
                 bgcolor: 'rgba(255,255,255,0.12)',
                 width: { xs: 40, sm: 42 },
                 height: { xs: 40, sm: 42 },
+                '&:hover': {
+                  bgcolor: 'rgba(255,255,255,0.2)',
+                },
               }}
               aria-label="zoom-in"
             >
@@ -191,6 +229,9 @@ const ImageViewer: React.FC<ImageViewerProps> = ({
                   bgcolor: 'rgba(255,255,255,0.12)',
                   width: { xs: 40, sm: 42 },
                   height: { xs: 40, sm: 42 },
+                  '&:hover': {
+                    bgcolor: 'rgba(255,255,255,0.2)',
+                  },
                 }}
                 aria-label="download"
               >
@@ -204,6 +245,9 @@ const ImageViewer: React.FC<ImageViewerProps> = ({
                 bgcolor: 'rgba(255,255,255,0.18)',
                 width: { xs: 40, sm: 42 },
                 height: { xs: 40, sm: 42 },
+                '&:hover': {
+                  bgcolor: 'rgba(255,255,255,0.28)',
+                },
               }}
               aria-label="close"
             >
@@ -211,13 +255,16 @@ const ImageViewer: React.FC<ImageViewerProps> = ({
             </IconButton>
           </Box>
         </Box>
+
+        {/* 底部信息栏 */}
         <Box
           sx={{
-            position: 'absolute',
+            position: 'fixed',
             bottom: 0,
             left: 0,
             right: 0,
-            display: 'flex',
+            zIndex: 2000,
+            display: open ? 'flex' : 'none',
             alignItems: 'center',
             justifyContent: 'center',
             px: { xs: 2, sm: 3 },
@@ -238,33 +285,8 @@ const ImageViewer: React.FC<ImageViewerProps> = ({
             缩放: {Math.round(scale * 100)}% | 滚轮缩放 | 拖拽移动
           </Typography>
         </Box>
-      </>
-    );
-  };
-
-  if (!open || items.length === 0) {
-    return null;
-  }
-
-  return (
-    <PhotoSlider
-      visible={open}
-      photoClosable={true}
-      images={sliderImages}
-      index={currentIndex}
-      onClose={() => {
-        onClose();
-      }}
-      onIndexChange={(index) => {
-        if (!Number.isFinite(index)) {
-          return;
-        }
-        setCurrentIndex(index);
-      }}
-      overlayRender={renderOverlay}
-      maskOpacity={0.95}
-      bannerVisible={false}
-    />
+      </Portal>
+    </>
   );
 };
 

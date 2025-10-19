@@ -618,29 +618,6 @@ const CustomImageGenerationPage: React.FC = () => {
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', minHeight: '100%' }}>
-      <Box
-        sx={{
-          background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-          color: 'white',
-          py: { xs: 3, md: 5 },
-          textAlign: 'center',
-        }}
-      >
-        <Container maxWidth="md">
-          <Typography
-            variant="h4"
-            component="h2"
-            gutterBottom
-            sx={{ fontWeight: 700, fontSize: { xs: '1.9rem', md: '2.5rem' } }}
-          >
-            AI图片生成器
-          </Typography>
-          <Typography variant="body1" sx={{ opacity: 0.9, fontSize: { xs: '0.95rem', md: '1.05rem' } }}>
-            用文字描述你的想法，让AI为你创造精美的图片
-          </Typography>
-        </Container>
-      </Box>
-
       <Container maxWidth="md" sx={{ py: { xs: 2, sm: 3 }, flex: 1 }}>
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: { xs: 2, sm: 3 } }}>
           <ImageGenerator
@@ -659,89 +636,6 @@ const CustomImageGenerationPage: React.FC = () => {
         </Box>
       </Container>
 
-      <Box
-        component="footer"
-        sx={{
-          background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-          color: 'white',
-          py: 3,
-        }}
-      >
-        <Container maxWidth="lg">
-          <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: 'repeat(4, 1fr)' }, gap: 2 }}>
-            <Box>
-              <Typography variant="h6" gutterBottom>
-                使用指南
-              </Typography>
-              <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
-                <Typography variant="body2">1. 输入创意描述文本</Typography>
-                <Typography variant="body2">2. 上传参考图片（可选）</Typography>
-                <Typography variant="body2">3. 点击生成按钮创作</Typography>
-                <Typography variant="body2">4. 下载</Typography>
-              </Box>
-            </Box>
-
-            <Box>
-              <Typography variant="h6" gutterBottom>
-                ✨ 功能特色
-              </Typography>
-              <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
-                <Typography variant="body2">🤖 AI智能生成</Typography>
-                <Typography variant="body2">🖱️ 拖拽上传支持</Typography>
-                <Typography variant="body2">🎨 即时图片预览</Typography>
-                <Typography variant="body2">💾 一键下载保存</Typography>
-              </Box>
-            </Box>
-
-            <Box>
-              <Typography variant="h6" gutterBottom>
-                🛠️ 技术栈
-              </Typography>
-              <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
-                <Typography variant="body2">React + TypeScript</Typography>
-                <Typography variant="body2">Material-UI</Typography>
-                <Typography variant="body2">Gemini AI API</Typography>
-                <Typography variant="body2">Vite 构建工具</Typography>
-              </Box>
-            </Box>
-
-            <Box>
-              <Typography variant="h6" gutterBottom>
-                ⚙️ 环境配置
-              </Typography>
-              <Typography variant="body2" gutterBottom>
-                需要配置 API 密钥：
-              </Typography>
-              <Box
-                sx={{
-                  bgcolor: 'rgba(0,0,0,0.3)',
-                  p: 1,
-                  borderRadius: 1,
-                  fontFamily: 'monospace',
-                  fontSize: '0.8rem',
-                  mb: 1,
-                }}
-              >
-                VITE_GEMINI_API_KEY
-                <br />
-                VITE_OPENROUTER_API_KEY
-              </Box>
-              <Typography variant="caption" sx={{ display: 'block' }}>
-                Gemini: Google AI Studio
-              </Typography>
-              <Typography variant="caption" sx={{ display: 'block' }}>
-                OpenRouter: openrouter.ai
-              </Typography>
-            </Box>
-          </Box>
-
-          <Box sx={{ textAlign: 'center', mt: 2, pt: 2, borderTop: '1px solid rgba(255,255,255,0.2)' }}>
-            <Typography variant="body2" sx={{ opacity: 0.8 }}>
-              © 2025 AI图片生成器 - 让创意无限延伸 🚀
-            </Typography>
-          </Box>
-        </Container>
-      </Box>
     </Box>
   );
 };

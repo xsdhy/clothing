@@ -422,11 +422,7 @@ const GeneratedImageGalleryPage: React.FC = () => {
                   </ButtonBase>
  
                   <CardActions sx={{ justifyContent: 'space-between', flexWrap: 'wrap' }}>
-                    <Button size="small" startIcon={<OpenInFullIcon fontSize="small" />} onClick={() => handleOpenViewer(index)}>
-                      放大查看
-                    </Button>
                     <Button size="small" startIcon={<InfoOutlinedIcon fontSize="small" />} onClick={() => handleOpenDetails(item.recordId, item.imageIndex)}>
-                      查看详情
                     </Button>
                   </CardActions>
                 </Card>
