@@ -1,7 +1,6 @@
 package llm
 
 import (
-	"clothing/internal/config"
 	"clothing/internal/entity"
 	"context"
 	"errors"
@@ -11,47 +10,69 @@ import (
 )
 
 type OpenRouter struct {
-	apiKey string
+	providerID   string
+	providerName string
+
+	apiKey   string
+	endpoint string
 
 	models      []entity.LlmModel
 	modelLookup map[string]struct{}
 }
 
-func NewOpenRouter(cfg config.Config) (*OpenRouter, error) {
-	if strings.TrimSpace(cfg.OpenRouterAPIKey) == "" {
+func NewOpenRouter(provider *entity.DbProvider, models []entity.DbModel) (*OpenRouter, error) {
+	if provider == nil {
+		return nil, errors.New("openrouter provider config is nil")
+	}
+
+	apiKey := strings.TrimSpace(provider.APIKey)
+	if apiKey == "" {
 		return nil, errors.New("openrouter api key is not configured")
 	}
 
-	models := []entity.LlmModel{
-		{
-			ID:          "google/gemini-2.5-flash-image-preview",
-			Name:        "Gemini 2.5 Flash Image Preview",
-			Description: "Google 的高性能模型",
-		},
+	activeModels := make([]entity.LlmModel, 0, len(models))
+	modelLookup := make(map[string]struct{}, len(models))
+	for _, model := range models {
+		if !model.IsActive {
+			continue
+		}
+		llmModel := model.ToLlmModel()
+		activeModels = append(activeModels, llmModel)
+		modelLookup[llmModel.ID] = struct{}{}
 	}
 
-	o := &OpenRouter{
-		models: models,
-		apiKey: cfg.OpenRouterAPIKey,
-		modelLookup: func() map[string]struct{} {
-			lookup := make(map[string]struct{}, len(models))
-			for _, model := range models {
-				lookup[model.ID] = struct{}{}
-			}
-			return lookup
-		}(),
+	if len(activeModels) == 0 {
+		return nil, errors.New("openrouter has no active models configured")
 	}
 
-	return o, nil
+	endpoint := strings.TrimSpace(provider.BaseURL)
+	if endpoint == "" {
+		endpoint = "https://openrouter.ai/api/v1/chat/completions"
+	}
+
+	name := strings.TrimSpace(provider.Name)
+	if name == "" {
+		name = provider.ID
+	}
+
+	return &OpenRouter{
+		providerID:   provider.ID,
+		providerName: name,
+		apiKey:       apiKey,
+		endpoint:     endpoint,
+		models:       activeModels,
+		modelLookup:  modelLookup,
+	}, nil
 }
+
 func (o *OpenRouter) ProviderID() string {
-	return "openrouter"
+	return o.providerID
 }
 
 func (o *OpenRouter) Provider() entity.LlmProvider {
 	return entity.LlmProvider{
-		ID:     "openrouter",
-		Name:   "OpenRouter",
+		ID:     o.providerID,
+		Name:   o.providerName,
 		Models: o.Models(),
 	}
 }
@@ -75,5 +96,5 @@ func (o *OpenRouter) GenerateImages(ctx context.Context, request entity.Generate
 		"size":                strings.TrimSpace(request.Size),
 	}).Info("llm_generate_images_start")
 
-	return GenerateImagesByOpenaiProtocol(ctx, o.apiKey, "https://openrouter.ai/api/v1/chat/completions", request.Model, request.Prompt, request.Images)
+	return GenerateImagesByOpenaiProtocol(ctx, o.apiKey, o.endpoint, request.Model, request.Prompt, request.Images)
 }

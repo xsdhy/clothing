@@ -39,6 +39,7 @@ import AdvancedSettingsPage from "./pages/AdvancedSettingsPage";
 import LoginPage from "./pages/LoginPage";
 import RegisterPage from "./pages/RegisterPage";
 import UserManagementPage from "./pages/UserManagementPage";
+import ProviderManagementPage from "./pages/ProviderManagementPage";
 import { useAuth } from "./contexts/AuthContext";
 
 const theme = createTheme({
@@ -206,6 +207,7 @@ const AppLayout: React.FC = () => {
       { label: "瀑布流", path: "/gallery" },
     ];
     if (isAdmin) {
+      items.push({ label: "厂商管理", path: "/providers" });
       items.push({ label: "用户管理", path: "/users" });
     }
     return items;
@@ -599,6 +601,14 @@ const App: React.FC = () => (
         <Route path="history" element={<GenerationHistoryPage />} />
         <Route path="gallery" element={<GeneratedImageGalleryPage />} />
         <Route path="settings" element={<AdvancedSettingsPage />} />
+        <Route
+          path="providers"
+          element={
+            <RequireAdmin>
+              <ProviderManagementPage />
+            </RequireAdmin>
+          }
+        />
         <Route
           path="users"
           element={

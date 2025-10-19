@@ -2,7 +2,6 @@ package llm
 
 import (
 	"bytes"
-	"clothing/internal/config"
 	"clothing/internal/entity"
 	"clothing/internal/utils"
 	"context"
@@ -18,9 +17,9 @@ import (
 )
 
 const (
-	falAPIBaseURL               = "https://fal.run"
-	falModeTextToImage  falMode = "text_to_image"
-	falModeImageToImage falMode = "image_to_image"
+	falDefaultAPIBaseURL         = "https://fal.run"
+	falModeTextToImage   falMode = "text_to_image"
+	falModeImageToImage  falMode = "image_to_image"
 
 	falDefaultImageSize = "1024x1024"
 	falPollInterval     = 2 * time.Second
@@ -35,60 +34,108 @@ type falModelConfig struct {
 }
 
 type FalAI struct {
-	apiKey      string
+	providerID   string
+	providerName string
+
+	apiKey  string
+	apiBase string
+
 	httpClient  *http.Client
 	models      []entity.LlmModel
 	modelLookup map[string]falModelConfig
 }
 
-func NewFalAI(cfg config.Config) (*FalAI, error) {
-	apiKey := strings.TrimSpace(cfg.FalAPIKey)
+func NewFalAI(provider *entity.DbProvider, models []entity.DbModel) (*FalAI, error) {
+	if provider == nil {
+		return nil, errors.New("fal.ai provider config is nil")
+	}
+
+	apiKey := strings.TrimSpace(provider.APIKey)
 	if apiKey == "" {
 		return nil, errors.New("fal.ai api key is not configured")
 	}
 
-	models := []entity.LlmModel{
-		{
-			ID:          "fal-ai/hunyuan-image/v3/text-to-image",
-			Name:        "Hunyuan Image v3",
-			Description: "Tencent Hunyuan 文生图",
-			Price:       "$0.1",
-		},
-		{
-			ID:          "fal-ai/qwen-image-edit/image-to-image",
-			Name:        "Qwen Image Edit",
-			Description: "Qwen 图像编辑",
-			Price:       "$0.03",
-		},
+	name := strings.TrimSpace(provider.Name)
+	if name == "" {
+		name = provider.ID
 	}
 
-	lookup := map[string]falModelConfig{
-		"fal-ai/hunyuan-image/v3/text-to-image": {
-			endpoint: "/fal-ai/hunyuan-image/v3/text-to-image",
-			mode:     falModeTextToImage,
-		},
-		"fal-ai/qwen-image-edit/image-to-image": {
-			endpoint: "/fal-ai/qwen-image-edit/image-to-image",
-			mode:     falModeImageToImage,
-		},
+	baseURL := strings.TrimSpace(provider.BaseURL)
+	if baseURL == "" {
+		baseURL = falDefaultAPIBaseURL
+	}
+	baseURL = strings.TrimRight(baseURL, "/")
+
+	activeModels := make([]entity.LlmModel, 0, len(models))
+	lookup := make(map[string]falModelConfig, len(models))
+
+	for _, model := range models {
+		if !model.IsActive {
+			continue
+		}
+
+		llmModel := model.ToLlmModel()
+		activeModels = append(activeModels, llmModel)
+
+		endpoint := ""
+		modeValue := ""
+
+		if model.Settings != nil {
+			if v, ok := model.Settings["endpoint"].(string); ok {
+				endpoint = v
+			}
+			if v, ok := model.Settings["mode"].(string); ok {
+				modeValue = v
+			}
+		}
+
+		endpoint = strings.TrimSpace(endpoint)
+		if endpoint == "" {
+			endpoint = "/" + strings.TrimLeft(llmModel.ID, "/")
+		}
+		if !strings.HasPrefix(endpoint, "/") {
+			endpoint = "/" + endpoint
+		}
+
+		mode := falMode(strings.TrimSpace(modeValue))
+		if mode == "" {
+			if strings.Contains(strings.ToLower(llmModel.ID), "image-to-image") ||
+				strings.Contains(strings.ToLower(llmModel.Name), "edit") {
+				mode = falModeImageToImage
+			} else {
+				mode = falModeTextToImage
+			}
+		}
+
+		lookup[llmModel.ID] = falModelConfig{
+			endpoint: endpoint,
+			mode:     mode,
+		}
+	}
+
+	if len(activeModels) == 0 {
+		return nil, errors.New("fal.ai has no active models configured")
 	}
 
 	return &FalAI{
-		apiKey:      apiKey,
-		httpClient:  &http.Client{Timeout: 60 * time.Second},
-		models:      models,
-		modelLookup: lookup,
+		providerID:   provider.ID,
+		providerName: name,
+		apiKey:       apiKey,
+		apiBase:      baseURL,
+		httpClient:   &http.Client{Timeout: 60 * time.Second},
+		models:       activeModels,
+		modelLookup:  lookup,
 	}, nil
 }
 
 func (f *FalAI) ProviderID() string {
-	return "fal"
+	return f.providerID
 }
 
 func (f *FalAI) Provider() entity.LlmProvider {
 	return entity.LlmProvider{
-		ID:     f.ProviderID(),
-		Name:   "fal.ai",
+		ID:     f.providerID,
+		Name:   f.providerName,
 		Models: f.Models(),
 	}
 }
@@ -208,7 +255,7 @@ func (f *FalAI) submitAndWait(ctx context.Context, endpoint string, payload map[
 		return nil, fmt.Errorf("fal.ai marshal request: %w", err)
 	}
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, falAPIBaseURL+endpoint, bytes.NewReader(bs))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, f.apiBase+endpoint, bytes.NewReader(bs))
 	if err != nil {
 		return nil, fmt.Errorf("fal.ai create request: %w", err)
 	}

@@ -12,7 +12,7 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
-const dashscopeGenerationURL = "https://dashscope.aliyuncs.com/api/v1/services/aigc/multimodal-generation/generation"
+const defaultDashscopeGenerationURL = "https://dashscope.aliyuncs.com/api/v1/services/aigc/multimodal-generation/generation"
 
 type dashscopeContent struct {
 	Image string `json:"image,omitempty"`
@@ -61,7 +61,7 @@ type dashscopeChoiceMsg struct {
 	Content []dashscopeContent `json:"content"`
 }
 
-func GenerateImagesByDashscopeProtocol(ctx context.Context, apiKey, model, prompt string, base64Images []string) (imageDataURLs []string, assistantText string, err error) {
+func GenerateImagesByDashscopeProtocol(ctx context.Context, apiKey, endpoint, model, prompt string, base64Images []string) (imageDataURLs []string, assistantText string, err error) {
 	if strings.TrimSpace(apiKey) == "" {
 		return nil, "", errors.New("api key missing")
 	}
@@ -69,6 +69,11 @@ func GenerateImagesByDashscopeProtocol(ctx context.Context, apiKey, model, promp
 	trimmedPrompt := strings.TrimSpace(prompt)
 	if trimmedPrompt == "" {
 		return nil, "", errors.New("prompt is empty")
+	}
+
+	targetEndpoint := strings.TrimSpace(endpoint)
+	if targetEndpoint == "" {
+		targetEndpoint = defaultDashscopeGenerationURL
 	}
 
 	logrus.WithFields(logrus.Fields{
@@ -110,7 +115,7 @@ func GenerateImagesByDashscopeProtocol(ctx context.Context, apiKey, model, promp
 		return nil, "", fmt.Errorf("dashscope marshal request: %w", err)
 	}
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, dashscopeGenerationURL, bytes.NewReader(payload))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, targetEndpoint, bytes.NewReader(payload))
 	if err != nil {
 		return nil, "", fmt.Errorf("dashscope create request: %w", err)
 	}

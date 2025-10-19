@@ -5,6 +5,7 @@ import (
 	"clothing/internal/config"
 	"clothing/internal/model"
 	"clothing/internal/storage"
+	"context"
 	_ "embed"
 	"fmt"
 	"net/http"
@@ -35,6 +36,12 @@ func main() {
 	if err != nil {
 		logrus.WithError(err).Error("failed to initialise repository")
 		return
+	}
+
+	if repo != nil {
+		if err := model.SeedDefaultProviders(context.Background(), repo, cfg); err != nil {
+			logrus.WithError(err).Warn("failed to seed default providers")
+		}
 	}
 
 	store, err := storage.NewStorage(cfg)
@@ -82,6 +89,20 @@ func main() {
 	userAdmin.POST("", httpHandler.CreateUser)
 	userAdmin.PATCH(":id", httpHandler.UpdateUser)
 	userAdmin.DELETE(":id", httpHandler.DeleteUser)
+
+	providerAdmin := protected.Group("/providers")
+	providerAdmin.Use(httpHandler.RequireAdmin())
+	providerAdmin.GET("", httpHandler.AdminListProviders)
+	providerAdmin.POST("", httpHandler.CreateProvider)
+	providerAdmin.GET("/:id", httpHandler.GetProviderDetail)
+	providerAdmin.PATCH("/:id", httpHandler.UpdateProvider)
+	providerAdmin.DELETE("/:id", httpHandler.DeleteProvider)
+
+	modelAdmin := providerAdmin.Group("/:id/models")
+	modelAdmin.GET("", httpHandler.ListProviderModels)
+	modelAdmin.POST("", httpHandler.CreateProviderModel)
+	modelAdmin.PATCH("/:model_id", httpHandler.UpdateProviderModel)
+	modelAdmin.DELETE("/:model_id", httpHandler.DeleteProviderModel)
 
 	if localProvider, ok := store.(storage.LocalBaseDirProvider); ok {
 		publicPrefix := strings.TrimSpace(cfg.StoragePublicBaseURL)

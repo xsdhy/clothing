@@ -100,3 +100,75 @@ export interface UserListResponse {
   users: UserSummary[];
   meta: PaginationMeta;
 }
+
+export interface ProviderModelAdmin {
+  model_id: string;
+  name: string;
+  description?: string;
+  price?: string;
+  max_images?: number;
+  modalities?: string[];
+  supported_sizes?: string[];
+  settings?: Record<string, unknown>;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ProviderAdmin {
+  id: string;
+  name: string;
+  driver: string;
+  description?: string;
+  base_url?: string;
+  config?: Record<string, unknown>;
+  is_active: boolean;
+  has_api_key: boolean;
+  created_at: string;
+  updated_at: string;
+  models?: ProviderModelAdmin[];
+}
+
+export interface ProviderCreatePayload {
+  id: string;
+  name: string;
+  driver: string;
+  description?: string;
+  api_key?: string;
+  base_url?: string;
+  config?: Record<string, unknown>;
+  is_active?: boolean;
+}
+
+export interface ProviderUpdatePayload {
+  name?: string;
+  driver?: string;
+  description?: string;
+  api_key?: string;
+  base_url?: string;
+  config?: Record<string, unknown>;
+  is_active?: boolean;
+}
+
+export interface ProviderModelCreatePayload {
+  model_id: string;
+  name: string;
+  description?: string;
+  price?: string;
+  max_images?: number;
+  modalities?: string[];
+  supported_sizes?: string[];
+  settings?: Record<string, unknown>;
+  is_active?: boolean;
+}
+
+export interface ProviderModelUpdatePayload {
+  name?: string;
+  description?: string;
+  price?: string;
+  max_images?: number;
+  modalities?: string[];
+  supported_sizes?: string[];
+  settings?: Record<string, unknown>;
+  is_active?: boolean;
+}

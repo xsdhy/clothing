@@ -1,7 +1,6 @@
 package llm
 
 import (
-	"clothing/internal/config"
 	"clothing/internal/entity"
 	"context"
 	"errors"
@@ -12,49 +11,64 @@ import (
 )
 
 type Dashscope struct {
-	apiKey string
+	providerID   string
+	providerName string
+
+	apiKey   string
+	endpoint string
 
 	models      []entity.LlmModel
 	modelLookup map[string]struct{}
 }
 
-func NewDashscope(cfg config.Config) (*Dashscope, error) {
-	if strings.TrimSpace(cfg.DashscopeAPIKey) == "" {
+func NewDashscope(provider *entity.DbProvider, models []entity.DbModel) (*Dashscope, error) {
+	if provider == nil {
+		return nil, errors.New("dashscope provider config is nil")
+	}
+
+	apiKey := strings.TrimSpace(provider.APIKey)
+	if apiKey == "" {
 		return nil, errors.New("dashscope api key is not configured")
 	}
 
-	models := []entity.LlmModel{
-		{
-			ID:          "qwen-image-edit",
-			Name:        "qwen-image-edit",
-			Description: "qwen-image-edit",
-		},
+	activeModels := make([]entity.LlmModel, 0, len(models))
+	modelLookup := make(map[string]struct{}, len(models))
+	for _, model := range models {
+		if !model.IsActive {
+			continue
+		}
+		llmModel := model.ToLlmModel()
+		activeModels = append(activeModels, llmModel)
+		modelLookup[llmModel.ID] = struct{}{}
 	}
 
-	d := &Dashscope{
-		apiKey: cfg.DashscopeAPIKey,
-
-		models: models,
-		modelLookup: func() map[string]struct{} {
-			lookup := make(map[string]struct{}, len(models))
-			for _, model := range models {
-				lookup[model.ID] = struct{}{}
-			}
-			return lookup
-		}(),
+	if len(activeModels) == 0 {
+		return nil, errors.New("dashscope has no active models configured")
 	}
 
-	return d, nil
+	name := strings.TrimSpace(provider.Name)
+	if name == "" {
+		name = provider.ID
+	}
+
+	return &Dashscope{
+		providerID:   provider.ID,
+		providerName: name,
+		apiKey:       apiKey,
+		endpoint:     strings.TrimSpace(provider.BaseURL),
+		models:       activeModels,
+		modelLookup:  modelLookup,
+	}, nil
 }
 
 func (d *Dashscope) ProviderID() string {
-	return "dashscope"
+	return d.providerID
 }
 
 func (d *Dashscope) Provider() entity.LlmProvider {
 	return entity.LlmProvider{
-		ID:     d.ProviderID(),
-		Name:   "Dashscope",
+		ID:     d.providerID,
+		Name:   d.providerName,
 		Models: d.Models(),
 	}
 }
@@ -89,5 +103,5 @@ func (d *Dashscope) GenerateImages(ctx context.Context, request entity.GenerateI
 		return nil, "", err
 	}
 
-	return GenerateImagesByDashscopeProtocol(ctx, d.apiKey, request.Model, request.Prompt, request.Images)
+	return GenerateImagesByDashscopeProtocol(ctx, d.apiKey, d.endpoint, request.Model, request.Prompt, request.Images)
 }

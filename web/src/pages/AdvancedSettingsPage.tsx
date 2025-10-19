@@ -26,11 +26,19 @@ const AdvancedSettingsPage: React.FC = () => {
                 管理员工具
               </Typography>
               <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-                用户管理已迁移至独立页面，点击下方按钮快速进入。
+                快速访问厂商与用户管理页面，更新凭证、模型或账号信息。
               </Typography>
-              <Button variant="contained" onClick={() => navigate("/users")}>
-                前往用户管理
-              </Button>
+              <Stack direction={{ xs: "column", sm: "row" }} spacing={2}>
+                <Button
+                  variant="contained"
+                  onClick={() => navigate("/providers")}
+                >
+                  前往厂商管理
+                </Button>
+                <Button variant="outlined" onClick={() => navigate("/users")}>
+                  前往用户管理
+                </Button>
+              </Stack>
             </Box>
           )}
         </Stack>

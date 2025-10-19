@@ -175,5 +175,7 @@ func (f *RepositoryFactory) migrateSchema(db *gorm.DB) error {
 	return db.AutoMigrate(
 		&entity.DbUser{},
 		&entity.DbUsageRecord{},
+		&entity.DbProvider{},
+		&entity.DbModel{},
 	)
 }

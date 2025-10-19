@@ -1,7 +1,6 @@
 package llm
 
 import (
-	"clothing/internal/config"
 	"clothing/internal/entity"
 	"context"
 	"errors"
@@ -12,6 +11,9 @@ import (
 )
 
 type Volcengine struct {
+	providerID   string
+	providerName string
+
 	apiKey string
 
 	models      []entity.LlmModel
@@ -19,46 +21,57 @@ type Volcengine struct {
 	modelByID   map[string]entity.LlmModel
 }
 
-func NewVolcengine(cfg config.Config) (*Volcengine, error) {
-	if strings.TrimSpace(cfg.VolcengineAPIKey) == "" {
+func NewVolcengine(provider *entity.DbProvider, models []entity.DbModel) (*Volcengine, error) {
+	if provider == nil {
+		return nil, errors.New("volcengine provider config is nil")
+	}
+
+	apiKey := strings.TrimSpace(provider.APIKey)
+	if apiKey == "" {
 		return nil, errors.New("volcengine api key is not configured")
 	}
 
-	models := []entity.LlmModel{
-		{
-			ID:          "doubao-seedream-4-0-250828",
-			Name:        "Doubao Seedream 4.0",
-			Description: "火山引擎图像生成模型",
-			Inputs: entity.Inputs{
-				Modalities:     []entity.Modality{entity.ModText, entity.ModImage},
-				MaxImages:      9,
-				SupportedSizes: []string{"1K", "2K", "4K"},
-			},
-		},
+	name := strings.TrimSpace(provider.Name)
+	if name == "" {
+		name = provider.ID
 	}
 
-	v := &Volcengine{
-		apiKey:      cfg.VolcengineAPIKey,
-		models:      models,
-		modelLookup: make(map[string]struct{}, len(models)),
-		modelByID:   make(map[string]entity.LlmModel, len(models)),
-	}
+	activeModels := make([]entity.LlmModel, 0, len(models))
+	modelLookup := make(map[string]struct{}, len(models))
+	modelByID := make(map[string]entity.LlmModel, len(models))
+
 	for _, model := range models {
-		v.modelLookup[model.ID] = struct{}{}
-		v.modelByID[model.ID] = model
+		if !model.IsActive {
+			continue
+		}
+		llmModel := model.ToLlmModel()
+		activeModels = append(activeModels, llmModel)
+		modelLookup[llmModel.ID] = struct{}{}
+		modelByID[llmModel.ID] = llmModel
 	}
 
-	return v, nil
+	if len(activeModels) == 0 {
+		return nil, errors.New("volcengine has no active models configured")
+	}
+
+	return &Volcengine{
+		providerID:   provider.ID,
+		providerName: name,
+		apiKey:       apiKey,
+		models:       activeModels,
+		modelLookup:  modelLookup,
+		modelByID:    modelByID,
+	}, nil
 }
 
 func (v *Volcengine) ProviderID() string {
-	return "volcengine"
+	return v.providerID
 }
 
 func (v *Volcengine) Provider() entity.LlmProvider {
 	return entity.LlmProvider{
-		ID:     v.ProviderID(),
-		Name:   "Volcengine",
+		ID:     v.providerID,
+		Name:   v.providerName,
 		Models: v.Models(),
 	}
 }

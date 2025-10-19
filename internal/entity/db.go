@@ -57,6 +57,46 @@ func (a StringArray) ToSlice() []string {
 	return out
 }
 
+// JSONMap stores a map as JSON text.
+type JSONMap map[string]interface{}
+
+// Value implements driver.Valuer for JSONMap.
+func (m JSONMap) Value() (driver.Value, error) {
+	if len(m) == 0 {
+		return "{}", nil
+	}
+	raw, err := json.Marshal(map[string]interface{}(m))
+	if err != nil {
+		return nil, err
+	}
+	return string(raw), nil
+}
+
+// Scan implements sql.Scanner for JSONMap.
+func (m *JSONMap) Scan(value interface{}) error {
+	if value == nil {
+		*m = nil
+		return nil
+	}
+
+	switch v := value.(type) {
+	case []byte:
+		if len(v) == 0 {
+			*m = JSONMap{}
+			return nil
+		}
+		return json.Unmarshal(v, (*map[string]interface{})(m))
+	case string:
+		if v == "" {
+			*m = JSONMap{}
+			return nil
+		}
+		return json.Unmarshal([]byte(v), (*map[string]interface{})(m))
+	default:
+		return fmt.Errorf("unsupported type for JSONMap: %T", value)
+	}
+}
+
 // DbUsageRecord stores a generation usage record.
 type DbUsageRecord struct {
 	ID        uint      `gorm:"primarykey" json:"id"`

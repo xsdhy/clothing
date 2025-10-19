@@ -1,7 +1,6 @@
 package llm
 
 import (
-	"clothing/internal/config"
 	"clothing/internal/entity"
 	"context"
 	"errors"
@@ -11,66 +10,68 @@ import (
 )
 
 type AiHubMix struct {
-	apiKey string
+	providerID   string
+	providerName string
+
+	apiKey   string
+	endpoint string
 
 	models      []entity.LlmModel
 	modelLookup map[string]struct{}
 }
 
-func NewAiHubMix(cfg config.Config) (*AiHubMix, error) {
-	if strings.TrimSpace(cfg.AiHubMixAPIKey) == "" {
-		return nil, errors.New("AiHubMix api key is not configured")
+func NewAiHubMix(provider *entity.DbProvider, models []entity.DbModel) (*AiHubMix, error) {
+	if provider == nil {
+		return nil, errors.New("aihubmix provider config is nil")
 	}
 
-	models := []entity.LlmModel{
-		{
-			ID:          "qwen-image-edit",
-			Name:        "qwen-image-edit",
-			Price:       "<UNK>",
-			Description: "",
-		},
-		{
-			ID:          "gemini-2.5-flash-image-preview",
-			Name:        "gemini-2.5-flash-image-preview",
-			Price:       "0.03/IMG",
-			Description: "",
-		},
-		{
-			ID:          "imagen-4.0-fast-generate-001",
-			Name:        "imagen-4.0-fast-generate-001",
-			Price:       "0.03/IMG",
-			Description: "",
-		},
-		{
-			ID:          "gpt-4o-image",
-			Name:        "gpt-4o-image",
-			Price:       "0.005/IMG",
-			Description: "",
-		},
+	apiKey := strings.TrimSpace(provider.APIKey)
+	if apiKey == "" {
+		return nil, errors.New("aihubmix api key is not configured")
 	}
 
-	o := &AiHubMix{
-		apiKey: cfg.AiHubMixAPIKey,
-		models: models,
-		modelLookup: func() map[string]struct{} {
-			lookup := make(map[string]struct{}, len(models))
-			for _, model := range models {
-				lookup[model.ID] = struct{}{}
-			}
-			return lookup
-		}(),
+	activeModels := make([]entity.LlmModel, 0, len(models))
+	modelLookup := make(map[string]struct{}, len(models))
+	for _, model := range models {
+		if !model.IsActive {
+			continue
+		}
+		llmModel := model.ToLlmModel()
+		activeModels = append(activeModels, llmModel)
+		modelLookup[llmModel.ID] = struct{}{}
 	}
-	return o, nil
+	if len(activeModels) == 0 {
+		return nil, errors.New("aihubmix has no active models configured")
+	}
+
+	endpoint := strings.TrimSpace(provider.BaseURL)
+	if endpoint == "" {
+		endpoint = "https://aihubmix.com/v1/chat/completions"
+	}
+
+	name := strings.TrimSpace(provider.Name)
+	if name == "" {
+		name = provider.ID
+	}
+
+	return &AiHubMix{
+		providerID:   provider.ID,
+		providerName: name,
+		apiKey:       apiKey,
+		endpoint:     endpoint,
+		models:       activeModels,
+		modelLookup:  modelLookup,
+	}, nil
 }
 
 func (o *AiHubMix) ProviderID() string {
-	return "AiHubMix"
+	return o.providerID
 }
 
 func (o *AiHubMix) Provider() entity.LlmProvider {
 	return entity.LlmProvider{
-		ID:     "AiHubMix",
-		Name:   "AiHubMix",
+		ID:     o.providerID,
+		Name:   o.providerName,
 		Models: o.Models(),
 	}
 }
@@ -94,5 +95,5 @@ func (o *AiHubMix) GenerateImages(ctx context.Context, request entity.GenerateIm
 		"size":                strings.TrimSpace(request.Size),
 	}).Info("llm_generate_images_start")
 
-	return GenerateImagesByOpenaiProtocol(ctx, o.apiKey, "https://aihubmix.com/v1/chat/completions", request.Model, request.Prompt, request.Images)
+	return GenerateImagesByOpenaiProtocol(ctx, o.apiKey, o.endpoint, request.Model, request.Prompt, request.Images)
 }

@@ -2,6 +2,7 @@ package api
 
 import (
 	"clothing/internal/entity"
+	"clothing/internal/llm"
 	"clothing/internal/storage"
 	"clothing/internal/utils"
 	"context"
@@ -18,7 +19,25 @@ import (
 )
 
 func (h *HTTPHandler) ListProviders(c *gin.Context) {
-	c.JSON(http.StatusOK, gin.H{"providers": h.providers})
+	if h.repo == nil {
+		c.JSON(http.StatusOK, gin.H{"providers": []entity.LlmProvider{}})
+		return
+	}
+
+	ctx := c.Request.Context()
+	providers, err := h.repo.ListProviders(ctx, false)
+	if err != nil {
+		logrus.WithError(err).Error("failed to list providers from database")
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to load provider catalogue"})
+		return
+	}
+
+	results := make([]entity.LlmProvider, 0, len(providers))
+	for _, provider := range providers {
+		results = append(results, provider.ToLlmProvider(provider.Models))
+	}
+
+	c.JSON(http.StatusOK, gin.H{"providers": results})
 }
 
 func (h *HTTPHandler) GenerateImage(c *gin.Context) {
@@ -42,10 +61,14 @@ func (h *HTTPHandler) GenerateImage(c *gin.Context) {
 
 	request.Size = strings.TrimSpace(request.Size)
 
+	if h.repo == nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "provider repository not configured"})
+		return
+	}
+
 	providerID := strings.TrimSpace(request.Provider)
-	provider, ok := h.providerMap[providerID]
-	if !ok {
-		c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("unsupported provider: %s", request.Provider)})
+	if providerID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "provider is required"})
 		return
 	}
 
@@ -55,12 +78,48 @@ func (h *HTTPHandler) GenerateImage(c *gin.Context) {
 		return
 	}
 
-	if !provider.SupportsModel(request.Model) {
+	ctx := c.Request.Context()
+
+	dbProvider, err := h.repo.GetProvider(ctx, providerID)
+	if err != nil {
+		logrus.WithError(err).WithFields(logrus.Fields{
+			"provider": providerID,
+		}).Error("failed to load provider from database")
+		c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("unsupported provider: %s", request.Provider)})
+		return
+	}
+	if dbProvider == nil || !dbProvider.IsActive {
+		c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("provider %s is disabled", request.Provider)})
+		return
+	}
+
+	var dbModel *entity.DbModel
+	for i := range dbProvider.Models {
+		model := &dbProvider.Models[i]
+		if strings.EqualFold(model.ModelID, request.Model) {
+			dbModel = model
+			break
+		}
+	}
+
+	if dbModel == nil || !dbModel.IsActive {
 		c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("unsupported model: %s", request.Model)})
 		return
 	}
 
-	ctx := c.Request.Context()
+	service, err := llm.NewService(dbProvider)
+	if err != nil {
+		logrus.WithError(err).WithFields(logrus.Fields{
+			"provider": providerID,
+		}).Error("failed to initialise provider service")
+		c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("provider %s is temporarily unavailable", request.Provider)})
+		return
+	}
+
+	if !service.SupportsModel(request.Model) {
+		c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("unsupported model: %s", request.Model)})
+		return
+	}
 
 	c.Writer.Header().Set("Content-Type", "text/event-stream")
 	c.Writer.Header().Set("Cache-Control", "no-cache")
@@ -108,7 +167,7 @@ func (h *HTTPHandler) GenerateImage(c *gin.Context) {
 			}
 		}
 
-		images, text, err := provider.GenerateImages(ctx, request)
+		images, text, err := service.GenerateImages(ctx, request)
 		if err != nil {
 			logrus.WithError(err).WithFields(logrus.Fields{
 				"provider": providerID,

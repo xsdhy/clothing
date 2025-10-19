@@ -21,4 +21,17 @@ type Repository interface {
 	ListUsageRecords(ctx context.Context, params *entity.UsageRecordQuery) ([]entity.DbUsageRecord, *entity.Meta, error)
 	GetUsageRecord(ctx context.Context, id uint) (*entity.DbUsageRecord, error)
 	DeleteUsageRecord(ctx context.Context, id uint) error
+
+	// Providers & models
+	CreateProvider(ctx context.Context, provider *entity.DbProvider) error
+	UpdateProvider(ctx context.Context, id string, updates map[string]interface{}) error
+	DeleteProvider(ctx context.Context, id string) error
+	ListProviders(ctx context.Context, includeInactive bool) ([]entity.DbProvider, error)
+	GetProvider(ctx context.Context, id string) (*entity.DbProvider, error)
+	GetProviderWithModel(ctx context.Context, providerID, modelID string, includeInactive bool) (*entity.DbProvider, *entity.DbModel, error)
+
+	CreateModel(ctx context.Context, model *entity.DbModel) error
+	UpdateModel(ctx context.Context, providerID, modelID string, updates map[string]interface{}) error
+	DeleteModel(ctx context.Context, providerID, modelID string) error
+	ListModels(ctx context.Context, providerID string, includeInactive bool) ([]entity.DbModel, error)
 }
