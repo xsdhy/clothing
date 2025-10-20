@@ -1,28 +1,33 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
-import Grid from "@mui/material/Grid";
 import {
   Alert,
   Box,
   Button,
-  Card,
-  CardContent,
   Chip,
   CircularProgress,
-  Divider,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogTitle,
+  FormControlLabel,
   Paper,
   Stack,
   Switch,
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableRow,
   TextField,
   Typography,
 } from "@mui/material";
+import AddRoundedIcon from "@mui/icons-material/AddRounded";
 import DeleteForeverRoundedIcon from "@mui/icons-material/DeleteForeverRounded";
 import RestartAltRoundedIcon from "@mui/icons-material/RestartAltRounded";
 import type {
   ProviderAdmin,
   ProviderModelAdmin,
-  ProviderCreatePayload,
   ProviderUpdatePayload,
-  ProviderModelCreatePayload,
   ProviderModelUpdatePayload,
 } from "../types";
 import {
@@ -37,16 +42,18 @@ import {
 import { useAuth } from "../contexts/AuthContext";
 
 interface ProviderFormState {
+  id: string;
   name: string;
   driver: string;
   description: string;
   base_url: string;
   api_key: string;
-  config: string;
+  config_text: string;
   is_active: boolean;
 }
 
-interface ModelFormState {
+interface ModelDialogForm {
+  model_id: string;
   name: string;
   description: string;
   price: string;
@@ -57,24 +64,51 @@ interface ModelFormState {
   is_active: boolean;
 }
 
-interface NewModelFormState extends ModelFormState {
-  model_id: string;
-}
-
 const jsonStringify = (value?: Record<string, unknown>): string =>
   value && Object.keys(value).length > 0 ? JSON.stringify(value, null, 2) : "";
 
-const toProviderForm = (provider: ProviderAdmin): ProviderFormState => ({
+const parseCommaSeparated = (value: string): string[] =>
+  value
+    .split(",")
+    .map((item) => item.trim())
+    .filter((item) => item.length > 0);
+
+const defaultProviderForm = (): ProviderFormState => ({
+  id: "",
+  name: "",
+  driver: "",
+  description: "",
+  base_url: "",
+  api_key: "",
+  config_text: "",
+  is_active: true,
+});
+
+const toProviderFormState = (provider: ProviderAdmin): ProviderFormState => ({
+  id: provider.id,
   name: provider.name,
   driver: provider.driver,
   description: provider.description ?? "",
   base_url: provider.base_url ?? "",
   api_key: "",
-  config: jsonStringify(provider.config as Record<string, unknown>),
+  config_text: jsonStringify(provider.config as Record<string, unknown>),
   is_active: provider.is_active,
 });
 
-const toModelForm = (model: ProviderModelAdmin): ModelFormState => ({
+const defaultModelForm = (): ModelDialogForm => ({
+  model_id: "",
+  name: "",
+  description: "",
+  price: "",
+  max_images: "",
+  modalities: "",
+  supported_sizes: "",
+  settings: "",
+  is_active: true,
+});
+
+const toModelDialogForm = (model: ProviderModelAdmin): ModelDialogForm => ({
+  model_id: model.model_id,
   name: model.name,
   description: model.description ?? "",
   price: model.price ?? "",
@@ -88,72 +122,55 @@ const toModelForm = (model: ProviderModelAdmin): ModelFormState => ({
   is_active: model.is_active,
 });
 
-const emptyNewModelForm = (): NewModelFormState => ({
-  model_id: "",
-  name: "",
-  description: "",
-  price: "",
-  max_images: "",
-  modalities: "",
-  supported_sizes: "",
-  settings: "",
-  is_active: true,
-});
-
-const parseCommaSeparated = (value: string): string[] =>
-  value
-    .split(",")
-    .map((item) => item.trim())
-    .filter((item) => item.length > 0);
-
 const ProviderManagementPage: React.FC = () => {
   const { isAdmin } = useAuth();
   const [providers, setProviders] = useState<ProviderAdmin[]>([]);
-  const [providerForms, setProviderForms] = useState<
-    Record<string, ProviderFormState>
-  >({});
-  const [modelForms, setModelForms] = useState<
-    Record<string, Record<string, ModelFormState>>
-  >({});
-  const [newModelForms, setNewModelForms] = useState<
-    Record<string, NewModelFormState>
-  >({});
-  const [newProvider, setNewProvider] = useState<
-    ProviderCreatePayload & { config_text: string }
-  >({
-    id: "",
-    name: "",
-    driver: "",
-    description: "",
-    api_key: "",
-    base_url: "",
-    config_text: "",
-    is_active: true,
-  });
   const [loading, setLoading] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
 
-  const syncForms = useCallback((list: ProviderAdmin[]) => {
-    const providerState: Record<string, ProviderFormState> = {};
-    const modelState: Record<string, Record<string, ModelFormState>> = {};
-    const newModelState: Record<string, NewModelFormState> = {};
+  const [providerDialogOpen, setProviderDialogOpen] = useState(false);
+  const [providerDialogMode, setProviderDialogMode] =
+    useState<"create" | "edit">("create");
+  const [providerForm, setProviderForm] =
+    useState<ProviderFormState>(defaultProviderForm);
+  const [providerDialogError, setProviderDialogError] = useState<string | null>(
+    null,
+  );
+  const [editingProvider, setEditingProvider] = useState<ProviderAdmin | null>(
+    null,
+  );
 
-    list.forEach((provider) => {
-      providerState[provider.id] = toProviderForm(provider);
-      const models = provider.models ?? [];
-      const perProviderModels: Record<string, ModelFormState> = {};
-      models.forEach((model) => {
-        perProviderModels[model.model_id] = toModelForm(model);
-      });
-      modelState[provider.id] = perProviderModels;
-      newModelState[provider.id] = emptyNewModelForm();
-    });
+  const [modelDialogOpen, setModelDialogOpen] = useState(false);
+  const [modelManagerProviderId, setModelManagerProviderId] = useState<
+    string | null
+  >(null);
+  const [modelDialogMessage, setModelDialogMessage] = useState<string | null>(
+    null,
+  );
+  const [modelDialogError, setModelDialogError] = useState<string | null>(null);
 
-    setProviderForms(providerState);
-    setModelForms(modelState);
-    setNewModelForms(newModelState);
+  const [modelFormOpen, setModelFormOpen] = useState(false);
+  const [modelFormMode, setModelFormMode] = useState<"create" | "edit">(
+    "create",
+  );
+  const [modelFormError, setModelFormError] = useState<string | null>(null);
+  const [modelForm, setModelForm] =
+    useState<ModelDialogForm>(defaultModelForm);
+  const [editingModelId, setEditingModelId] = useState<string | null>(null);
+
+  const modelManagerProvider = useMemo(
+    () =>
+      modelManagerProviderId
+        ? providers.find((item) => item.id === modelManagerProviderId) ?? null
+        : null,
+    [modelManagerProviderId, providers],
+  );
+
+  const clearMessages = useCallback(() => {
+    setError(null);
+    setMessage(null);
   }, []);
 
   const loadProviders = useCallback(async () => {
@@ -161,11 +178,9 @@ const ProviderManagementPage: React.FC = () => {
       return;
     }
     setLoading(true);
-    setError(null);
     try {
       const data = await listProvidersAdmin();
       setProviders(data);
-      syncForms(data);
     } catch (err) {
       setError(
         err instanceof Error ? err.message : "加载厂商列表失败，请稍后再试",
@@ -173,186 +188,192 @@ const ProviderManagementPage: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  }, [isAdmin, syncForms]);
+  }, [isAdmin]);
 
   useEffect(() => {
     void loadProviders();
   }, [loadProviders]);
 
-  const providerHasData = useMemo(() => providers.length > 0, [providers]);
+  const handleRefresh = useCallback(() => {
+    void loadProviders();
+  }, [loadProviders]);
 
-  const clearMessages = useCallback(() => {
-    setError(null);
-    setMessage(null);
+  const openCreateProviderDialog = useCallback(() => {
+    setProviderDialogMode("create");
+    setProviderForm(defaultProviderForm());
+    setProviderDialogError(null);
+    setEditingProvider(null);
+    setProviderDialogOpen(true);
   }, []);
 
-  const handleCreateProvider = useCallback(
-    async (event: React.FormEvent) => {
+  const openEditProviderDialog = useCallback((provider: ProviderAdmin) => {
+    setProviderDialogMode("edit");
+    setProviderForm(toProviderFormState(provider));
+    setProviderDialogError(null);
+    setEditingProvider(provider);
+    setProviderDialogOpen(true);
+  }, []);
+
+  const closeProviderDialog = useCallback(() => {
+    if (busy) {
+      return;
+    }
+    setProviderDialogOpen(false);
+    setProviderDialogMode("create");
+    setProviderForm(defaultProviderForm());
+    setEditingProvider(null);
+    setProviderDialogError(null);
+  }, [busy]);
+
+  const handleSubmitProvider = useCallback(
+    async (event: React.FormEvent<HTMLFormElement>) => {
       event.preventDefault();
+      setProviderDialogError(null);
       clearMessages();
-      const trimmedId = newProvider.id?.trim() ?? "";
-      const trimmedName = newProvider.name?.trim() ?? "";
-      const trimmedDriver = newProvider.driver?.trim() ?? "";
-      if (!trimmedId || !trimmedName || !trimmedDriver) {
-        setError("厂商 ID、名称和驱动类型为必填项");
+
+      const trimmedName = providerForm.name.trim();
+      const trimmedDriver = providerForm.driver.trim();
+      if (!trimmedName || !trimmedDriver) {
+        setProviderDialogError("厂商名称和驱动类型为必填项");
         return;
       }
+      if (providerDialogMode === "create" && !providerForm.id.trim()) {
+        setProviderDialogError("厂商 ID 为必填项");
+        return;
+      }
+
+      const trimmedDescription = providerForm.description.trim();
+      const trimmedBaseUrl = providerForm.base_url.trim();
+      const trimmedConfig = providerForm.config_text.trim();
 
       let configObject: Record<string, unknown> | undefined;
-      if (newProvider.config_text.trim()) {
+      if (trimmedConfig) {
         try {
-          configObject = JSON.parse(newProvider.config_text);
-        } catch (err) {
-          setError("配置 JSON 解析失败，请检查格式");
+          configObject = JSON.parse(trimmedConfig);
+        } catch {
+          setProviderDialogError("配置 JSON 解析失败，请检查格式");
           return;
         }
       }
 
       setBusy(true);
       try {
-        await createProvider({
-          id: trimmedId,
-          name: trimmedName,
-          driver: trimmedDriver,
-          description: newProvider.description?.trim() || undefined,
-          api_key: newProvider.api_key?.trim() || undefined,
-          base_url: newProvider.base_url?.trim() || undefined,
-          config: configObject,
-          is_active: newProvider.is_active,
-        });
-        setMessage("厂商创建成功");
-        setNewProvider({
-          id: "",
-          name: "",
-          driver: "",
-          description: "",
-          api_key: "",
-          base_url: "",
-          config_text: "",
-          is_active: true,
-        });
-        await loadProviders();
-      } catch (err) {
-        setError(err instanceof Error ? err.message : "创建厂商失败");
-      } finally {
-        setBusy(false);
-      }
-    },
-    [clearMessages, loadProviders, newProvider],
-  );
+        if (providerDialogMode === "create") {
+          await createProvider({
+            id: providerForm.id.trim(),
+            name: trimmedName,
+            driver: trimmedDriver,
+            description: trimmedDescription || undefined,
+            base_url: trimmedBaseUrl || undefined,
+            api_key: providerForm.api_key.trim() || undefined,
+            config: configObject,
+            is_active: providerForm.is_active,
+          });
+          setMessage("厂商创建成功");
+        } else if (editingProvider) {
+          const payload: ProviderUpdatePayload = {};
+          if (trimmedName !== editingProvider.name) {
+            payload.name = trimmedName;
+          }
+          if (trimmedDriver !== editingProvider.driver) {
+            payload.driver = trimmedDriver;
+          }
+          if (
+            trimmedDescription !== (editingProvider.description ?? "")
+          ) {
+            payload.description = trimmedDescription;
+          }
+          if (trimmedBaseUrl !== (editingProvider.base_url ?? "")) {
+            payload.base_url = trimmedBaseUrl;
+          }
+          const trimmedApiKey = providerForm.api_key.trim();
+          if (trimmedApiKey) {
+            payload.api_key = trimmedApiKey;
+          }
+          if (configObject) {
+            payload.config = configObject;
+          } else if (
+            !trimmedConfig &&
+            editingProvider.config &&
+            Object.keys(editingProvider.config).length > 0
+          ) {
+            payload.config = {};
+          }
+          if (providerForm.is_active !== editingProvider.is_active) {
+            payload.is_active = providerForm.is_active;
+          }
 
-  const handleProviderFieldChange = useCallback(
-    (
-      providerId: string,
-      field: keyof ProviderFormState,
-      value: string | boolean,
-    ) => {
-      setProviderForms((prev) => ({
-        ...prev,
-        [providerId]: {
-          ...prev[providerId],
-          [field]: value as never,
-        },
-      }));
-    },
-    [],
-  );
-
-  const saveProviderChanges = useCallback(
-    async (
-      providerId: string,
-      overridePayload?: Partial<ProviderUpdatePayload>,
-    ) => {
-      clearMessages();
-      const provider = providers.find((item) => item.id === providerId);
-      const form = providerForms[providerId];
-      if (!provider || !form) {
-        setError("未找到对应的厂商信息");
-        return;
-      }
-
-      const payload: ProviderUpdatePayload = overridePayload
-        ? { ...overridePayload }
-        : {};
-      if (!overridePayload) {
-        if (form.name.trim() !== provider.name) {
-          payload.name = form.name.trim();
-        }
-        if (form.driver.trim() !== provider.driver) {
-          payload.driver = form.driver.trim();
-        }
-        if ((form.description ?? "").trim() !== (provider.description ?? "")) {
-          payload.description = form.description.trim();
-        }
-        if ((form.base_url ?? "").trim() !== (provider.base_url ?? "")) {
-          payload.base_url = form.base_url.trim();
-        }
-        if (form.api_key.trim()) {
-          payload.api_key = form.api_key.trim();
-        }
-        if (form.config.trim()) {
-          try {
-            payload.config = JSON.parse(form.config);
-          } catch {
-            setError("配置 JSON 解析失败，请检查格式");
+          if (Object.keys(payload).length === 0) {
+            setProviderDialogError("未检测到改动");
+            setBusy(false);
             return;
           }
-        } else if (provider.config && Object.keys(provider.config).length > 0) {
-          payload.config = {};
-        }
-        if (form.is_active !== provider.is_active) {
-          payload.is_active = form.is_active;
+
+          await updateProvider(editingProvider.id, payload);
+          setMessage("厂商信息已更新");
         }
 
-        if (Object.keys(payload).length === 0) {
-          setMessage("没有检测到改动");
-          return;
-        }
-      }
-
-      setBusy(true);
-      try {
-        await updateProvider(providerId, payload);
-        setMessage("厂商信息已更新");
+        setProviderDialogOpen(false);
+        setProviderDialogMode("create");
+        setProviderForm(defaultProviderForm());
+        setEditingProvider(null);
         await loadProviders();
       } catch (err) {
-        setError(err instanceof Error ? err.message : "更新厂商失败");
+        setProviderDialogError(
+          err instanceof Error ? err.message : "提交失败，请稍后再试",
+        );
       } finally {
         setBusy(false);
       }
     },
-    [clearMessages, loadProviders, providerForms, providers],
+    [
+      clearMessages,
+      editingProvider,
+      loadProviders,
+      providerDialogMode,
+      providerForm,
+    ],
   );
+
+  const handleClearProviderKey = useCallback(async () => {
+    if (!editingProvider) {
+      return;
+    }
+    if (
+      !window.confirm("确定要清空该厂商的 API 密钥吗？此操作将立即生效。")
+    ) {
+      return;
+    }
+    clearMessages();
+    setProviderDialogError(null);
+    setBusy(true);
+    try {
+      await updateProvider(editingProvider.id, { api_key: "" });
+      setMessage("密钥已清空");
+      setProviderDialogOpen(false);
+      setProviderDialogMode("create");
+      setProviderForm(defaultProviderForm());
+      setEditingProvider(null);
+      await loadProviders();
+    } catch (err) {
+      setProviderDialogError(
+        err instanceof Error ? err.message : "清空密钥失败",
+      );
+    } finally {
+      setBusy(false);
+    }
+  }, [clearMessages, editingProvider, loadProviders]);
 
   const handleToggleProviderActive = useCallback(
-    async (providerId: string) => {
-      const provider = providers.find((item) => item.id === providerId);
-      if (!provider) {
-        setError("未找到对应的厂商信息");
-        return;
-      }
-      await saveProviderChanges(providerId, {
-        is_active: !provider.is_active,
-      });
-    },
-    [providers, saveProviderChanges],
-  );
-
-  const handleClearProviderKey = useCallback(
-    async (providerId: string) => {
+    async (provider: ProviderAdmin) => {
       clearMessages();
-      if (
-        !window.confirm("确定要清空该厂商的 API 密钥吗？此操作将立即生效。")
-      ) {
-        return;
-      }
       setBusy(true);
       try {
-        await updateProvider(providerId, { api_key: "" });
-        setMessage("密钥已清空");
+        await updateProvider(provider.id, { is_active: !provider.is_active });
+        setMessage("厂商状态已更新");
         await loadProviders();
       } catch (err) {
-        setError(err instanceof Error ? err.message : "清空密钥失败");
+        setError(err instanceof Error ? err.message : "更新厂商状态失败");
       } finally {
         setBusy(false);
       }
@@ -361,16 +382,16 @@ const ProviderManagementPage: React.FC = () => {
   );
 
   const handleDeleteProvider = useCallback(
-    async (providerId: string) => {
-      clearMessages();
+    async (provider: ProviderAdmin) => {
       if (
         !window.confirm("确认删除该厂商及其全部模型配置吗？此操作不可恢复。")
       ) {
         return;
       }
+      clearMessages();
       setBusy(true);
       try {
-        await deleteProvider(providerId);
+        await deleteProvider(provider.id);
         setMessage("厂商已删除");
         await loadProviders();
       } catch (err) {
@@ -382,225 +403,306 @@ const ProviderManagementPage: React.FC = () => {
     [clearMessages, loadProviders],
   );
 
-  const handleModelFieldChange = useCallback(
-    (
-      providerId: string,
-      modelId: string,
-      field: keyof ModelFormState,
-      value: string | boolean,
-    ) => {
-      setModelForms((prev) => {
-        const providerModels = { ...(prev[providerId] ?? {}) };
-        providerModels[modelId] = {
-          ...providerModels[modelId],
-          [field]: value as never,
-        };
-        return {
-          ...prev,
-          [providerId]: providerModels,
-        };
-      });
-    },
-    [],
-  );
+  const openModelManager = useCallback((provider: ProviderAdmin) => {
+    setModelManagerProviderId(provider.id);
+    setModelDialogMessage(null);
+    setModelDialogError(null);
+    setModelFormOpen(false);
+    setModelForm(defaultModelForm());
+    setModelFormMode("create");
+    setEditingModelId(null);
+    setModelFormError(null);
+    setModelDialogOpen(true);
+  }, []);
 
-  const handleNewModelFieldChange = useCallback(
-    (
-      providerId: string,
-      field: keyof NewModelFormState,
-      value: string | boolean,
-    ) => {
-      setNewModelForms((prev) => ({
-        ...prev,
-        [providerId]: {
-          ...(prev[providerId] ?? emptyNewModelForm()),
-          [field]: value as never,
-        },
-      }));
-    },
-    [],
-  );
+  const closeModelDialog = useCallback(() => {
+    if (busy) {
+      return;
+    }
+    setModelDialogOpen(false);
+    setModelManagerProviderId(null);
+    setModelDialogMessage(null);
+    setModelDialogError(null);
+    setModelFormOpen(false);
+    setModelForm(defaultModelForm());
+    setModelFormMode("create");
+    setEditingModelId(null);
+    setModelFormError(null);
+  }, [busy]);
 
-  const saveModelChanges = useCallback(
-    async (
-      providerId: string,
-      modelId: string,
-      overridePayload?: Partial<ProviderModelUpdatePayload>,
-    ) => {
+  const openCreateModelForm = useCallback(() => {
+    if (!modelManagerProviderId) {
+      return;
+    }
+    setModelForm(defaultModelForm());
+    setModelFormMode("create");
+    setModelFormError(null);
+    setEditingModelId(null);
+    setModelFormOpen(true);
+  }, [modelManagerProviderId]);
+
+  const openEditModelForm = useCallback((model: ProviderModelAdmin) => {
+    setModelForm(toModelDialogForm(model));
+    setModelFormMode("edit");
+    setModelFormError(null);
+    setEditingModelId(model.model_id);
+    setModelFormOpen(true);
+  }, []);
+
+  const closeModelForm = useCallback(() => {
+    if (busy) {
+      return;
+    }
+    setModelFormOpen(false);
+    setModelForm(defaultModelForm());
+    setModelFormMode("create");
+    setEditingModelId(null);
+    setModelFormError(null);
+  }, [busy]);
+
+  const handleSubmitModelForm = useCallback(
+    async (event: React.FormEvent<HTMLFormElement>) => {
+      event.preventDefault();
+      setModelFormError(null);
+      setModelDialogError(null);
+      setModelDialogMessage(null);
       clearMessages();
-      const provider = providers.find((item) => item.id === providerId);
-      const model = provider?.models?.find((item) => item.model_id === modelId);
-      const form = modelForms[providerId]?.[modelId];
-      if (!provider || !model || !form) {
-        setError("未找到对应的模型信息");
+
+      if (!modelManagerProviderId) {
+        setModelFormError("未找到厂商信息，请重试");
         return;
       }
 
-      const payload: ProviderModelUpdatePayload = overridePayload
-        ? { ...overridePayload }
-        : {};
-      if (!overridePayload) {
-        if (form.name.trim() !== model.name) {
-          payload.name = form.name.trim();
-        }
-        if ((form.description ?? "").trim() !== (model.description ?? "")) {
-          payload.description = form.description.trim();
-        }
-        if ((form.price ?? "").trim() !== (model.price ?? "")) {
-          payload.price = form.price.trim();
-        }
-        if (form.max_images.trim()) {
-          const parsed = Number.parseInt(form.max_images.trim(), 10);
-          if (Number.isNaN(parsed) || parsed < 0) {
-            setError("最大参考图数量需为非负整数");
-            return;
-          }
-          payload.max_images = parsed;
-        } else if (model.max_images && model.max_images !== 0) {
-          payload.max_images = 0;
-        }
-        const modalities = parseCommaSeparated(form.modalities);
-        if (
-          JSON.stringify(modalities) !==
-          JSON.stringify(model.modalities ?? [])
-        ) {
-          payload.modalities = modalities;
-        }
-        const sizes = parseCommaSeparated(form.supported_sizes);
-        if (
-          JSON.stringify(sizes) !==
-          JSON.stringify(model.supported_sizes ?? [])
-        ) {
-          payload.supported_sizes = sizes;
-        }
-        if (form.settings.trim()) {
-          try {
-            payload.settings = JSON.parse(form.settings);
-          } catch {
-            setError("模型配置 JSON 解析失败，请检查格式");
-            return;
-          }
-        } else if (model.settings && Object.keys(model.settings).length > 0) {
-          payload.settings = {};
-        }
-        if (form.is_active !== model.is_active) {
-          payload.is_active = form.is_active;
-        }
-
-        if (Object.keys(payload).length === 0) {
-          setMessage("没有检测到模型改动");
-          return;
-        }
-      }
-
-      setBusy(true);
-      try {
-        await updateProviderModel(providerId, modelId, payload);
-        setMessage("模型信息已更新");
-        await loadProviders();
-      } catch (err) {
-        setError(err instanceof Error ? err.message : "更新模型失败");
-      } finally {
-        setBusy(false);
-      }
-    },
-    [clearMessages, loadProviders, modelForms, providers],
-  );
-
-  const handleToggleModelActive = useCallback(
-    async (providerId: string, modelId: string) => {
-      const provider = providers.find((item) => item.id === providerId);
-      const model = provider?.models?.find((item) => item.model_id === modelId);
-      if (!model) {
-        setError("未找到对应的模型信息");
-        return;
-      }
-      await saveModelChanges(providerId, modelId, {
-        is_active: !model.is_active,
-      });
-    },
-    [providers, saveModelChanges],
-  );
-
-  const handleDeleteModel = useCallback(
-    async (providerId: string, modelId: string) => {
-      clearMessages();
-      if (!window.confirm("确认删除该模型配置吗？")) {
-        return;
-      }
-      setBusy(true);
-      try {
-        await deleteProviderModel(providerId, modelId);
-        setMessage("模型已删除");
-        await loadProviders();
-      } catch (err) {
-        setError(err instanceof Error ? err.message : "删除模型失败");
-      } finally {
-        setBusy(false);
-      }
-    },
-    [clearMessages, loadProviders],
-  );
-
-  const handleCreateModel = useCallback(
-    async (providerId: string) => {
-      clearMessages();
-      const form = newModelForms[providerId] ?? emptyNewModelForm();
-      const trimmedModelId = form.model_id.trim();
-      const trimmedName = form.name.trim();
-      if (!trimmedModelId || !trimmedName) {
-        setError("请填写模型 ID 与名称");
+      const provider =
+        providers.find((item) => item.id === modelManagerProviderId) ?? null;
+      if (!provider) {
+        setModelFormError("未找到厂商信息，请重试");
         return;
       }
 
-      const payload: ProviderModelCreatePayload = {
-        model_id: trimmedModelId,
-        name: trimmedName,
-        description: form.description.trim() || undefined,
-        price: form.price.trim() || undefined,
-        modalities: parseCommaSeparated(form.modalities),
-        supported_sizes: parseCommaSeparated(form.supported_sizes),
-        is_active: form.is_active,
-      };
-
-      if (form.max_images.trim()) {
-        const parsed = Number.parseInt(form.max_images.trim(), 10);
-        if (Number.isNaN(parsed) || parsed < 0) {
-          setError("最大参考图数量需为非负整数");
-          return;
-        }
-        payload.max_images = parsed;
+      const trimmedName = modelForm.name.trim();
+      if (!trimmedName) {
+        setModelFormError("模型名称为必填项");
+        return;
       }
+
+      const trimmedModelId = modelForm.model_id.trim();
+      const trimmedDescription = modelForm.description.trim();
+      const trimmedPrice = modelForm.price.trim();
+      const trimmedSettings = modelForm.settings.trim();
+      const trimmedMaxImages = modelForm.max_images.trim();
 
       let settingsObject: Record<string, unknown> | undefined;
-      if (form.settings.trim()) {
+      if (trimmedSettings) {
         try {
-          settingsObject = JSON.parse(form.settings);
+          settingsObject = JSON.parse(trimmedSettings);
         } catch {
-          setError("模型配置 JSON 解析失败，请检查格式");
+          setModelFormError("模型配置 JSON 解析失败，请检查格式");
           return;
         }
+      }
+
+      let parsedMaxImages: number | undefined;
+      if (trimmedMaxImages) {
+        const parsed = Number.parseInt(trimmedMaxImages, 10);
+        if (Number.isNaN(parsed) || parsed < 0) {
+          setModelFormError("最大参考图数量需为非负整数");
+          return;
+        }
+        parsedMaxImages = parsed;
+      }
+
+      const modalities = parseCommaSeparated(modelForm.modalities);
+      const sizes = parseCommaSeparated(modelForm.supported_sizes);
+
+      if (modelFormMode === "create") {
+        if (!trimmedModelId) {
+          setModelFormError("模型 ID 为必填项");
+          return;
+        }
+        setBusy(true);
+        try {
+          await createProviderModel(provider.id, {
+            model_id: trimmedModelId,
+            name: trimmedName,
+            description: trimmedDescription || undefined,
+            price: trimmedPrice || undefined,
+            max_images: parsedMaxImages,
+            modalities: modalities.length > 0 ? modalities : undefined,
+            supported_sizes: sizes.length > 0 ? sizes : undefined,
+            settings: settingsObject,
+            is_active: modelForm.is_active,
+          });
+          setModelDialogMessage("模型已创建");
+          setModelFormOpen(false);
+          setModelForm(defaultModelForm());
+          await loadProviders();
+        } catch (err) {
+          setModelFormError(
+            err instanceof Error ? err.message : "创建模型失败",
+          );
+        } finally {
+          setBusy(false);
+        }
+        return;
+      }
+
+      if (!editingModelId) {
+        setModelFormError("未找到模型信息，请重试");
+        return;
+      }
+      const existingModel =
+        provider.models?.find((item) => item.model_id === editingModelId) ??
+        null;
+      if (!existingModel) {
+        setModelFormError("未找到模型信息，请重试");
+        return;
+      }
+
+      const payload: ProviderModelUpdatePayload = {};
+      if (trimmedName !== existingModel.name) {
+        payload.name = trimmedName;
+      }
+      if (trimmedDescription !== (existingModel.description ?? "")) {
+        payload.description = trimmedDescription;
+      }
+      if (trimmedPrice !== (existingModel.price ?? "")) {
+        payload.price = trimmedPrice;
+      }
+      if (parsedMaxImages !== undefined) {
+        if (parsedMaxImages !== existingModel.max_images) {
+          payload.max_images = parsedMaxImages;
+        }
+      } else if (
+        (existingModel.max_images ?? 0) !== 0 &&
+        !trimmedMaxImages
+      ) {
+        payload.max_images = 0;
+      }
+      if (
+        JSON.stringify(modalities) !==
+        JSON.stringify(existingModel.modalities ?? [])
+      ) {
+        payload.modalities = modalities;
+      }
+      if (
+        JSON.stringify(sizes) !==
+        JSON.stringify(existingModel.supported_sizes ?? [])
+      ) {
+        payload.supported_sizes = sizes;
       }
       if (settingsObject) {
         payload.settings = settingsObject;
+      } else if (
+        !trimmedSettings &&
+        existingModel.settings &&
+        Object.keys(existingModel.settings).length > 0
+      ) {
+        payload.settings = {};
+      }
+      if (modelForm.is_active !== existingModel.is_active) {
+        payload.is_active = modelForm.is_active;
+      }
+
+      if (Object.keys(payload).length === 0) {
+        setModelFormError("未检测到改动");
+        return;
       }
 
       setBusy(true);
       try {
-        await createProviderModel(providerId, payload);
-        setMessage("模型已创建");
-        setNewModelForms((prev) => ({
-          ...prev,
-          [providerId]: emptyNewModelForm(),
-        }));
+        await updateProviderModel(provider.id, editingModelId, payload);
+        setModelDialogMessage("模型信息已更新");
+        setModelFormOpen(false);
+        setModelForm(defaultModelForm());
+        setEditingModelId(null);
         await loadProviders();
       } catch (err) {
-        setError(err instanceof Error ? err.message : "创建模型失败");
+        setModelFormError(
+          err instanceof Error ? err.message : "更新模型失败",
+        );
       } finally {
         setBusy(false);
       }
     },
-    [clearMessages, loadProviders, newModelForms],
+    [
+      clearMessages,
+      editingModelId,
+      loadProviders,
+      modelForm,
+      modelFormMode,
+      modelManagerProviderId,
+      providers,
+    ],
+  );
+
+  const handleToggleModelActive = useCallback(
+    async (model: ProviderModelAdmin) => {
+      if (!modelManagerProviderId) {
+        setModelDialogError("未找到厂商信息，请重试");
+        return;
+      }
+      const provider =
+        providers.find((item) => item.id === modelManagerProviderId) ?? null;
+      if (!provider) {
+        setModelDialogError("未找到厂商信息，请重试");
+        return;
+      }
+      clearMessages();
+      setModelDialogError(null);
+      setBusy(true);
+      try {
+        await updateProviderModel(provider.id, model.model_id, {
+          is_active: !model.is_active,
+        });
+        setModelDialogMessage("模型状态已更新");
+        await loadProviders();
+      } catch (err) {
+        setModelDialogError(
+          err instanceof Error ? err.message : "更新模型状态失败",
+        );
+      } finally {
+        setBusy(false);
+      }
+    },
+    [clearMessages, loadProviders, modelManagerProviderId, providers],
+  );
+
+  const handleDeleteModel = useCallback(
+    async (model: ProviderModelAdmin) => {
+      if (!modelManagerProviderId) {
+        setModelDialogError("未找到厂商信息，请重试");
+        return;
+      }
+      const provider =
+        providers.find((item) => item.id === modelManagerProviderId) ?? null;
+      if (!provider) {
+        setModelDialogError("未找到厂商信息，请重试");
+        return;
+      }
+      if (
+        !window.confirm(
+          `确认删除模型 ${model.model_id} 吗？此操作不可恢复。`,
+        )
+      ) {
+        return;
+      }
+      clearMessages();
+      setModelDialogError(null);
+      setBusy(true);
+      try {
+        await deleteProviderModel(provider.id, model.model_id);
+        setModelDialogMessage("模型已删除");
+        await loadProviders();
+      } catch (err) {
+        setModelDialogError(
+          err instanceof Error ? err.message : "删除模型失败",
+        );
+      } finally {
+        setBusy(false);
+      }
+    },
+    [clearMessages, loadProviders, modelManagerProviderId, providers],
   );
 
   if (!isAdmin) {
@@ -622,134 +724,273 @@ const ProviderManagementPage: React.FC = () => {
     <Box sx={{ display: "flex", flexDirection: "column", gap: 4 }}>
       <Box>
         <Typography variant="h4" sx={{ fontWeight: 700, mb: 1 }}>
-          厂商与模型管理
+          厂商管理
         </Typography>
         <Typography variant="body1" color="text.secondary">
-          在此集中维护厂商凭证及其模型配置，所有改动即时生效。
+          统一管理各类模型服务厂商及其模型配置，支持快速启用、停用与同步更新。
         </Typography>
       </Box>
 
-      {(error || message) && (
-        <Stack spacing={2}>
-          {error && (
-            <Alert severity="error" onClose={() => setError(null)}>
-              {error}
-            </Alert>
-          )}
-          {message && (
-            <Alert severity="success" onClose={() => setMessage(null)}>
-              {message}
-            </Alert>
-          )}
+      <Paper sx={{ p: 4, display: "flex", flexDirection: "column", gap: 3 }}>
+        <Stack
+          direction={{ xs: "column", sm: "row" }}
+          spacing={2}
+          justifyContent="space-between"
+          alignItems={{ xs: "stretch", sm: "center" }}
+        >
+          <Box>
+            <Typography variant="h6" sx={{ fontWeight: 600 }}>
+              厂商列表
+            </Typography>
+            <Typography variant="body2" color="text.secondary">
+              支持按行操作模型管理、编辑、停用和删除。
+            </Typography>
+          </Box>
+          <Stack direction="row" spacing={1}>
+            <Button
+              variant="outlined"
+              onClick={handleRefresh}
+              disabled={loading || busy}
+            >
+              刷新
+            </Button>
+            <Button
+              variant="contained"
+              startIcon={<AddRoundedIcon />}
+              onClick={openCreateProviderDialog}
+              disabled={busy}
+            >
+              新增厂商
+            </Button>
+          </Stack>
         </Stack>
-      )}
 
-      <Paper
-        component="form"
-        onSubmit={handleCreateProvider}
-        sx={{ p: 4, display: "flex", flexDirection: "column", gap: 3 }}
+        {(error || message) && (
+          <Stack spacing={2}>
+            {error && <Alert severity="error">{error}</Alert>}
+            {message && <Alert severity="success">{message}</Alert>}
+          </Stack>
+        )}
+
+        {loading ? (
+          <Box
+            sx={{
+              display: "flex",
+              justifyContent: "center",
+              alignItems: "center",
+              py: 6,
+            }}
+          >
+            <CircularProgress />
+          </Box>
+        ) : providers.length > 0 ? (
+          <Box sx={{ overflowX: "auto" }}>
+            <Table>
+              <TableHead>
+                <TableRow>
+                  <TableCell>厂商</TableCell>
+                  <TableCell>驱动</TableCell>
+                  <TableCell>状态</TableCell>
+                  <TableCell>模型数量</TableCell>
+                  <TableCell>描述</TableCell>
+                  <TableCell align="right">操作</TableCell>
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {providers.map((provider) => (
+                  <TableRow key={provider.id} hover>
+                    <TableCell>
+                      <Stack spacing={0.5}>
+                        <Typography
+                          variant="subtitle1"
+                          sx={{ fontWeight: 600 }}
+                        >
+                          {provider.name}
+                        </Typography>
+                        <Typography variant="body2" color="text.secondary">
+                          {provider.id}
+                        </Typography>
+                      </Stack>
+                    </TableCell>
+                    <TableCell>{provider.driver}</TableCell>
+                    <TableCell>
+                      <Chip
+                        size="small"
+                        color={provider.is_active ? "success" : "default"}
+                        label={provider.is_active ? "启用" : "停用"}
+                      />
+                    </TableCell>
+                    <TableCell>{provider.models?.length ?? 0}</TableCell>
+                    <TableCell sx={{ maxWidth: 240 }}>
+                      <Typography
+                        variant="body2"
+                        color="text.secondary"
+                        noWrap
+                      >
+                        {provider.description || "—"}
+                      </Typography>
+                    </TableCell>
+                    <TableCell align="right">
+                      <Stack
+                        direction="row"
+                        spacing={1}
+                        justifyContent="flex-end"
+                      >
+                        <Button
+                          variant="outlined"
+                          size="small"
+                          onClick={() => openModelManager(provider)}
+                          disabled={busy}
+                        >
+                          模型管理
+                        </Button>
+                        <Button
+                          variant="outlined"
+                          size="small"
+                          onClick={() => openEditProviderDialog(provider)}
+                          disabled={busy}
+                        >
+                          编辑
+                        </Button>
+                        <Button
+                          variant="text"
+                          size="small"
+                          onClick={() =>
+                            void handleToggleProviderActive(provider)
+                          }
+                          disabled={busy}
+                        >
+                          {provider.is_active ? "停用" : "启用"}
+                        </Button>
+                        <Button
+                          variant="text"
+                          size="small"
+                          color="error"
+                          startIcon={<DeleteForeverRoundedIcon fontSize="small" />}
+                          onClick={() => void handleDeleteProvider(provider)}
+                          disabled={busy}
+                        >
+                          删除
+                        </Button>
+                      </Stack>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </Box>
+        ) : (
+          <Box
+            sx={{
+              display: "flex",
+              justifyContent: "center",
+              alignItems: "center",
+              py: 6,
+            }}
+          >
+            <Typography variant="body2" color="text.secondary">
+              尚未配置任何厂商，请点击“新增厂商”完成首个配置。
+            </Typography>
+          </Box>
+        )}
+      </Paper>
+
+      <Dialog
+        open={providerDialogOpen}
+        onClose={closeProviderDialog}
+        fullWidth
+        maxWidth="md"
       >
-        <Box>
-          <Typography variant="h6" sx={{ fontWeight: 600 }}>
-            创建新厂商
-          </Typography>
-          <Typography variant="body2" color="text.secondary">
-            厂商 ID 将用于调用接口及记录追踪，建议使用全小写英文字母。
-          </Typography>
-        </Box>
-        <Grid container spacing={3}>
-          <Grid size={{ xs: 12, md: 4 }}>
-            <TextField
-              label="厂商 ID"
-              value={newProvider.id}
-              required
-              onChange={(event) =>
-                setNewProvider((prev) => ({
-                  ...prev,
-                  id: event.target.value,
-                }))
-              }
-              fullWidth
-            />
-          </Grid>
-          <Grid size={{ xs: 12, md: 4 }}>
+        <DialogTitle>
+          {providerDialogMode === "create"
+            ? "新增厂商"
+            : `编辑厂商：${editingProvider?.name ?? ""}`}
+        </DialogTitle>
+        <Box component="form" onSubmit={handleSubmitProvider}>
+          <DialogContent sx={{ display: "flex", flexDirection: "column", gap: 2 }}>
+            {providerDialogError && (
+              <Alert severity="error">{providerDialogError}</Alert>
+            )}
+            {providerDialogMode === "create" && (
+              <TextField
+                label="厂商 ID"
+                value={providerForm.id}
+                onChange={(event) =>
+                  setProviderForm((prev) => ({
+                    ...prev,
+                    id: event.target.value,
+                  }))
+                }
+                required
+                helperText="需要与后端持久化配置一致，建议使用小写字母与连字符"
+              />
+            )}
             <TextField
               label="显示名称"
-              value={newProvider.name}
-              required
+              value={providerForm.name}
               onChange={(event) =>
-                setNewProvider((prev) => ({
+                setProviderForm((prev) => ({
                   ...prev,
                   name: event.target.value,
                 }))
               }
-              fullWidth
+              required
             />
-          </Grid>
-          <Grid size={{ xs: 12, md: 4 }}>
             <TextField
               label="驱动类型"
-              value={newProvider.driver}
-              required
-              helperText="例如 openrouter / dashscope / fal"
+              value={providerForm.driver}
               onChange={(event) =>
-                setNewProvider((prev) => ({
+                setProviderForm((prev) => ({
                   ...prev,
                   driver: event.target.value,
                 }))
               }
-              fullWidth
+              required
+              helperText="例如 openrouter / dashscope / fal"
             />
-          </Grid>
-          <Grid size={{ xs: 12, md: 6 }}>
             <TextField
               label="API 基础地址"
-              value={newProvider.base_url}
+              value={providerForm.base_url}
               onChange={(event) =>
-                setNewProvider((prev) => ({
+                setProviderForm((prev) => ({
                   ...prev,
                   base_url: event.target.value,
                 }))
               }
               placeholder="可选，留空使用默认地址"
-              fullWidth
             />
-          </Grid>
-          <Grid size={{ xs: 12, md: 6 }}>
-            <TextField
-              label="API 密钥"
-              value={newProvider.api_key}
-              onChange={(event) =>
-                setNewProvider((prev) => ({
-                  ...prev,
-                  api_key: event.target.value,
-                }))
-              }
-              placeholder="输入后立即生效"
-              fullWidth
-            />
-          </Grid>
-          <Grid size={{ xs: 12 }}>
             <TextField
               label="描述"
-              value={newProvider.description}
+              value={providerForm.description}
               onChange={(event) =>
-                setNewProvider((prev) => ({
+                setProviderForm((prev) => ({
                   ...prev,
                   description: event.target.value,
                 }))
               }
               multiline
               minRows={2}
-              fullWidth
             />
-          </Grid>
-          <Grid size={{ xs: 12 }}>
+            <TextField
+              label="API 密钥"
+              value={providerForm.api_key}
+              onChange={(event) =>
+                setProviderForm((prev) => ({
+                  ...prev,
+                  api_key: event.target.value,
+                }))
+              }
+              placeholder={
+                providerDialogMode === "edit"
+                  ? "留空则保持不变"
+                  : "可选，输入后立即生效"
+              }
+            />
             <TextField
               label="附加配置 (JSON)"
-              value={newProvider.config_text}
+              value={providerForm.config_text}
               onChange={(event) =>
-                setNewProvider((prev) => ({
+                setProviderForm((prev) => ({
                   ...prev,
                   config_text: event.target.value,
                 }))
@@ -757,680 +998,334 @@ const ProviderManagementPage: React.FC = () => {
               placeholder='例如 {"endpoint": "..."}'
               multiline
               minRows={3}
-              fullWidth
             />
-          </Grid>
-        </Grid>
-        <Stack
-          direction="row"
-          spacing={2}
-          alignItems="center"
-          justifyContent="space-between"
-        >
-          <Stack direction="row" spacing={1} alignItems="center">
-            <Switch
-              checked={newProvider.is_active ?? true}
+            <FormControlLabel
+              control={
+                <Switch
+                  checked={providerForm.is_active}
+                  onChange={(event) =>
+                    setProviderForm((prev) => ({
+                      ...prev,
+                      is_active: event.target.checked,
+                    }))
+                  }
+                />
+              }
+              label={providerForm.is_active ? "启用状态" : "停用状态"}
+            />
+          </DialogContent>
+          <DialogActions sx={{ px: 3, pb: 3 }}>
+            {providerDialogMode === "edit" && (
+              <Button
+                color="warning"
+                onClick={handleClearProviderKey}
+                startIcon={<RestartAltRoundedIcon />}
+                disabled={busy}
+              >
+                清空密钥
+              </Button>
+            )}
+            <Box sx={{ flexGrow: 1 }} />
+            <Button onClick={closeProviderDialog} disabled={busy}>
+              取消
+            </Button>
+            <Button type="submit" variant="contained" disabled={busy}>
+              {busy
+                ? "提交中..."
+                : providerDialogMode === "create"
+                  ? "创建"
+                  : "保存"}
+            </Button>
+          </DialogActions>
+        </Box>
+      </Dialog>
+
+      <Dialog
+        open={modelDialogOpen}
+        onClose={closeModelDialog}
+        fullWidth
+        maxWidth="lg"
+      >
+        <DialogTitle>
+          模型管理
+          {modelManagerProvider ? `：${modelManagerProvider.name}` : ""}
+        </DialogTitle>
+        <DialogContent sx={{ display: "flex", flexDirection: "column", gap: 3 }}>
+          <Stack
+            direction={{ xs: "column", sm: "row" }}
+            spacing={2}
+            justifyContent="space-between"
+            alignItems={{ xs: "stretch", sm: "center" }}
+          >
+            <Box>
+              <Typography variant="subtitle1" sx={{ fontWeight: 600 }}>
+                已配置模型
+              </Typography>
+              <Typography variant="body2" color="text.secondary">
+                维护模型基础信息、开关状态及附加配置。
+              </Typography>
+            </Box>
+            <Stack direction="row" spacing={1}>
+              <Button
+                variant="outlined"
+                onClick={handleRefresh}
+                disabled={loading || busy}
+              >
+                刷新
+              </Button>
+              <Button
+                variant="contained"
+                startIcon={<AddRoundedIcon />}
+                onClick={openCreateModelForm}
+                disabled={!modelManagerProviderId || busy}
+              >
+                新增模型
+              </Button>
+            </Stack>
+          </Stack>
+
+          {(modelDialogError || modelDialogMessage) && (
+            <Stack spacing={2}>
+              {modelDialogError && (
+                <Alert severity="error">{modelDialogError}</Alert>
+              )}
+              {modelDialogMessage && (
+                <Alert severity="success">{modelDialogMessage}</Alert>
+              )}
+            </Stack>
+          )}
+
+          {modelManagerProvider && modelManagerProvider.models?.length ? (
+            <Box sx={{ overflowX: "auto" }}>
+              <Table>
+                <TableHead>
+                  <TableRow>
+                    <TableCell>模型 ID</TableCell>
+                    <TableCell>名称</TableCell>
+                    <TableCell>价格/描述</TableCell>
+                    <TableCell>状态</TableCell>
+                    <TableCell align="right">操作</TableCell>
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  {modelManagerProvider.models?.map((model) => (
+                    <TableRow key={model.model_id} hover>
+                      <TableCell>
+                        <Typography variant="body2" sx={{ fontWeight: 600 }}>
+                          {model.model_id}
+                        </Typography>
+                      </TableCell>
+                      <TableCell>{model.name}</TableCell>
+                      <TableCell>
+                        <Typography variant="body2" color="text.secondary">
+                          {model.price || model.description || "—"}
+                        </Typography>
+                      </TableCell>
+                      <TableCell>
+                        <Chip
+                          size="small"
+                          color={model.is_active ? "success" : "default"}
+                          label={model.is_active ? "启用" : "停用"}
+                        />
+                      </TableCell>
+                      <TableCell align="right">
+                        <Stack
+                          direction="row"
+                          spacing={1}
+                          justifyContent="flex-end"
+                        >
+                          <Button
+                            variant="outlined"
+                            size="small"
+                            onClick={() => openEditModelForm(model)}
+                            disabled={busy}
+                          >
+                            编辑
+                          </Button>
+                          <Button
+                            variant="text"
+                            size="small"
+                            onClick={() =>
+                              void handleToggleModelActive(model)
+                            }
+                            disabled={busy}
+                          >
+                            {model.is_active ? "停用" : "启用"}
+                          </Button>
+                          <Button
+                            variant="text"
+                            size="small"
+                            color="error"
+                            startIcon={
+                              <DeleteForeverRoundedIcon fontSize="small" />
+                            }
+                            onClick={() => void handleDeleteModel(model)}
+                            disabled={busy}
+                          >
+                            删除
+                          </Button>
+                        </Stack>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </Box>
+          ) : (
+            <Typography variant="body2" color="text.secondary">
+              暂无模型配置，可通过“新增模型”完成添加。
+            </Typography>
+          )}
+        </DialogContent>
+        <DialogActions sx={{ px: 3, pb: 3 }}>
+          <Button onClick={closeModelDialog} disabled={busy}>
+            关闭
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      <Dialog
+        open={modelFormOpen}
+        onClose={closeModelForm}
+        fullWidth
+        maxWidth="md"
+      >
+        <DialogTitle>
+          {modelFormMode === "create"
+            ? "新增模型"
+            : `编辑模型：${modelForm.model_id}`}
+        </DialogTitle>
+        <Box component="form" onSubmit={handleSubmitModelForm}>
+          <DialogContent sx={{ display: "flex", flexDirection: "column", gap: 2 }}>
+            {modelFormError && <Alert severity="error">{modelFormError}</Alert>}
+            {modelFormMode === "create" ? (
+              <TextField
+                label="模型 ID"
+                value={modelForm.model_id}
+                onChange={(event) =>
+                  setModelForm((prev) => ({
+                    ...prev,
+                    model_id: event.target.value,
+                  }))
+                }
+                required
+                helperText="需要与后端识别的模型标识一致"
+              />
+            ) : (
+              <TextField
+                label="模型 ID"
+                value={modelForm.model_id}
+                disabled
+              />
+            )}
+            <TextField
+              label="显示名称"
+              value={modelForm.name}
               onChange={(event) =>
-                setNewProvider((prev) => ({
+                setModelForm((prev) => ({
                   ...prev,
-                  is_active: event.target.checked,
+                  name: event.target.value,
+                }))
+              }
+              required
+            />
+            <TextField
+              label="价格 / 描述"
+              value={modelForm.price}
+              onChange={(event) =>
+                setModelForm((prev) => ({
+                  ...prev,
+                  price: event.target.value,
                 }))
               }
             />
-            <Typography variant="body2">
-              {newProvider.is_active ? "启用状态" : "停用状态"}
-            </Typography>
-          </Stack>
-          <Button
-            type="submit"
-            variant="contained"
-            disabled={busy}
-            sx={{ minWidth: 160 }}
-          >
-            创建厂商
-          </Button>
-        </Stack>
-      </Paper>
-
-      {loading ? (
-        <Box
-          sx={{
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            py: 8,
-          }}
-        >
-          <CircularProgress />
+            <TextField
+              label="模型描述"
+              value={modelForm.description}
+              onChange={(event) =>
+                setModelForm((prev) => ({
+                  ...prev,
+                  description: event.target.value,
+                }))
+              }
+              multiline
+              minRows={2}
+            />
+            <TextField
+              label="最大参考图数量"
+              value={modelForm.max_images}
+              onChange={(event) =>
+                setModelForm((prev) => ({
+                  ...prev,
+                  max_images: event.target.value,
+                }))
+              }
+              placeholder="可选，需为非负整数"
+            />
+            <TextField
+              label="支持模态（逗号分隔）"
+              value={modelForm.modalities}
+              onChange={(event) =>
+                setModelForm((prev) => ({
+                  ...prev,
+                  modalities: event.target.value,
+                }))
+              }
+              placeholder="例如 text, image"
+            />
+            <TextField
+              label="支持尺寸（逗号分隔）"
+              value={modelForm.supported_sizes}
+              onChange={(event) =>
+                setModelForm((prev) => ({
+                  ...prev,
+                  supported_sizes: event.target.value,
+                }))
+              }
+              placeholder="例如 1K, 2K, 4K"
+            />
+            <TextField
+              label="附加配置 (JSON)"
+              value={modelForm.settings}
+              onChange={(event) =>
+                setModelForm((prev) => ({
+                  ...prev,
+                  settings: event.target.value,
+                }))
+              }
+              placeholder='例如 {"endpoint": "/fal-ai/..."}'
+              multiline
+              minRows={3}
+            />
+            <FormControlLabel
+              control={
+                <Switch
+                  checked={modelForm.is_active}
+                  onChange={(event) =>
+                    setModelForm((prev) => ({
+                      ...prev,
+                      is_active: event.target.checked,
+                    }))
+                  }
+                />
+              }
+              label={modelForm.is_active ? "启用状态" : "停用状态"}
+            />
+          </DialogContent>
+          <DialogActions sx={{ px: 3, pb: 3 }}>
+            <Button onClick={closeModelForm} disabled={busy}>
+              取消
+            </Button>
+            <Button type="submit" variant="contained" disabled={busy}>
+              {busy
+                ? "提交中..."
+                : modelFormMode === "create"
+                  ? "创建"
+                  : "保存"}
+            </Button>
+          </DialogActions>
         </Box>
-      ) : providerHasData ? (
-        <Stack spacing={4}>
-          {providers.map((provider) => {
-            const form = providerForms[provider.id] ?? toProviderForm(provider);
-            const models = provider.models ?? [];
-            return (
-              <Paper key={provider.id} sx={{ p: { xs: 3, md: 4 } }}>
-                <Stack spacing={3}>
-                  <Box
-                    sx={{
-                      display: "flex",
-                      flexDirection: { xs: "column", md: "row" },
-                      alignItems: { xs: "flex-start", md: "center" },
-                      justifyContent: "space-between",
-                      gap: 2,
-                    }}
-                  >
-                    <Box>
-                      <Typography variant="h5" sx={{ fontWeight: 700 }}>
-                        {provider.name}
-                      </Typography>
-                      <Typography variant="body2" color="text.secondary">
-                        驱动：{provider.driver} / ID：{provider.id}
-                      </Typography>
-                    </Box>
-                    <Stack direction="row" spacing={1} alignItems="center">
-                      <Chip
-                        label={provider.is_active ? "已启用" : "已停用"}
-                        color={provider.is_active ? "success" : "default"}
-                      />
-                      <Chip
-                        label={provider.has_api_key ? "已配置密钥" : "未配置密钥"}
-                        color={provider.has_api_key ? "primary" : "default"}
-                      />
-                    </Stack>
-                  </Box>
-
-                  <Grid container spacing={3}>
-                    <Grid size={{ xs: 12, md: 6 }}>
-                      <Stack spacing={3}>
-                        <TextField
-                          label="显示名称"
-                          value={form.name}
-                          onChange={(event) =>
-                            handleProviderFieldChange(
-                              provider.id,
-                              "name",
-                              event.target.value,
-                            )
-                          }
-                          fullWidth
-                        />
-                        <TextField
-                          label="驱动类型"
-                          helperText="需与后端驱动名称一致"
-                          value={form.driver}
-                          onChange={(event) =>
-                            handleProviderFieldChange(
-                              provider.id,
-                              "driver",
-                              event.target.value,
-                            )
-                          }
-                          fullWidth
-                        />
-                        <TextField
-                          label="API 基础地址"
-                          value={form.base_url}
-                          onChange={(event) =>
-                            handleProviderFieldChange(
-                              provider.id,
-                              "base_url",
-                              event.target.value,
-                            )
-                          }
-                          placeholder="留空使用默认地址"
-                          fullWidth
-                        />
-                        <TextField
-                          label="描述"
-                          value={form.description}
-                          onChange={(event) =>
-                            handleProviderFieldChange(
-                              provider.id,
-                              "description",
-                              event.target.value,
-                            )
-                          }
-                          multiline
-                          minRows={2}
-                          fullWidth
-                        />
-                      </Stack>
-                    </Grid>
-                    <Grid size={{ xs: 12, md: 6 }}>
-                      <Stack spacing={3}>
-                        <TextField
-                          label="API 密钥"
-                          value={form.api_key}
-                          onChange={(event) =>
-                            handleProviderFieldChange(
-                              provider.id,
-                              "api_key",
-                              event.target.value,
-                            )
-                          }
-                          placeholder="输入新值以更新，留空不修改"
-                          fullWidth
-                        />
-                        <TextField
-                          label="附加配置 (JSON)"
-                          value={form.config}
-                          onChange={(event) =>
-                            handleProviderFieldChange(
-                              provider.id,
-                              "config",
-                              event.target.value,
-                            )
-                          }
-                          placeholder='例如 {"endpoint": "..."}'
-                          multiline
-                          minRows={4}
-                          fullWidth
-                        />
-                        <Stack direction="row" spacing={1} alignItems="center">
-                          <Switch
-                            checked={form.is_active}
-                            onChange={(event) =>
-                              handleProviderFieldChange(
-                                provider.id,
-                                "is_active",
-                                event.target.checked,
-                              )
-                            }
-                          />
-                          <Typography variant="body2">
-                            {form.is_active ? "启用状态" : "停用状态"}
-                          </Typography>
-                        </Stack>
-                      </Stack>
-                    </Grid>
-                  </Grid>
-
-                  <Stack
-                    direction={{ xs: "column", md: "row" }}
-                    spacing={2}
-                    justifyContent="flex-end"
-                  >
-                    <Button
-                      variant="contained"
-                      onClick={() => saveProviderChanges(provider.id)}
-                      disabled={busy}
-                    >
-                      保存修改
-                    </Button>
-                    <Button
-                      variant="outlined"
-                      color="warning"
-                      startIcon={<RestartAltRoundedIcon />}
-                      onClick={() => handleClearProviderKey(provider.id)}
-                      disabled={busy || !provider.has_api_key}
-                    >
-                      清空密钥
-                    </Button>
-                    <Button
-                      variant="outlined"
-                      color={provider.is_active ? "secondary" : "success"}
-                      onClick={() => handleToggleProviderActive(provider.id)}
-                      disabled={busy}
-                    >
-                      {provider.is_active ? "停用厂商" : "启用厂商"}
-                    </Button>
-                    <Button
-                      variant="outlined"
-                      color="error"
-                      startIcon={<DeleteForeverRoundedIcon />}
-                      onClick={() => handleDeleteProvider(provider.id)}
-                      disabled={busy}
-                    >
-                      删除厂商
-                    </Button>
-                  </Stack>
-
-                  <Divider />
-
-                  <Stack spacing={2}>
-                    <Typography variant="h6" sx={{ fontWeight: 600 }}>
-                      模型配置
-                    </Typography>
-                    {models.length === 0 ? (
-                      <Typography variant="body2" color="text.secondary">
-                        该厂商暂未配置模型，添加后即可在前端选择。
-                      </Typography>
-                    ) : (
-                      <Stack spacing={2}>
-                        {models.map((model) => {
-                          const modelForm =
-                            modelForms[provider.id]?.[model.model_id] ??
-                            toModelForm(model);
-                          return (
-                            <Card key={model.model_id} variant="outlined">
-                              <CardContent>
-                                <Stack spacing={2}>
-                                  <Box
-                                    sx={{
-                                      display: "flex",
-                                      flexDirection: {
-                                        xs: "column",
-                                        md: "row",
-                                      },
-                                      alignItems: {
-                                        xs: "flex-start",
-                                        md: "center",
-                                      },
-                                      justifyContent: "space-between",
-                                      gap: 1.5,
-                                    }}
-                                  >
-                                    <Typography
-                                      variant="subtitle1"
-                                      sx={{ fontWeight: 600 }}
-                                    >
-                                      {model.name}（{model.model_id}）
-                                    </Typography>
-                                    <Stack
-                                      direction="row"
-                                      spacing={1}
-                                      alignItems="center"
-                                    >
-                                      <Chip
-                                        label={
-                                          modelForm.is_active
-                                            ? "已启用"
-                                            : "已停用"
-                                        }
-                                        size="small"
-                                        color={
-                                          modelForm.is_active
-                                            ? "success"
-                                            : "default"
-                                        }
-                                      />
-                                      {model.price && (
-                                        <Chip
-                                          label={`价格: ${model.price}`}
-                                          size="small"
-                                          color="primary"
-                                          variant="outlined"
-                                        />
-                                      )}
-                                    </Stack>
-                                  </Box>
-
-                                  <Grid container spacing={2}>
-                                    <Grid size={{ xs: 12, md: 4 }}>
-                                      <TextField
-                                        label="显示名称"
-                                        value={modelForm.name}
-                                        onChange={(event) =>
-                                          handleModelFieldChange(
-                                            provider.id,
-                                            model.model_id,
-                                            "name",
-                                            event.target.value,
-                                          )
-                                        }
-                                        fullWidth
-                                      />
-                                    </Grid>
-                                    <Grid size={{ xs: 12, md: 4 }}>
-                                      <TextField
-                                        label="价格 / 描述"
-                                        value={modelForm.price}
-                                        onChange={(event) =>
-                                          handleModelFieldChange(
-                                            provider.id,
-                                            model.model_id,
-                                            "price",
-                                            event.target.value,
-                                          )
-                                        }
-                                        placeholder="可选，例如 $0.02"
-                                        fullWidth
-                                      />
-                                    </Grid>
-                                    <Grid size={{ xs: 12, md: 4 }}>
-                                      <TextField
-                                        label="最大参考图数量"
-                                        value={modelForm.max_images}
-                                        onChange={(event) =>
-                                          handleModelFieldChange(
-                                            provider.id,
-                                            model.model_id,
-                                            "max_images",
-                                            event.target.value,
-                                          )
-                                        }
-                                        placeholder="留空则不限"
-                                        fullWidth
-                                      />
-                                    </Grid>
-                                    <Grid size={{ xs: 12, md: 6 }}>
-                                      <TextField
-                                        label="支持模态（逗号分隔）"
-                                        value={modelForm.modalities}
-                                        onChange={(event) =>
-                                          handleModelFieldChange(
-                                            provider.id,
-                                            model.model_id,
-                                            "modalities",
-                                            event.target.value,
-                                          )
-                                        }
-                                        placeholder="例如 text, image"
-                                        fullWidth
-                                      />
-                                    </Grid>
-                                    <Grid size={{ xs: 12, md: 6 }}>
-                                      <TextField
-                                        label="支持尺寸（逗号分隔）"
-                                        value={modelForm.supported_sizes}
-                                        onChange={(event) =>
-                                          handleModelFieldChange(
-                                            provider.id,
-                                            model.model_id,
-                                            "supported_sizes",
-                                            event.target.value,
-                                          )
-                                        }
-                                        placeholder="例如 1K, 2K, 4K"
-                                        fullWidth
-                                      />
-                                    </Grid>
-                                    <Grid size={{ xs: 12 }}>
-                                      <TextField
-                                        label="描述"
-                                        value={modelForm.description}
-                                        onChange={(event) =>
-                                          handleModelFieldChange(
-                                            provider.id,
-                                            model.model_id,
-                                            "description",
-                                            event.target.value,
-                                          )
-                                        }
-                                        multiline
-                                        minRows={2}
-                                        fullWidth
-                                      />
-                                    </Grid>
-                                    <Grid size={{ xs: 12 }}>
-                                      <TextField
-                                        label="附加配置 (JSON)"
-                                        value={modelForm.settings}
-                                        onChange={(event) =>
-                                          handleModelFieldChange(
-                                            provider.id,
-                                            model.model_id,
-                                            "settings",
-                                            event.target.value,
-                                          )
-                                        }
-                                        placeholder='例如 {"endpoint": "/fal-ai/..."}'
-                                        multiline
-                                        minRows={3}
-                                        fullWidth
-                                      />
-                                    </Grid>
-                                  </Grid>
-
-                                  <Stack
-                                    direction={{ xs: "column", md: "row" }}
-                                    spacing={2}
-                                    justifyContent="flex-end"
-                                  >
-                                    <Button
-                                      variant="contained"
-                                      onClick={() =>
-                                        saveModelChanges(
-                                          provider.id,
-                                          model.model_id,
-                                        )
-                                      }
-                                      disabled={busy}
-                                    >
-                                      保存模型
-                                    </Button>
-                                    <Button
-                                      variant="outlined"
-                                      color={
-                                        modelForm.is_active
-                                          ? "secondary"
-                                          : "success"
-                                      }
-                                      onClick={() =>
-                                        handleToggleModelActive(
-                                          provider.id,
-                                          model.model_id,
-                                        )
-                                      }
-                                      disabled={busy}
-                                    >
-                                      {modelForm.is_active ? "停用模型" : "启用模型"}
-                                    </Button>
-                                    <Button
-                                      variant="outlined"
-                                      color="error"
-                                      startIcon={<DeleteForeverRoundedIcon />}
-                                      onClick={() =>
-                                        handleDeleteModel(
-                                          provider.id,
-                                          model.model_id,
-                                        )
-                                      }
-                                      disabled={busy}
-                                    >
-                                      删除模型
-                                    </Button>
-                                  </Stack>
-                                </Stack>
-                              </CardContent>
-                            </Card>
-                          );
-                        })}
-                      </Stack>
-                    )}
-
-                    <Card variant="outlined">
-                      <CardContent>
-                        <Stack
-                          component="form"
-                          spacing={2}
-                          onSubmit={(event) => {
-                            event.preventDefault();
-                            void handleCreateModel(provider.id);
-                          }}
-                        >
-                          <Typography
-                            variant="subtitle1"
-                            sx={{ fontWeight: 600 }}
-                          >
-                            新增模型
-                          </Typography>
-                          <Grid container spacing={2}>
-                            <Grid size={{ xs: 12, md: 4 }}>
-                              <TextField
-                                label="模型 ID"
-                                value={
-                                  newModelForms[provider.id]?.model_id ?? ""
-                                }
-                                onChange={(event) =>
-                                  handleNewModelFieldChange(
-                                    provider.id,
-                                    "model_id",
-                                    event.target.value,
-                                  )
-                                }
-                                placeholder="必须与后端模型标识一致"
-                                required
-                                fullWidth
-                              />
-                            </Grid>
-                            <Grid size={{ xs: 12, md: 4 }}>
-                              <TextField
-                                label="显示名称"
-                                value={newModelForms[provider.id]?.name ?? ""}
-                                onChange={(event) =>
-                                  handleNewModelFieldChange(
-                                    provider.id,
-                                    "name",
-                                    event.target.value,
-                                  )
-                                }
-                                required
-                                fullWidth
-                              />
-                            </Grid>
-                            <Grid size={{ xs: 12, md: 4 }}>
-                              <TextField
-                                label="价格 / 描述"
-                                value={newModelForms[provider.id]?.price ?? ""}
-                                onChange={(event) =>
-                                  handleNewModelFieldChange(
-                                    provider.id,
-                                    "price",
-                                    event.target.value,
-                                  )
-                                }
-                                fullWidth
-                              />
-                            </Grid>
-                            <Grid size={{ xs: 12, md: 6 }}>
-                              <TextField
-                                label="最大参考图数量"
-                                value={
-                                  newModelForms[provider.id]?.max_images ?? ""
-                                }
-                                onChange={(event) =>
-                                  handleNewModelFieldChange(
-                                    provider.id,
-                                    "max_images",
-                                    event.target.value,
-                                  )
-                                }
-                                placeholder="可选"
-                                fullWidth
-                              />
-                            </Grid>
-                            <Grid size={{ xs: 12, md: 6 }}>
-                              <TextField
-                                label="支持模态（逗号分隔）"
-                                value={
-                                  newModelForms[provider.id]?.modalities ?? ""
-                                }
-                                onChange={(event) =>
-                                  handleNewModelFieldChange(
-                                    provider.id,
-                                    "modalities",
-                                    event.target.value,
-                                  )
-                                }
-                                placeholder="例如 text, image"
-                                fullWidth
-                              />
-                            </Grid>
-                            <Grid size={{ xs: 12 }}>
-                              <TextField
-                                label="支持尺寸（逗号分隔）"
-                                value={
-                                  newModelForms[provider.id]
-                                    ?.supported_sizes ?? ""
-                                }
-                                onChange={(event) =>
-                                  handleNewModelFieldChange(
-                                    provider.id,
-                                    "supported_sizes",
-                                    event.target.value,
-                                  )
-                                }
-                                placeholder="例如 1K, 2K, 4K"
-                                fullWidth
-                              />
-                            </Grid>
-                            <Grid size={{ xs: 12 }}>
-                              <TextField
-                                label="模型描述"
-                                value={
-                                  newModelForms[provider.id]?.description ?? ""
-                                }
-                                onChange={(event) =>
-                                  handleNewModelFieldChange(
-                                    provider.id,
-                                    "description",
-                                    event.target.value,
-                                  )
-                                }
-                                multiline
-                                minRows={2}
-                                fullWidth
-                              />
-                            </Grid>
-                            <Grid size={{ xs: 12 }}>
-                              <TextField
-                                label="附加配置 (JSON)"
-                                value={newModelForms[provider.id]?.settings ?? ""}
-                                onChange={(event) =>
-                                  handleNewModelFieldChange(
-                                    provider.id,
-                                    "settings",
-                                    event.target.value,
-                                  )
-                                }
-                                placeholder='例如 {"endpoint": "/fal-ai/..."}'
-                                multiline
-                                minRows={3}
-                                fullWidth
-                              />
-                            </Grid>
-                          </Grid>
-                          <Stack
-                            direction="row"
-                            spacing={1}
-                            alignItems="center"
-                          >
-                            <Switch
-                              checked={
-                                newModelForms[provider.id]?.is_active ?? true
-                              }
-                              onChange={(event) =>
-                                handleNewModelFieldChange(
-                                  provider.id,
-                                  "is_active",
-                                  event.target.checked,
-                                )
-                              }
-                            />
-                            <Typography variant="body2">
-                              {newModelForms[provider.id]?.is_active ?? true
-                                ? "启用状态"
-                                : "停用状态"}
-                            </Typography>
-                          </Stack>
-                          <Button
-                            type="submit"
-                            variant="contained"
-                            disabled={busy}
-                            sx={{ alignSelf: "flex-end" }}
-                          >
-                            添加模型
-                          </Button>
-                        </Stack>
-                      </CardContent>
-                    </Card>
-                  </Stack>
-                </Stack>
-              </Paper>
-            );
-          })}
-        </Stack>
-      ) : (
-        <Card>
-          <CardContent>
-            <Typography variant="body1" color="text.secondary">
-              尚未配置任何厂商，请使用上方表单创建新厂商。
-            </Typography>
-          </CardContent>
-        </Card>
-      )}
+      </Dialog>
     </Box>
   );
 };
