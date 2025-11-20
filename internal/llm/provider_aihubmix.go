@@ -47,13 +47,15 @@ func NewAiHubMix(provider *entity.DbProvider, models []entity.DbModel) (*AiHubMi
 	}
 
 	baseURL := strings.TrimSpace(provider.BaseURL)
-	endpoint := baseURL
+	endpoint := strings.TrimRight(baseURL, "/")
 	if strings.Contains(strings.ToLower(baseURL), "gemini") {
 		// Prevent Gemini-specific base URL from polluting the OpenAI-compatible path.
 		endpoint = ""
 	}
 	if endpoint == "" {
 		endpoint = "https://aihubmix.com/v1/chat/completions"
+	} else if !strings.Contains(strings.ToLower(endpoint), "chat/completions") {
+		endpoint = endpoint + "/chat/completions"
 	}
 
 	// geminiEndpoint can come from config.gemini_base_url or fall back to a Gemini-looking base_url.
@@ -103,6 +105,7 @@ func (o *AiHubMix) GenerateImages(ctx context.Context, request entity.GenerateIm
 	logrus.WithFields(logrus.Fields{
 		"prompt_preview":      request.Prompt,
 		"reference_image_cnt": len(request.Images),
+		"reference_video_cnt": len(request.Videos),
 		"size":                strings.TrimSpace(request.Size),
 	}).Info("llm_generate_images_start")
 
@@ -110,5 +113,5 @@ func (o *AiHubMix) GenerateImages(ctx context.Context, request entity.GenerateIm
 		return GenerateImagesByGeminiProtocol(ctx, o.apiKey, o.geminiEndpoint, request.Model, request.Prompt, request.Images)
 	}
 
-	return GenerateImagesByOpenaiProtocol(ctx, o.apiKey, o.endpoint, request.Model, request.Prompt, request.Images)
+	return GenerateImagesByOpenaiProtocol(ctx, o.apiKey, o.endpoint, request.Model, request.Prompt, request.Images, request.Videos)
 }

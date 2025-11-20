@@ -155,6 +155,14 @@ func buildDefaultProviderSeeds(cfg config.Config) []providerSeed {
 					IsActive: true,
 				},
 				{
+					ModelID:     "qwen3-vl-235b-a22b-instruct",
+					Name:        "Qwen3-VL-235B-A22B Instruct",
+					Description: "视频/图像理解多模态模型",
+					Price:       "<UNK>",
+					Modalities:  entity.StringArray{"text", "image", "video"},
+					IsActive:    true,
+				},
+				{
 					ModelID:  "gemini-2.5-flash-image-preview",
 					Name:     "Gemini 2.5 Flash Image Preview",
 					Price:    "0.03/IMG",

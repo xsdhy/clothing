@@ -94,7 +94,9 @@ func (d *Dashscope) GenerateImages(ctx context.Context, request entity.GenerateI
 
 		"prompt_preview":      request.Prompt,
 		"reference_image_cnt": len(request.Images),
+		"reference_video_cnt": len(request.Videos),
 		"size":                strings.TrimSpace(request.Size),
+		"duration":            request.Duration,
 	}).Info("llm_generate_images_start")
 
 	if !d.SupportsModel(request.Model) {
@@ -103,5 +105,5 @@ func (d *Dashscope) GenerateImages(ctx context.Context, request entity.GenerateI
 		return nil, "", err
 	}
 
-	return GenerateImagesByDashscopeProtocol(ctx, d.apiKey, d.endpoint, request.Model, request.Prompt, request.Images)
+	return GenerateImagesByDashscopeProtocol(ctx, d.apiKey, d.endpoint, request.Model, request.Prompt, request.Size, request.Duration, request.Images, request.Videos)
 }

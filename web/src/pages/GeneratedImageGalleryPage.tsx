@@ -8,6 +8,7 @@ import { deleteUsageRecord, fetchUsageRecords } from '../ai';
 import type { UsageRecord } from '../types';
 import ImageViewer, { type ImageViewerItem } from '../components/ImageViewer';
 import UsageRecordDetailDialog from '../components/UsageRecordDetailDialog';
+import { buildDownloadName, isVideoUrl } from '../utils/media';
 
 const PAGE_SIZE = 20;
 
@@ -15,6 +16,7 @@ interface GalleryItem {
   recordId: number;
   imageIndex: number;
   url: string;
+  isVideo: boolean;
   prompt: string;
   createdAt: string;
   providerId: string;
@@ -56,6 +58,7 @@ const GeneratedImageGalleryPage: React.FC = () => {
           recordId: record.id,
           imageIndex: index,
           url: image.url,
+          isVideo: isVideoUrl(image.url),
           prompt: record.prompt,
           createdAt: record.created_at,
           providerId: record.provider_id,
@@ -71,8 +74,13 @@ const GeneratedImageGalleryPage: React.FC = () => {
       galleryItems.map((item) => ({
         src: item.url,
         key: `${item.recordId}-${item.imageIndex}-${item.url}`,
-        title: `记录 #${item.recordId} 第 ${item.imageIndex + 1} 张`,
-        downloadName: `record-${item.recordId}-image-${item.imageIndex + 1}.png`,
+        title: `记录 #${item.recordId} 第 ${item.imageIndex + 1} 个媒体`,
+        type: item.isVideo ? 'video' : 'image',
+        downloadName: buildDownloadName(
+          item.url,
+          `record-${item.recordId}-media-${item.imageIndex + 1}`,
+          item.isVideo ? '.mp4' : '.png',
+        ),
       })),
     [galleryItems]
   );
@@ -362,10 +370,10 @@ const GeneratedImageGalleryPage: React.FC = () => {
         <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2} alignItems={{ xs: 'flex-start', sm: 'center' }} justifyContent="space-between" sx={{ mb: 4 }}>
           <Box>
             <Typography variant="h4" gutterBottom>
-              生成图片库
+              生成媒体库
             </Typography>
             <Typography variant="body2" color="text.secondary">
-              浏览所有生成的图片，支持瀑布流查看、放大预览、下拉加载与关联记录操作。
+              浏览所有生成的图片/视频，支持瀑布流查看、放大预览、下拉加载与关联记录操作。
             </Typography>
           </Box>
           <Button variant="contained" color="primary" startIcon={<RefreshIcon />} onClick={handleRefresh} disabled={initialLoading}>
@@ -399,34 +407,55 @@ const GeneratedImageGalleryPage: React.FC = () => {
               columnGap: 2,
             }}
           >
-            {galleryItems.map((item, index) => (
-              <Box key={`${item.recordId}-${item.imageIndex}-${item.url}`} sx={{ breakInside: 'avoid', mb: 2 }}>
-                <Card elevation={1} sx={{ overflow: 'hidden' }}>
-                  <ButtonBase
-                    onClick={() => handleOpenViewer(index)}
-                    sx={{
-                      display: 'block',
-                      width: '100%',
-                      '& img': {
-                        transition: 'transform 0.3s ease',
-                      },
-                      '&:hover img': {
-                        transform: 'scale(1.02)',
-                      },
-                    }}
-                  >
-                    <Box component="img" src={item.url} alt={item.prompt || `记录 ${item.recordId} 生成图片`}
-                      sx={{ width: '100%', display: 'block' }}
-                    />
-                  </ButtonBase>
- 
-                  <CardActions sx={{ justifyContent: 'space-between', flexWrap: 'wrap' }}>
-                    <Button size="small" startIcon={<InfoOutlinedIcon fontSize="small" />} onClick={() => handleOpenDetails(item.recordId, item.imageIndex)}>
-                    </Button>
-                  </CardActions>
-                </Card>
-              </Box>
-            ))}
+            {galleryItems.map((item, index) => {
+              const mediaComponent = item.isVideo ? 'video' : 'img';
+              return (
+                <Box key={`${item.recordId}-${item.imageIndex}-${item.url}`} sx={{ breakInside: 'avoid', mb: 2 }}>
+                  <Card elevation={1} sx={{ overflow: 'hidden' }}>
+                    <ButtonBase
+                      onClick={() => handleOpenViewer(index)}
+                      sx={{
+                        display: 'block',
+                        width: '100%',
+                        '& img, & video': {
+                          transition: 'transform 0.3s ease',
+                        },
+                        '&:hover img, &:hover video': {
+                          transform: 'scale(1.02)',
+                        },
+                      }}
+                    >
+                      <Box
+                        component={mediaComponent}
+                        src={item.url}
+                        alt={item.prompt || `记录 ${item.recordId} 生成媒体`}
+                        sx={{
+                          width: '100%',
+                          display: 'block',
+                          backgroundColor: 'black',
+                          maxHeight: 560,
+                          objectFit: 'cover',
+                        }}
+                        {...(item.isVideo
+                          ? { controls: true, muted: true, playsInline: true }
+                          : {})}
+                      />
+                    </ButtonBase>
+
+                    <CardActions sx={{ justifyContent: 'space-between', flexWrap: 'wrap' }}>
+                      <Button
+                        size="small"
+                        startIcon={<InfoOutlinedIcon fontSize="small" />}
+                        onClick={() => handleOpenDetails(item.recordId, item.imageIndex)}
+                        aria-label={`查看记录 ${item.recordId}`}
+                      >
+                        查看记录
+                      </Button>
+                    </CardActions>
+                  </Card>
+                </Box>
+              );
+            })}
           </Box>
         )}
 
@@ -457,7 +486,7 @@ const GeneratedImageGalleryPage: React.FC = () => {
 
         {!hasMore && galleryItems.length > 0 && (
           <Typography variant="caption" color="text.secondary" sx={{ display: 'block', textAlign: 'center', py: 2 }}>
-            已加载全部 {metaTotal} 张生成图片
+            已加载全部 {metaTotal} 条生成媒体
           </Typography>
         )}
 

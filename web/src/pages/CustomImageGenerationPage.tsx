@@ -9,7 +9,6 @@ import {
   Alert,
   CircularProgress,
   Card,
-  CardMedia,
   Chip,
   FormControl,
   InputLabel,
@@ -33,10 +32,37 @@ import type {
 import { generateImage, fetchProviders } from "../ai";
 import ImageUpload from "../components/ImageUpload";
 import ImageViewer from "../components/ImageViewer";
+import { buildDownloadName, isVideoUrl } from "../utils/media";
 
-function downloadImage(
+const VIDEO_PRESETS: Record<
+  string,
+  { resolutions: string[]; durations: number[] }
+> = {
+  "wan2.5-i2v-preview": {
+    resolutions: ["480P", "720P", "1080P"],
+    durations: [5, 10],
+  },
+  "wan2.2-i2v-plus": {
+    resolutions: ["480P", "1080P"],
+    durations: [5],
+  },
+  "wan2.2-i2v-flash": {
+    resolutions: ["480P", "720P", "1080P"],
+    durations: [5],
+  },
+  "wanx2.1-i2v-turbo": {
+    resolutions: ["480P", "720P"],
+    durations: [3, 4, 5],
+  },
+  "wanx2.1-i2v-plus": {
+    resolutions: ["720P"],
+    durations: [5],
+  },
+};
+
+function downloadMedia(
   dataUrl: string,
-  filename: string = "generated-image.png",
+  filename: string = "generated-media",
 ): void {
   try {
     const link = document.createElement("a");
@@ -96,16 +122,49 @@ const ImageGenerator: React.FC<ImageGeneratorProps> = ({
   );
   const [selectedModel, setSelectedModel] = useState<AIModel | null>(null);
   const [selectedSize, setSelectedSize] = useState<string>("");
+  const [selectedDuration, setSelectedDuration] = useState<number | "">("");
   const [resultViewerOpen, setResultViewerOpen] = useState(false);
   const [resultViewerIndex, setResultViewerIndex] = useState(0);
   const [selectionInitialized, setSelectionInitialized] = useState(false);
+
+  const resolutionOptions = React.useMemo(() => {
+    if (!selectedModel) {
+      return [] as string[];
+    }
+    if (selectedModel.inputs?.supported_sizes?.length) {
+      return selectedModel.inputs.supported_sizes;
+    }
+    const preset = VIDEO_PRESETS[selectedModel.id];
+    return preset?.resolutions ?? [];
+  }, [selectedModel]);
+
+  const durationOptions = React.useMemo(() => {
+    if (!selectedModel) {
+      return [] as number[];
+    }
+    if (selectedModel.inputs?.supported_durations?.length) {
+      return selectedModel.inputs.supported_durations;
+    }
+    const preset = VIDEO_PRESETS[selectedModel.id];
+    return preset?.durations ?? [];
+  }, [selectedModel]);
+
+  const isVideoModel = React.useMemo(() => {
+    const id = selectedModel?.id?.toLowerCase() ?? "";
+    const modalities =
+      selectedModel?.inputs?.modalities?.map((m) => m.toLowerCase()) ?? [];
+    if (modalities.includes("video")) {
+      return true;
+    }
+    return id.includes("i2v") || id.includes("video");
+  }, [selectedModel]);
 
   useEffect(() => {
     setSelectionInitialized(false);
   }, [selectionKey]);
 
   useEffect(() => {
-    const sizes = selectedModel?.inputs?.supported_sizes ?? [];
+    const sizes = resolutionOptions;
     if (sizes.length === 0) {
       setSelectedSize("");
       return;
@@ -113,7 +172,20 @@ const ImageGenerator: React.FC<ImageGeneratorProps> = ({
     setSelectedSize((current) =>
       sizes.includes(current) ? current : sizes[0],
     );
-  }, [selectedModel]);
+  }, [resolutionOptions, selectedModel]);
+
+  useEffect(() => {
+    const durations = durationOptions;
+    if (durations.length === 0) {
+      setSelectedDuration("");
+      return;
+    }
+    setSelectedDuration((current) =>
+      typeof current === "number" && durations.includes(current)
+        ? current
+        : durations[0],
+    );
+  }, [durationOptions]);
 
   useEffect(() => {
     let cancelled = false;
@@ -180,17 +252,33 @@ const ImageGenerator: React.FC<ImageGeneratorProps> = ({
     setSelectedModel(model);
 
     let size = "";
-    if (
-      model?.inputs?.supported_sizes &&
-      model.inputs.supported_sizes.length > 0
-    ) {
-      size = model.inputs.supported_sizes[0];
-      if (initialSize && model.inputs.supported_sizes.includes(initialSize)) {
+    const sizeOptions =
+      model?.inputs?.supported_sizes?.length && model.inputs.supported_sizes
+        ? model.inputs.supported_sizes
+        : model
+          ? VIDEO_PRESETS[model.id]?.resolutions ?? []
+          : [];
+    if (sizeOptions.length > 0) {
+      size = sizeOptions[0];
+      if (initialSize && sizeOptions.includes(initialSize)) {
         size = initialSize;
       }
     }
 
+    let duration: number | "" = "";
+    const durationOptionsInit =
+      model?.inputs?.supported_durations?.length &&
+      model.inputs.supported_durations
+        ? model.inputs.supported_durations
+        : model
+          ? VIDEO_PRESETS[model.id]?.durations ?? []
+          : [];
+    if (durationOptionsInit.length > 0) {
+      duration = durationOptionsInit[0];
+    }
+
     setSelectedSize(size);
+    setSelectedDuration(duration);
     setSelectionInitialized(true);
   }, [
     providers,
@@ -220,9 +308,14 @@ const ImageGenerator: React.FC<ImageGeneratorProps> = ({
         images,
         provider: selectedProvider,
         model: selectedModel.id,
-        size: selectedModel.inputs?.supported_sizes?.length
-          ? selectedSize
-          : undefined,
+        size:
+          resolutionOptions.length > 0 && selectedSize
+            ? selectedSize
+            : undefined,
+        duration:
+          typeof selectedDuration === "number" && selectedDuration > 0
+            ? selectedDuration
+            : undefined,
       };
 
       const result = await generateImage(request);
@@ -245,13 +338,23 @@ const ImageGenerator: React.FC<ImageGeneratorProps> = ({
   const handleDownload = (index: number) => {
     const image = lastGeneratedImages[index];
     if (image) {
-      downloadImage(image, `generated-image-${index + 1}.png`);
+      const filename = buildDownloadName(
+        image,
+        `generated-media-${index + 1}`,
+        isVideoUrl(image) ? ".mp4" : ".png",
+      );
+      downloadMedia(image, filename);
     }
   };
 
   const handleDownloadAll = () => {
     lastGeneratedImages.forEach((image, index) => {
-      downloadImage(image, `generated-image-${index + 1}.png`);
+      const filename = buildDownloadName(
+        image,
+        `generated-media-${index + 1}`,
+        isVideoUrl(image) ? ".mp4" : ".png",
+      );
+      downloadMedia(image, filename);
     });
   };
 
@@ -446,24 +549,44 @@ const ImageGenerator: React.FC<ImageGeneratorProps> = ({
               </Select>
             </FormControl>
 
-            {selectedModel?.inputs?.supported_sizes &&
-              selectedModel.inputs.supported_sizes.length > 0 && (
-                <FormControl fullWidth size="small">
-                  <InputLabel>图片尺寸</InputLabel>
-                  <Select
-                    value={selectedSize}
-                    label="图片尺寸"
-                    disabled={isGenerating}
-                    onChange={(e) => setSelectedSize(e.target.value)}
-                  >
-                    {selectedModel.inputs.supported_sizes.map((sizeOption) => (
-                      <MenuItem key={sizeOption} value={sizeOption}>
-                        {sizeOption}
-                      </MenuItem>
-                    ))}
-                  </Select>
-                </FormControl>
-              )}
+            {resolutionOptions.length > 0 && (
+              <FormControl fullWidth size="small">
+                <InputLabel>{isVideoModel ? "分辨率" : "图片尺寸"}</InputLabel>
+                <Select
+                  value={selectedSize}
+                  label={isVideoModel ? "分辨率" : "图片尺寸"}
+                  disabled={isGenerating}
+                  onChange={(e) => setSelectedSize(e.target.value)}
+                >
+                  {resolutionOptions.map((sizeOption) => (
+                    <MenuItem key={sizeOption} value={sizeOption}>
+                      {sizeOption}
+                    </MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+            )}
+
+            {durationOptions.length > 0 && (
+              <FormControl fullWidth size="small">
+                <InputLabel>视频时长</InputLabel>
+                <Select
+                  value={selectedDuration === "" ? "" : selectedDuration}
+                  label="视频时长"
+                  disabled={isGenerating}
+                  onChange={(e) => {
+                    const value = Number(e.target.value);
+                    setSelectedDuration(Number.isFinite(value) ? value : "");
+                  }}
+                >
+                  {durationOptions.map((option) => (
+                    <MenuItem key={option} value={option}>
+                      {option} 秒
+                    </MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+            )}
           </Box>
 
           {providerError && (
@@ -592,45 +715,57 @@ const ImageGenerator: React.FC<ImageGeneratorProps> = ({
               pb: { xs: 1.5, sm: 2 },
             }}
           >
-            {lastGeneratedImages.map((image, index) => (
-              <Box
-                key={image + index}
-                sx={{
-                  display: "flex",
-                  flexDirection: "column",
-                  gap: 1,
-                }}
-              >
-                <CardMedia
-                  component="img"
-                  image={image}
-                  alt={`AI生成的图片 ${index + 1}`}
-                  onClick={() => handleOpenResultViewer(index)}
+            {lastGeneratedImages.map((image, index) => {
+              const isVideo = isVideoUrl(image);
+              const mediaComponent = isVideo ? "video" : "img";
+              return (
+                <Box
+                  key={image + index}
                   sx={{
-                    width: "100%",
-                    maxHeight: 420,
-                    objectFit: "cover",
-                    bgcolor: "grey.100",
-                    cursor: "pointer",
-                    borderRadius: 2,
-                    transition: "all 0.2s",
-                    "&:hover": {
-                      filter: "brightness(1.05)",
-                      transform: "scale(1.01)",
-                    },
+                    display: "flex",
+                    flexDirection: "column",
+                    gap: 1,
                   }}
-                />
-                <Button
-                  variant="outlined"
-                  size="small"
-                  startIcon={<Download />}
-                  onClick={() => handleDownload(index)}
-                  sx={{ alignSelf: "flex-end" }}
                 >
-                  下载第 {index + 1} 张
-                </Button>
-              </Box>
-            ))}
+                  <Box
+                    component={mediaComponent}
+                    src={image}
+                    alt={`AI生成的媒体 ${index + 1}`}
+                    onClick={() => handleOpenResultViewer(index)}
+                    sx={{
+                      width: "100%",
+                      maxHeight: 420,
+                      objectFit: "cover",
+                      bgcolor: "grey.100",
+                      cursor: "pointer",
+                      borderRadius: 2,
+                      transition: "all 0.2s",
+                      display: "block",
+                      "&:hover": {
+                        filter: "brightness(1.05)",
+                        transform: "scale(1.01)",
+                      },
+                    }}
+                    {...(isVideo
+                      ? {
+                          controls: true,
+                          muted: true,
+                          playsInline: true,
+                        }
+                      : {})}
+                  />
+                  <Button
+                    variant="outlined"
+                    size="small"
+                    startIcon={<Download />}
+                    onClick={() => handleDownload(index)}
+                    sx={{ alignSelf: "flex-end" }}
+                  >
+                    下载第 {index + 1} {isVideo ? "个视频" : "张图片"}
+                  </Button>
+                </Box>
+              );
+            })}
           </Box>
         </Card>
       )}

@@ -22,6 +22,7 @@ import DeleteOutlineIcon from "@mui/icons-material/DeleteOutline";
 
 import { fetchUsageRecordDetail } from "../ai";
 import type { UsageRecord } from "../types";
+import { isVideoUrl } from "../utils/media";
 
 const formatDateTime = (value: string): string => {
   const date = new Date(value);
@@ -189,7 +190,7 @@ const UsageRecordDetailDialog: React.FC<UsageRecordDetailDialogProps> = ({
                   color="text.secondary"
                   gutterBottom
                 >
-                  输出图片
+                  输出媒体
                 </Typography>
                 <Stack
                   spacing={2}
@@ -231,18 +232,18 @@ const UsageRecordDetailDialog: React.FC<UsageRecordDetailDialogProps> = ({
                             display: "block",
                             width: { xs: "100%", md: 360 },
                             bgcolor: "background.default",
-                            "& img": {
+                            "& img, & video": {
                               transition: "transform 0.3s ease",
                             },
-                            "&:hover img": {
+                            "&:hover img, &:hover video": {
                               transform: "scale(1.01)",
                             },
                           }}
                         >
                           <Box
-                            component="img"
+                            component={isVideoUrl(image.url) ? "video" : "img"}
                             src={image.url}
-                            alt={`输出图片 ${index + 1}`}
+                            alt={`输出媒体 ${index + 1}`}
                             sx={{
                               width: "100%",
                               display: "block",
@@ -250,6 +251,13 @@ const UsageRecordDetailDialog: React.FC<UsageRecordDetailDialogProps> = ({
                               objectFit: "contain",
                               backgroundColor: "background.default",
                             }}
+                            {...(isVideoUrl(image.url)
+                              ? {
+                                  controls: true,
+                                  muted: true,
+                                  playsInline: true,
+                                }
+                              : {})}
                           />
                         </ButtonBase>
                         <Stack
@@ -338,7 +346,7 @@ const UsageRecordDetailDialog: React.FC<UsageRecordDetailDialogProps> = ({
                   color="text.secondary"
                   gutterBottom
                 >
-                  输入图片
+                  输入媒体
                 </Typography>
                 <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
                   {record.input_images.map((image, index) => (
@@ -354,14 +362,22 @@ const UsageRecordDetailDialog: React.FC<UsageRecordDetailDialogProps> = ({
                       }}
                     >
                       <Box
-                        component="img"
+                        component={isVideoUrl(image.url) ? "video" : "img"}
                         src={image.url}
-                        alt={`输入图片 ${index + 1}`}
+                        alt={`输入媒体 ${index + 1}`}
                         sx={{
                           width: "100%",
                           height: "100%",
                           objectFit: "cover",
+                          backgroundColor: "background.default",
                         }}
+                        {...(isVideoUrl(image.url)
+                          ? {
+                              muted: true,
+                              playsInline: true,
+                              loop: true,
+                            }
+                          : {})}
                       />
                     </Box>
                   ))}

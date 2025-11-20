@@ -1,6 +1,7 @@
 package entity
 
 import (
+	"strconv"
 	"strings"
 	"time"
 )
@@ -80,6 +81,11 @@ func (m DbModel) ToLlmModel() LlmModel {
 	if len(m.SupportedSizes) > 0 {
 		inputs.SupportedSizes = m.SupportedSizes.ToSlice()
 	}
+	if len(m.Settings) > 0 {
+		if durations := parseDurations(m.Settings); len(durations) > 0 {
+			inputs.SupportedDurations = durations
+		}
+	}
 
 	return LlmModel{
 		ID:          m.ModelID,
@@ -106,5 +112,38 @@ func (p DbProvider) ToLlmProvider(models []DbModel) LlmProvider {
 		activeModels = append(activeModels, model.ToLlmModel())
 	}
 	out.Models = activeModels
+	return out
+}
+
+func parseDurations(settings JSONMap) []int {
+	raw := settings["durations"]
+	var out []int
+	switch v := raw.(type) {
+	case []interface{}:
+		for _, item := range v {
+			switch vv := item.(type) {
+			case float64:
+				out = append(out, int(vv))
+			case int:
+				out = append(out, vv)
+			case int64:
+				out = append(out, int(vv))
+			case string:
+				trim := strings.TrimSpace(vv)
+				if trim == "" {
+					continue
+				}
+				if num, err := strconv.Atoi(trim); err == nil {
+					out = append(out, num)
+				}
+			}
+		}
+	case []int:
+		out = append(out, v...)
+	case []float64:
+		for _, item := range v {
+			out = append(out, int(item))
+		}
+	}
 	return out
 }

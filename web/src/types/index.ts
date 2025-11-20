@@ -1,6 +1,8 @@
 export interface GenerationRequest {
   prompt: string;
   images: string[];
+  duration?: number;
+  videos?: string[];
   provider: AIProvider;
   model: string;
   size?: string;
@@ -40,6 +42,7 @@ export interface AIModelInput {
   modalities?: string[]; // 支持的模态枚举，例: ["text"], ["image"], ["text","image"]
   max_images: number; // 支持的最大输入图片数
   supported_sizes?: string[]; // 支持的图像尺寸，留空表示不限预设
+  supported_durations?: number[]; // 视频时长（秒）
 }
 
 export interface UserSummary {

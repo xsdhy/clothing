@@ -30,27 +30,29 @@ type UpdateProviderRequest struct {
 
 // CreateModelRequest defines payload for creating provider models.
 type CreateModelRequest struct {
-	ModelID        string                 `json:"model_id" binding:"required"`
-	Name           string                 `json:"name" binding:"required"`
-	Description    string                 `json:"description"`
-	Price          string                 `json:"price"`
-	MaxImages      *int                   `json:"max_images"`
-	Modalities     []string               `json:"modalities"`
-	SupportedSizes []string               `json:"supported_sizes"`
-	Settings       map[string]interface{} `json:"settings"`
-	IsActive       *bool                  `json:"is_active"`
+	ModelID            string                 `json:"model_id" binding:"required"`
+	Name               string                 `json:"name" binding:"required"`
+	Description        string                 `json:"description"`
+	Price              string                 `json:"price"`
+	MaxImages          *int                   `json:"max_images"`
+	Modalities         []string               `json:"modalities"`
+	SupportedSizes     []string               `json:"supported_sizes"`
+	SupportedDurations []int                  `json:"supported_durations"`
+	Settings           map[string]interface{} `json:"settings"`
+	IsActive           *bool                  `json:"is_active"`
 }
 
 // UpdateModelRequest defines payload for updating provider models.
 type UpdateModelRequest struct {
-	Name           *string                `json:"name"`
-	Description    *string                `json:"description"`
-	Price          *string                `json:"price"`
-	MaxImages      *int                   `json:"max_images"`
-	Modalities     *[]string              `json:"modalities"`
-	SupportedSizes *[]string              `json:"supported_sizes"`
-	Settings       map[string]interface{} `json:"settings"`
-	IsActive       *bool                  `json:"is_active"`
+	Name               *string                `json:"name"`
+	Description        *string                `json:"description"`
+	Price              *string                `json:"price"`
+	MaxImages          *int                   `json:"max_images"`
+	Modalities         *[]string              `json:"modalities"`
+	SupportedSizes     *[]string              `json:"supported_sizes"`
+	SupportedDurations *[]int                 `json:"supported_durations"`
+	Settings           map[string]interface{} `json:"settings"`
+	IsActive           *bool                  `json:"is_active"`
 }
 
 // ProviderAdminView is the admin-facing provider representation.
@@ -70,17 +72,18 @@ type ProviderAdminView struct {
 
 // ProviderModelSummary is the admin-facing model representation.
 type ProviderModelSummary struct {
-	ModelID        string    `json:"model_id"`
-	Name           string    `json:"name"`
-	Description    string    `json:"description,omitempty"`
-	Price          string    `json:"price,omitempty"`
-	MaxImages      int       `json:"max_images,omitempty"`
-	Modalities     []string  `json:"modalities,omitempty"`
-	SupportedSizes []string  `json:"supported_sizes,omitempty"`
-	Settings       JSONMap   `json:"settings,omitempty"`
-	IsActive       bool      `json:"is_active"`
-	CreatedAt      time.Time `json:"created_at"`
-	UpdatedAt      time.Time `json:"updated_at"`
+	ModelID            string    `json:"model_id"`
+	Name               string    `json:"name"`
+	Description        string    `json:"description,omitempty"`
+	Price              string    `json:"price,omitempty"`
+	MaxImages          int       `json:"max_images,omitempty"`
+	Modalities         []string  `json:"modalities,omitempty"`
+	SupportedSizes     []string  `json:"supported_sizes,omitempty"`
+	SupportedDurations []int     `json:"supported_durations,omitempty"`
+	Settings           JSONMap   `json:"settings,omitempty"`
+	IsActive           bool      `json:"is_active"`
+	CreatedAt          time.Time `json:"created_at"`
+	UpdatedAt          time.Time `json:"updated_at"`
 }
 
 // ToAdminView converts DbProvider to ProviderAdminView.
@@ -114,18 +117,20 @@ func (p DbProvider) ToAdminView(includeModels bool) ProviderAdminView {
 func (m DbModel) ToAdminView() ProviderModelSummary {
 	modalities := []string(m.Modalities.ToSlice())
 	sizes := []string(m.SupportedSizes.ToSlice())
+	durations := parseDurations(m.Settings)
 
 	return ProviderModelSummary{
-		ModelID:        m.ModelID,
-		Name:           m.Name,
-		Description:    m.Description,
-		Price:          m.Price,
-		MaxImages:      m.MaxImages,
-		Modalities:     modalities,
-		SupportedSizes: sizes,
-		Settings:       m.Settings,
-		IsActive:       m.IsActive,
-		CreatedAt:      m.CreatedAt,
-		UpdatedAt:      m.UpdatedAt,
+		ModelID:            m.ModelID,
+		Name:               m.Name,
+		Description:        m.Description,
+		Price:              m.Price,
+		MaxImages:          m.MaxImages,
+		Modalities:         modalities,
+		SupportedSizes:     sizes,
+		SupportedDurations: durations,
+		Settings:           m.Settings,
+		IsActive:           m.IsActive,
+		CreatedAt:          m.CreatedAt,
+		UpdatedAt:          m.UpdatedAt,
 	}
 }

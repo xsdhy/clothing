@@ -79,6 +79,7 @@ func (h *HTTPHandler) GenerateImage(c *gin.Context) {
 	}
 
 	ctx := c.Request.Context()
+	streamCtx := ctx
 
 	dbProvider, err := h.repo.GetProvider(ctx, providerID)
 	if err != nil {
@@ -121,6 +122,9 @@ func (h *HTTPHandler) GenerateImage(c *gin.Context) {
 		return
 	}
 
+	// 独立的生成上下文：与前端连接解耦，最长 10 分钟，避免客户端关闭后任务被取消。
+	genCtx, cancelGen := context.WithTimeout(context.Background(), 10*time.Minute)
+
 	c.Writer.Header().Set("Content-Type", "text/event-stream")
 	c.Writer.Header().Set("Cache-Control", "no-cache")
 	c.Writer.Header().Set("Connection", "keep-alive")
@@ -140,6 +144,7 @@ func (h *HTTPHandler) GenerateImage(c *gin.Context) {
 	userID := requestUser.ID
 
 	go func() {
+		defer cancelGen()
 		defer close(messages)
 		messages <- sseMessage{event: "status", data: gin.H{"state": "processing"}}
 
@@ -154,7 +159,7 @@ func (h *HTTPHandler) GenerateImage(c *gin.Context) {
 		var storageIssues []string
 
 		if len(request.Images) > 0 {
-			inputPaths, err := h.saveImagesToStorage("inputs", request.Images, request.Model)
+			inputPaths, err := h.saveImagesToStorage(genCtx, "inputs", request.Images, request.Model)
 			if len(inputPaths) > 0 {
 				record.InputImages = entity.StringArray(inputPaths)
 			}
@@ -167,7 +172,7 @@ func (h *HTTPHandler) GenerateImage(c *gin.Context) {
 			}
 		}
 
-		images, text, err := service.GenerateImages(ctx, request)
+		images, text, err := service.GenerateImages(genCtx, request)
 		if err != nil {
 			logrus.WithError(err).WithFields(logrus.Fields{
 				"provider": providerID,
@@ -190,7 +195,7 @@ func (h *HTTPHandler) GenerateImage(c *gin.Context) {
 		record.OutputText = text
 
 		if len(images) > 0 {
-			outputPaths, err := h.saveImagesToStorage("outputs", images, request.Model)
+			outputPaths, err := h.saveImagesToStorage(genCtx, "outputs", images, request.Model)
 			if len(outputPaths) > 0 {
 				record.OutputImages = entity.StringArray(outputPaths)
 			}
@@ -222,7 +227,7 @@ func (h *HTTPHandler) GenerateImage(c *gin.Context) {
 
 	c.Stream(func(w io.Writer) bool {
 		select {
-		case <-ctx.Done():
+		case <-streamCtx.Done():
 			logrus.WithFields(logrus.Fields{
 				"provider": providerID,
 				"model":    request.Model,
@@ -248,12 +253,16 @@ func (h *HTTPHandler) GenerateImage(c *gin.Context) {
 	})
 }
 
-func (h *HTTPHandler) saveImagesToStorage(category string, payloads []string, model string) ([]string, error) {
+func (h *HTTPHandler) saveImagesToStorage(parentCtx context.Context, category string, payloads []string, model string) ([]string, error) {
 	if h.storage == nil || len(payloads) == 0 {
 		return nil, nil
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	if parentCtx == nil {
+		parentCtx = context.Background()
+	}
+
+	ctx, cancel := context.WithTimeout(parentCtx, 5*time.Minute)
 	defer cancel()
 
 	var (

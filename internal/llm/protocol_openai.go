@@ -18,15 +18,47 @@ import (
 type orImageURL struct {
 	URL string `json:"url"`
 }
+type orVideoURL struct {
+	URL string `json:"url"`
+}
 type orImage struct {
 	Type     string     `json:"type"` // "image_url"
 	ImageURL orImageURL `json:"image_url"`
 }
+type orContentPart struct {
+	Type string `json:"type"` // "text"
+	Text string `json:"text,omitempty"`
+}
 
 type orDelta struct {
-	Content string    `json:"content"`
-	Images  []orImage `json:"images"`
+	ContentRaw json.RawMessage `json:"content"`
+	Images     []orImage       `json:"images"`
 }
+
+func (d orDelta) Text() string {
+	if len(d.ContentRaw) == 0 {
+		return ""
+	}
+
+	var rawText string
+	if err := json.Unmarshal(d.ContentRaw, &rawText); err == nil {
+		return rawText
+	}
+
+	var parts []orContentPart
+	if err := json.Unmarshal(d.ContentRaw, &parts); err == nil {
+		var builder strings.Builder
+		for _, part := range parts {
+			if part.Text != "" {
+				builder.WriteString(part.Text)
+			}
+		}
+		return builder.String()
+	}
+
+	return ""
+}
+
 type orChoice struct {
 	Delta              orDelta `json:"delta"`
 	FinishReason       string  `json:"finish_reason"`
@@ -38,9 +70,10 @@ type orStreamChunk struct {
 }
 
 type orMsgPart struct {
-	Type     string      `json:"type"` // "text" | "image_url"
+	Type     string      `json:"type"` // "text" | "image_url" | "video_url"
 	Text     string      `json:"text,omitempty"`
 	ImageURL *orImageURL `json:"image_url,omitempty"`
+	VideoURL *orVideoURL `json:"video_url,omitempty"`
 }
 type orMessage struct {
 	Role    string      `json:"role"` // "user"
@@ -48,8 +81,12 @@ type orMessage struct {
 }
 
 // 输入图片 data:URL 也行，http(s) 也行
-func makeUserMessage(prompt string, refs []string) orMessage {
-	parts := []orMsgPart{{Type: "text", Text: prompt}}
+func makeUserMessage(prompt string, refs, videos []string) orMessage {
+	trimmedPrompt := strings.TrimSpace(prompt)
+	parts := []orMsgPart{}
+	if trimmedPrompt != "" {
+		parts = append(parts, orMsgPart{Type: "text", Text: trimmedPrompt})
+	}
 	for _, r := range refs {
 		r = strings.TrimSpace(r)
 		if r == "" {
@@ -60,25 +97,49 @@ func makeUserMessage(prompt string, refs []string) orMessage {
 			ImageURL: &orImageURL{URL: r},
 		})
 	}
+
+	for _, v := range videos {
+		v = strings.TrimSpace(v)
+		if v == "" {
+			continue
+		}
+		parts = append(parts, orMsgPart{
+			Type:     "video_url",
+			VideoURL: &orVideoURL{URL: v},
+		})
+	}
 	return orMessage{Role: "user", Content: parts}
 }
 
-func GenerateImagesByOpenaiProtocol(ctx context.Context, apiKey, baseURL, model, prompt string, refs []string) (imageDataURLs []string, assistantText string, err error) {
+func GenerateImagesByOpenaiProtocol(ctx context.Context, apiKey, baseURL, model, prompt string, refs, videos []string) (imageDataURLs []string, assistantText string, err error) {
 	if strings.TrimSpace(apiKey) == "" {
 		return nil, "", errors.New("api key missing")
 	}
 
+	trimmedPrompt := strings.TrimSpace(prompt)
+
 	logrus.WithFields(logrus.Fields{
 		"model":                 model,
-		"prompt_length":         len(prompt),
+		"prompt_length":         len(trimmedPrompt),
 		"reference_image_count": len(refs),
-		"reference_cnt":         len(refs),
+		"reference_video_count": len(videos),
+		"reference_media_count": len(refs) + len(videos),
+		"prompt_preview":        trimmedPrompt,
+		"base_url":              truncateForLog(baseURL, 128),
 	}).Info("GenerateImagesOR called")
+
+	modalities := []string{"text"}
+	if len(refs) > 0 {
+		modalities = append(modalities, "image")
+	}
+	if len(videos) > 0 {
+		modalities = append(modalities, "video")
+	}
 
 	reqBody := map[string]any{
 		"model":      model,
-		"messages":   []orMessage{makeUserMessage(prompt, refs)},
-		"modalities": []string{"image", "text"},
+		"messages":   []orMessage{makeUserMessage(trimmedPrompt, refs, videos)},
+		"modalities": modalities,
 		"stream":     true,
 	}
 
@@ -114,7 +175,7 @@ func GenerateImagesByOpenaiProtocol(ctx context.Context, apiKey, baseURL, model,
 	nativeFinishReasonText := ""
 	seenImages := make(map[string]struct{})
 	for sc.Scan() {
-		line := sc.Text()
+		line := strings.TrimSpace(sc.Text())
 		logrus.WithFields(logrus.Fields{"data": line}).Info("stream chunk")
 		if !strings.HasPrefix(line, "data: ") {
 			continue
@@ -136,8 +197,8 @@ func GenerateImagesByOpenaiProtocol(ctx context.Context, apiKey, baseURL, model,
 
 			// 累积文本和图片 URL
 			delta := choice.Delta
-			if delta.Content != "" {
-				assistantText += delta.Content
+			if text := delta.Text(); text != "" {
+				assistantText += text
 			}
 
 			if choice.FinishReason != "" {
@@ -166,13 +227,22 @@ func GenerateImagesByOpenaiProtocol(ctx context.Context, apiKey, baseURL, model,
 	}
 	logrus.Info("openai stream response ended")
 	if err := sc.Err(); err != nil {
-		return nil, "", err
+		return nil, strings.TrimSpace(assistantText), err
 	}
+
+	assistantText = strings.TrimSpace(assistantText)
 	if len(imageDataURLs) == 0 {
-		if len(nativeFinishReasonText) > 0 {
-			return nil, "", errors.New(nativeFinishReasonText)
+		if assistantText != "" {
+			logrus.WithFields(logrus.Fields{
+				"native_finish_reason": strings.TrimSpace(nativeFinishReasonText),
+				"text_length":          len(assistantText),
+			}).Warn("openai stream returned text only without images")
+			return nil, assistantText, nil
 		}
-		return nil, "", errors.New("no image in streamed response")
+		if len(nativeFinishReasonText) > 0 {
+			return nil, assistantText, errors.New(nativeFinishReasonText)
+		}
+		return nil, assistantText, errors.New("no image or text in streamed response")
 	}
-	return imageDataURLs, strings.TrimSpace(assistantText), nil
+	return imageDataURLs, assistantText, nil
 }

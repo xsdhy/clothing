@@ -128,9 +128,9 @@ func main() {
 	httpServer := &http.Server{
 		Addr:         serverHost,
 		Handler:      r,
-		ReadTimeout:  300 * time.Second,
-		WriteTimeout: 300 * time.Second,
-		IdleTimeout:  600 * time.Second,
+		ReadTimeout:  900 * time.Second,
+		WriteTimeout: 900 * time.Second,
+		IdleTimeout:  1200 * time.Second,
 	}
 	err = httpServer.ListenAndServe()
 	if err != nil && err != http.ErrServerClosed {

@@ -5,7 +5,9 @@ import "time"
 type GenerateImageRequest struct {
 	Prompt   string   `json:"prompt" binding:"required"`
 	Images   []string `json:"images"`
+	Videos   []string `json:"videos,omitempty"`
 	Size     string   `json:"size,omitempty"`
+	Duration int      `json:"duration,omitempty"`
 	Provider string   `json:"provider" binding:"required"` //供应商ID
 	Model    string   `json:"model" binding:"required"`    //模型ID
 }
@@ -21,12 +23,14 @@ type Modality string
 const (
 	ModText  Modality = "text"
 	ModImage Modality = "image"
+	ModVideo Modality = "video"
 )
 
 type Inputs struct {
-	Modalities     []Modality `json:"modalities,omitempty"`      // 支持的模态枚举，例: ["text"], ["image"], ["text","image"]
-	MaxImages      int        `json:"max_images,omitempty"`      // 支持的最大输入图片数
-	SupportedSizes []string   `json:"supported_sizes,omitempty"` // 支持的图像尺寸，留空表示不限预设
+	Modalities         []Modality `json:"modalities,omitempty"`          // 支持的模态枚举，例: ["text"], ["image"], ["text","image"]
+	MaxImages          int        `json:"max_images,omitempty"`          // 支持的最大输入图片数
+	SupportedSizes     []string   `json:"supported_sizes,omitempty"`     // 支持的图像尺寸/分辨率，留空表示不限预设
+	SupportedDurations []int      `json:"supported_durations,omitempty"` // 视频模型支持的时长（秒）
 }
 
 type LlmModel struct {

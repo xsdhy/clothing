@@ -93,8 +93,9 @@ func (o *OpenRouter) GenerateImages(ctx context.Context, request entity.Generate
 	logrus.WithFields(logrus.Fields{
 		"prompt_preview":      request.Prompt,
 		"reference_image_cnt": len(request.Images),
+		"reference_video_cnt": len(request.Videos),
 		"size":                strings.TrimSpace(request.Size),
 	}).Info("llm_generate_images_start")
 
-	return GenerateImagesByOpenaiProtocol(ctx, o.apiKey, o.endpoint, request.Model, request.Prompt, request.Images)
+	return GenerateImagesByOpenaiProtocol(ctx, o.apiKey, o.endpoint, request.Model, request.Prompt, request.Images, request.Videos)
 }

@@ -5,6 +5,8 @@ import { PhotoSlider } from 'react-photo-view';
 import type { DataType, OverlayRenderProps } from 'react-photo-view/dist/types';
 import 'react-photo-view/dist/react-photo-view.css';
 
+import { isVideoUrl } from '../utils/media';
+
 export interface ImageViewerProps {
   open: boolean;
   onClose: () => void;
@@ -24,9 +26,22 @@ export interface ImageViewerItem {
   key?: string | number;
   title?: string;
   downloadName?: string;
+  type?: 'image' | 'video';
 }
 
 type NormalizedImageViewerItem = ImageViewerItem & { key: string | number };
+
+const BLANK_PLACEHOLDER = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==';
+
+const isVideoItem = (item?: ImageViewerItem): boolean => {
+  if (!item) {
+    return false;
+  }
+  if (item.type === 'video') {
+    return true;
+  }
+  return isVideoUrl(item.src);
+};
 
 const ImageViewer: React.FC<ImageViewerProps> = ({
   open,
@@ -45,12 +60,21 @@ const ImageViewer: React.FC<ImageViewerProps> = ({
         key: item.key ?? item.src,
         title: item.title,
         downloadName: item.downloadName,
+        type: item.type ?? (isVideoUrl(item.src) ? 'video' : 'image'),
       }));
     }
     if (!imageUrl) {
       return [];
     }
-    return [{ src: imageUrl, key: imageUrl, title, downloadName: undefined }];
+    return [
+      {
+        src: imageUrl,
+        key: imageUrl,
+        title,
+        downloadName: undefined,
+        type: isVideoUrl(imageUrl) ? 'video' : 'image',
+      },
+    ];
   }, [imageUrl, images, title]);
 
   const [currentIndex, setCurrentIndex] = useState(initialIndex);
@@ -68,7 +92,15 @@ const ImageViewer: React.FC<ImageViewerProps> = ({
 
   const currentItem = items[currentIndex];
   const resolvedTitle = currentItem?.title ?? title;
-  const sliderImages = useMemo<DataType[]>(() => items.map(({ key, src }) => ({ key, src })), [items]);
+  const sliderImages = useMemo<DataType[]>(
+    () =>
+      items.map(({ key, src, type }) => ({
+        key,
+        src: type === 'video' ? BLANK_PLACEHOLDER : src,
+      })),
+    [items],
+  );
+  const currentIsVideo = isVideoItem(currentItem);
 
   const handleZoomOut = () => {
     const newScale = Math.max(MIN_SCALE, scale / 1.2);
@@ -99,14 +131,50 @@ const ImageViewer: React.FC<ImageViewerProps> = ({
   };
 
   const renderOverlay = ({ scale: photoScale, onScale }: OverlayRenderProps) => {
-    // 保存 onScale 回调引用
+    if (currentIsVideo) {
+      scaleCallbackRef.current = null;
+      return (
+        <Box
+          sx={{
+            position: 'absolute',
+            inset: 0,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            pointerEvents: 'none',
+            px: { xs: 1.5, sm: 3 },
+          }}
+        >
+          <Box
+            component="video"
+            src={currentItem?.src}
+            controls
+            autoPlay
+            loop
+            muted
+            playsInline
+            sx={{
+              maxWidth: 'min(100%, 1280px)',
+              maxHeight: 'calc(100vh - 160px)',
+              boxShadow: 8,
+              borderRadius: 2,
+              bgcolor: 'black',
+              border: '1px solid rgba(255,255,255,0.08)',
+              pointerEvents: 'auto',
+            }}
+          />
+        </Box>
+      );
+    }
+
+    // 保存 onScale 回调引用（仅图片需要缩放）
     scaleCallbackRef.current = onScale || null;
-    
+
     // 同步 PhotoSlider 的 scale 到我们的 state
     if (photoScale !== scale) {
       setScale(photoScale);
     }
-    
+
     return null;
   };
 
@@ -176,51 +244,55 @@ const ImageViewer: React.FC<ImageViewerProps> = ({
               flexWrap: 'wrap',
             }}
           >
-            <IconButton
-              onClick={handleZoomOut}
-              sx={{
-                color: 'white',
-                bgcolor: 'rgba(255,255,255,0.12)',
-                width: { xs: 40, sm: 42 },
-                height: { xs: 40, sm: 42 },
-                '&:hover': {
-                  bgcolor: 'rgba(255,255,255,0.2)',
-                },
-              }}
-              aria-label="zoom-out"
-            >
-              <ZoomOut />
-            </IconButton>
-            <IconButton
-              onClick={handleReset}
-              sx={{
-                color: 'white',
-                bgcolor: 'rgba(255,255,255,0.12)',
-                width: { xs: 40, sm: 42 },
-                height: { xs: 40, sm: 42 },
-                '&:hover': {
-                  bgcolor: 'rgba(255,255,255,0.2)',
-                },
-              }}
-              aria-label="reset-zoom"
-            >
-              <ZoomOutMap />
-            </IconButton>
-            <IconButton
-              onClick={handleZoomIn}
-              sx={{
-                color: 'white',
-                bgcolor: 'rgba(255,255,255,0.12)',
-                width: { xs: 40, sm: 42 },
-                height: { xs: 40, sm: 42 },
-                '&:hover': {
-                  bgcolor: 'rgba(255,255,255,0.2)',
-                },
-              }}
-              aria-label="zoom-in"
-            >
-              <ZoomIn />
-            </IconButton>
+            {!currentIsVideo && (
+              <>
+                <IconButton
+                  onClick={handleZoomOut}
+                  sx={{
+                    color: 'white',
+                    bgcolor: 'rgba(255,255,255,0.12)',
+                    width: { xs: 40, sm: 42 },
+                    height: { xs: 40, sm: 42 },
+                    '&:hover': {
+                      bgcolor: 'rgba(255,255,255,0.2)',
+                    },
+                  }}
+                  aria-label="zoom-out"
+                >
+                  <ZoomOut />
+                </IconButton>
+                <IconButton
+                  onClick={handleReset}
+                  sx={{
+                    color: 'white',
+                    bgcolor: 'rgba(255,255,255,0.12)',
+                    width: { xs: 40, sm: 42 },
+                    height: { xs: 40, sm: 42 },
+                    '&:hover': {
+                      bgcolor: 'rgba(255,255,255,0.2)',
+                    },
+                  }}
+                  aria-label="reset-zoom"
+                >
+                  <ZoomOutMap />
+                </IconButton>
+                <IconButton
+                  onClick={handleZoomIn}
+                  sx={{
+                    color: 'white',
+                    bgcolor: 'rgba(255,255,255,0.12)',
+                    width: { xs: 40, sm: 42 },
+                    height: { xs: 40, sm: 42 },
+                    '&:hover': {
+                      bgcolor: 'rgba(255,255,255,0.2)',
+                    },
+                  }}
+                  aria-label="zoom-in"
+                >
+                  <ZoomIn />
+                </IconButton>
+              </>
+            )}
             {showDownload && onDownload && (
               <IconButton
                 onClick={handleDownload}
@@ -282,7 +354,7 @@ const ImageViewer: React.FC<ImageViewerProps> = ({
               textAlign: 'center',
             }}
           >
-            缩放: {Math.round(scale * 100)}%
+            {currentIsVideo ? '视频播放' : `缩放: ${Math.round(scale * 100)}%`}
           </Typography>
         </Box>
       </Portal>

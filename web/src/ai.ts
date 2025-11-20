@@ -45,12 +45,23 @@ export const generateImage = async (
     throw new Error("请选择服务商");
   }
 
+  const images = sanitizeImages(request.images);
+  const videos = sanitizeImages(request.videos);
+
   const payload: Record<string, unknown> = {
     prompt,
-    images: sanitizeImages(request.images),
+    images,
     provider: request.provider.id,
     model: request.model,
   };
+
+  if (typeof request.duration === "number" && request.duration > 0) {
+    payload.duration = request.duration;
+  }
+
+  if (videos.length > 0) {
+    payload.videos = videos;
+  }
 
   if (typeof request.size === "string" && request.size.trim()) {
     payload.size = request.size.trim();
