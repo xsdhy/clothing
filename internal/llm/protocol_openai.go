@@ -102,11 +102,11 @@ func GenerateImagesByOpenaiProtocol(ctx context.Context, apiKey, baseURL, model,
 			"baseURL": baseURL,
 			"status":  resp.StatusCode,
 			"body":    buf.String(),
-		}).Error("openrouter generate images failed")
-		return nil, "", fmt.Errorf("openrouter http %d: %s", resp.StatusCode, buf.String())
+		}).Error("openai generate images failed")
+		return nil, "", fmt.Errorf("openai http %d: %s", resp.StatusCode, buf.String())
 	}
 	// 处理 SSE 流式响应
-	logrus.Info("openrouter stream response started")
+	logrus.Info("openai stream response started")
 
 	sc := bufio.NewScanner(resp.Body)
 	sc.Buffer(make([]byte, 0, 64*1024), 10*1024*1024)
@@ -164,7 +164,7 @@ func GenerateImagesByOpenaiProtocol(ctx context.Context, apiKey, baseURL, model,
 		}
 
 	}
-	logrus.Info("openrouter stream response ended")
+	logrus.Info("openai stream response ended")
 	if err := sc.Err(); err != nil {
 		return nil, "", err
 	}

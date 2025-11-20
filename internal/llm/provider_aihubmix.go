@@ -15,6 +15,8 @@ type AiHubMix struct {
 
 	apiKey   string
 	endpoint string
+	// Optional custom Gemini base endpoint (e.g. https://aihubmix.com/gemini).
+	geminiEndpoint string
 
 	models      []entity.LlmModel
 	modelLookup map[string]struct{}
@@ -44,10 +46,18 @@ func NewAiHubMix(provider *entity.DbProvider, models []entity.DbModel) (*AiHubMi
 		return nil, errors.New("aihubmix has no active models configured")
 	}
 
-	endpoint := strings.TrimSpace(provider.BaseURL)
+	baseURL := strings.TrimSpace(provider.BaseURL)
+	endpoint := baseURL
+	if strings.Contains(strings.ToLower(baseURL), "gemini") {
+		// Prevent Gemini-specific base URL from polluting the OpenAI-compatible path.
+		endpoint = ""
+	}
 	if endpoint == "" {
 		endpoint = "https://aihubmix.com/v1/chat/completions"
 	}
+
+	// geminiEndpoint can come from config.gemini_base_url or fall back to a Gemini-looking base_url.
+	geminiEndpoint := "https://aihubmix.com/gemini"
 
 	name := strings.TrimSpace(provider.Name)
 	if name == "" {
@@ -55,12 +65,13 @@ func NewAiHubMix(provider *entity.DbProvider, models []entity.DbModel) (*AiHubMi
 	}
 
 	return &AiHubMix{
-		providerID:   provider.ID,
-		providerName: name,
-		apiKey:       apiKey,
-		endpoint:     endpoint,
-		models:       activeModels,
-		modelLookup:  modelLookup,
+		providerID:     provider.ID,
+		providerName:   name,
+		apiKey:         apiKey,
+		endpoint:       endpoint,
+		geminiEndpoint: geminiEndpoint,
+		models:         activeModels,
+		modelLookup:    modelLookup,
 	}, nil
 }
 
@@ -94,6 +105,10 @@ func (o *AiHubMix) GenerateImages(ctx context.Context, request entity.GenerateIm
 		"reference_image_cnt": len(request.Images),
 		"size":                strings.TrimSpace(request.Size),
 	}).Info("llm_generate_images_start")
+
+	if strings.Contains(request.Model, "gemini") {
+		return GenerateImagesByGeminiProtocol(ctx, o.apiKey, o.geminiEndpoint, request.Model, request.Prompt, request.Images)
+	}
 
 	return GenerateImagesByOpenaiProtocol(ctx, o.apiKey, o.endpoint, request.Model, request.Prompt, request.Images)
 }

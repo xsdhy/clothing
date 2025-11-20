@@ -5,11 +5,14 @@ import {
   Button,
   Chip,
   CircularProgress,
+  Collapse,
   Dialog,
   DialogActions,
   DialogContent,
   DialogTitle,
+  Divider,
   FormControlLabel,
+  IconButton,
   Paper,
   Stack,
   Switch,
@@ -19,10 +22,13 @@ import {
   TableHead,
   TableRow,
   TextField,
+  Tooltip,
   Typography,
 } from "@mui/material";
 import AddRoundedIcon from "@mui/icons-material/AddRounded";
+import ChevronRightRoundedIcon from "@mui/icons-material/ChevronRightRounded";
 import DeleteForeverRoundedIcon from "@mui/icons-material/DeleteForeverRounded";
+import ExpandMoreRoundedIcon from "@mui/icons-material/ExpandMoreRounded";
 import RestartAltRoundedIcon from "@mui/icons-material/RestartAltRounded";
 import type {
   ProviderAdmin,
@@ -142,14 +148,10 @@ const ProviderManagementPage: React.FC = () => {
     null,
   );
 
-  const [modelDialogOpen, setModelDialogOpen] = useState(false);
-  const [modelManagerProviderId, setModelManagerProviderId] = useState<
-    string | null
-  >(null);
-  const [modelDialogMessage, setModelDialogMessage] = useState<string | null>(
-    null,
-  );
-  const [modelDialogError, setModelDialogError] = useState<string | null>(null);
+  const [expandedProviders, setExpandedProviders] = useState<Record<
+    string,
+    boolean
+  >>({});
 
   const [modelFormOpen, setModelFormOpen] = useState(false);
   const [modelFormMode, setModelFormMode] = useState<"create" | "edit">(
@@ -158,14 +160,16 @@ const ProviderManagementPage: React.FC = () => {
   const [modelFormError, setModelFormError] = useState<string | null>(null);
   const [modelForm, setModelForm] =
     useState<ModelDialogForm>(defaultModelForm);
+  const [modelFormProviderId, setModelFormProviderId] = useState<string | null>(
+    null,
+  );
   const [editingModelId, setEditingModelId] = useState<string | null>(null);
-
-  const modelManagerProvider = useMemo(
+  const modelFormProvider = useMemo(
     () =>
-      modelManagerProviderId
-        ? providers.find((item) => item.id === modelManagerProviderId) ?? null
+      modelFormProviderId
+        ? providers.find((item) => item.id === modelFormProviderId) ?? null
         : null,
-    [modelManagerProviderId, providers],
+    [modelFormProviderId, providers],
   );
 
   const clearMessages = useCallback(() => {
@@ -403,51 +407,46 @@ const ProviderManagementPage: React.FC = () => {
     [clearMessages, loadProviders],
   );
 
-  const openModelManager = useCallback((provider: ProviderAdmin) => {
-    setModelManagerProviderId(provider.id);
-    setModelDialogMessage(null);
-    setModelDialogError(null);
-    setModelFormOpen(false);
-    setModelForm(defaultModelForm());
-    setModelFormMode("create");
-    setEditingModelId(null);
-    setModelFormError(null);
-    setModelDialogOpen(true);
+  const toggleProviderRow = useCallback((providerId: string) => {
+    setExpandedProviders((prev) => ({
+      ...prev,
+      [providerId]: !prev[providerId],
+    }));
   }, []);
 
-  const closeModelDialog = useCallback(() => {
-    if (busy) {
-      return;
-    }
-    setModelDialogOpen(false);
-    setModelManagerProviderId(null);
-    setModelDialogMessage(null);
-    setModelDialogError(null);
-    setModelFormOpen(false);
-    setModelForm(defaultModelForm());
-    setModelFormMode("create");
-    setEditingModelId(null);
-    setModelFormError(null);
-  }, [busy]);
-
-  const openCreateModelForm = useCallback(() => {
-    if (!modelManagerProviderId) {
-      return;
-    }
-    setModelForm(defaultModelForm());
-    setModelFormMode("create");
-    setModelFormError(null);
-    setEditingModelId(null);
-    setModelFormOpen(true);
-  }, [modelManagerProviderId]);
-
-  const openEditModelForm = useCallback((model: ProviderModelAdmin) => {
-    setModelForm(toModelDialogForm(model));
-    setModelFormMode("edit");
-    setModelFormError(null);
-    setEditingModelId(model.model_id);
-    setModelFormOpen(true);
+  const forceExpandProviderRow = useCallback((providerId: string) => {
+    setExpandedProviders((prev) =>
+      prev[providerId] ? prev : { ...prev, [providerId]: true },
+    );
   }, []);
+
+  const openCreateModelForm = useCallback(
+    (providerId: string) => {
+      clearMessages();
+      forceExpandProviderRow(providerId);
+      setModelForm(defaultModelForm());
+      setModelFormMode("create");
+      setModelFormError(null);
+      setEditingModelId(null);
+      setModelFormProviderId(providerId);
+      setModelFormOpen(true);
+    },
+    [clearMessages, forceExpandProviderRow],
+  );
+
+  const openEditModelForm = useCallback(
+    (providerId: string, model: ProviderModelAdmin) => {
+      clearMessages();
+      forceExpandProviderRow(providerId);
+      setModelForm(toModelDialogForm(model));
+      setModelFormMode("edit");
+      setModelFormError(null);
+      setEditingModelId(model.model_id);
+      setModelFormProviderId(providerId);
+      setModelFormOpen(true);
+    },
+    [clearMessages, forceExpandProviderRow],
+  );
 
   const closeModelForm = useCallback(() => {
     if (busy) {
@@ -458,23 +457,22 @@ const ProviderManagementPage: React.FC = () => {
     setModelFormMode("create");
     setEditingModelId(null);
     setModelFormError(null);
+    setModelFormProviderId(null);
   }, [busy]);
 
   const handleSubmitModelForm = useCallback(
     async (event: React.FormEvent<HTMLFormElement>) => {
       event.preventDefault();
       setModelFormError(null);
-      setModelDialogError(null);
-      setModelDialogMessage(null);
       clearMessages();
 
-      if (!modelManagerProviderId) {
+      if (!modelFormProviderId) {
         setModelFormError("未找到厂商信息，请重试");
         return;
       }
 
       const provider =
-        providers.find((item) => item.id === modelManagerProviderId) ?? null;
+        providers.find((item) => item.id === modelFormProviderId) ?? null;
       if (!provider) {
         setModelFormError("未找到厂商信息，请重试");
         return;
@@ -533,9 +531,10 @@ const ProviderManagementPage: React.FC = () => {
             settings: settingsObject,
             is_active: modelForm.is_active,
           });
-          setModelDialogMessage("模型已创建");
+          setMessage("模型已创建");
           setModelFormOpen(false);
           setModelForm(defaultModelForm());
+          setModelFormProviderId(null);
           await loadProviders();
         } catch (err) {
           setModelFormError(
@@ -612,10 +611,11 @@ const ProviderManagementPage: React.FC = () => {
       setBusy(true);
       try {
         await updateProviderModel(provider.id, editingModelId, payload);
-        setModelDialogMessage("模型信息已更新");
+        setMessage("模型信息已更新");
         setModelFormOpen(false);
         setModelForm(defaultModelForm());
         setEditingModelId(null);
+        setModelFormProviderId(null);
         await loadProviders();
       } catch (err) {
         setModelFormError(
@@ -631,53 +631,42 @@ const ProviderManagementPage: React.FC = () => {
       loadProviders,
       modelForm,
       modelFormMode,
-      modelManagerProviderId,
+      modelFormProviderId,
       providers,
     ],
   );
 
   const handleToggleModelActive = useCallback(
-    async (model: ProviderModelAdmin) => {
-      if (!modelManagerProviderId) {
-        setModelDialogError("未找到厂商信息，请重试");
-        return;
-      }
+    async (providerId: string, model: ProviderModelAdmin) => {
       const provider =
-        providers.find((item) => item.id === modelManagerProviderId) ?? null;
+        providers.find((item) => item.id === providerId) ?? null;
       if (!provider) {
-        setModelDialogError("未找到厂商信息，请重试");
+        setError("未找到厂商信息，请重试");
         return;
       }
       clearMessages();
-      setModelDialogError(null);
       setBusy(true);
       try {
         await updateProviderModel(provider.id, model.model_id, {
           is_active: !model.is_active,
         });
-        setModelDialogMessage("模型状态已更新");
+        setMessage("模型状态已更新");
         await loadProviders();
       } catch (err) {
-        setModelDialogError(
-          err instanceof Error ? err.message : "更新模型状态失败",
-        );
+        setError(err instanceof Error ? err.message : "更新模型状态失败");
       } finally {
         setBusy(false);
       }
     },
-    [clearMessages, loadProviders, modelManagerProviderId, providers],
+    [clearMessages, loadProviders, providers],
   );
 
   const handleDeleteModel = useCallback(
-    async (model: ProviderModelAdmin) => {
-      if (!modelManagerProviderId) {
-        setModelDialogError("未找到厂商信息，请重试");
-        return;
-      }
+    async (providerId: string, model: ProviderModelAdmin) => {
       const provider =
-        providers.find((item) => item.id === modelManagerProviderId) ?? null;
+        providers.find((item) => item.id === providerId) ?? null;
       if (!provider) {
-        setModelDialogError("未找到厂商信息，请重试");
+        setError("未找到厂商信息，请重试");
         return;
       }
       if (
@@ -688,21 +677,18 @@ const ProviderManagementPage: React.FC = () => {
         return;
       }
       clearMessages();
-      setModelDialogError(null);
       setBusy(true);
       try {
         await deleteProviderModel(provider.id, model.model_id);
-        setModelDialogMessage("模型已删除");
+        setMessage("模型已删除");
         await loadProviders();
       } catch (err) {
-        setModelDialogError(
-          err instanceof Error ? err.message : "删除模型失败",
-        );
+        setError(err instanceof Error ? err.message : "删除模型失败");
       } finally {
         setBusy(false);
       }
     },
-    [clearMessages, loadProviders, modelManagerProviderId, providers],
+    [clearMessages, loadProviders, providers],
   );
 
   if (!isAdmin) {
@@ -727,11 +713,11 @@ const ProviderManagementPage: React.FC = () => {
           厂商管理
         </Typography>
         <Typography variant="body1" color="text.secondary">
-          统一管理各类模型服务厂商及其模型配置，支持快速启用、停用与同步更新。
+          折叠式树形表格统一管理厂商与模型，弹窗完成新增/编辑，减少频繁跳转。
         </Typography>
       </Box>
 
-      <Paper sx={{ p: 4, display: "flex", flexDirection: "column", gap: 3 }}>
+      <Paper sx={{ p: 4, display: "flex", flexDirection: "column", gap: 2.5 }}>
         <Stack
           direction={{ xs: "column", sm: "row" }}
           spacing={2}
@@ -743,7 +729,7 @@ const ProviderManagementPage: React.FC = () => {
               厂商列表
             </Typography>
             <Typography variant="body2" color="text.secondary">
-              支持按行操作模型管理、编辑、停用和删除。
+              展开行可直接维护模型，动作集中在同一区域，方便快速迭代。
             </Typography>
           </Box>
           <Stack direction="row" spacing={1}>
@@ -785,97 +771,299 @@ const ProviderManagementPage: React.FC = () => {
           </Box>
         ) : providers.length > 0 ? (
           <Box sx={{ overflowX: "auto" }}>
-            <Table>
+            <Table size="small">
               <TableHead>
                 <TableRow>
-                  <TableCell>厂商</TableCell>
+                  <TableCell width={52} />
+                  <TableCell>厂商 / 描述</TableCell>
                   <TableCell>驱动</TableCell>
+                  <TableCell>模型</TableCell>
                   <TableCell>状态</TableCell>
-                  <TableCell>模型数量</TableCell>
-                  <TableCell>描述</TableCell>
                   <TableCell align="right">操作</TableCell>
                 </TableRow>
               </TableHead>
               <TableBody>
-                {providers.map((provider) => (
-                  <TableRow key={provider.id} hover>
-                    <TableCell>
-                      <Stack spacing={0.5}>
-                        <Typography
-                          variant="subtitle1"
-                          sx={{ fontWeight: 600 }}
-                        >
-                          {provider.name}
-                        </Typography>
-                        <Typography variant="body2" color="text.secondary">
-                          {provider.id}
-                        </Typography>
-                      </Stack>
-                    </TableCell>
-                    <TableCell>{provider.driver}</TableCell>
-                    <TableCell>
-                      <Chip
-                        size="small"
-                        color={provider.is_active ? "success" : "default"}
-                        label={provider.is_active ? "启用" : "停用"}
-                      />
-                    </TableCell>
-                    <TableCell>{provider.models?.length ?? 0}</TableCell>
-                    <TableCell sx={{ maxWidth: 240 }}>
-                      <Typography
-                        variant="body2"
-                        color="text.secondary"
-                        noWrap
-                      >
-                        {provider.description || "—"}
-                      </Typography>
-                    </TableCell>
-                    <TableCell align="right">
-                      <Stack
-                        direction="row"
-                        spacing={1}
-                        justifyContent="flex-end"
-                      >
-                        <Button
-                          variant="outlined"
-                          size="small"
-                          onClick={() => openModelManager(provider)}
-                          disabled={busy}
-                        >
-                          模型管理
-                        </Button>
-                        <Button
-                          variant="outlined"
-                          size="small"
-                          onClick={() => openEditProviderDialog(provider)}
-                          disabled={busy}
-                        >
-                          编辑
-                        </Button>
-                        <Button
-                          variant="text"
-                          size="small"
-                          onClick={() =>
-                            void handleToggleProviderActive(provider)
-                          }
-                          disabled={busy}
-                        >
-                          {provider.is_active ? "停用" : "启用"}
-                        </Button>
-                        <Button
-                          variant="text"
-                          size="small"
-                          color="error"
-                          startIcon={<DeleteForeverRoundedIcon fontSize="small" />}
-                          onClick={() => void handleDeleteProvider(provider)}
-                          disabled={busy}
-                        >
-                          删除
-                        </Button>
-                      </Stack>
-                    </TableCell>
-                  </TableRow>
-                ))}
+                {providers.map((provider) => {
+                  const isExpanded = Boolean(expandedProviders[provider.id]);
+                  const models = provider.models ?? [];
+                  const activeModels = models.filter((item) => item.is_active).length;
+
+                  return (
+                    <React.Fragment key={provider.id}>
+                      <TableRow hover selected={isExpanded}>
+                        <TableCell>
+                          <IconButton
+                            size="small"
+                            onClick={() => toggleProviderRow(provider.id)}
+                            aria-label={isExpanded ? "收起模型列表" : "展开模型列表"}
+                          >
+                            {isExpanded ? (
+                              <ExpandMoreRoundedIcon fontSize="small" />
+                            ) : (
+                              <ChevronRightRoundedIcon fontSize="small" />
+                            )}
+                          </IconButton>
+                        </TableCell>
+                        <TableCell sx={{ minWidth: 220 }}>
+                          <Stack spacing={0.5}>
+                            <Stack direction="row" spacing={1} alignItems="center">
+                              <Typography variant="subtitle1" sx={{ fontWeight: 600 }}>
+                                {provider.name}
+                              </Typography>
+                              <Chip size="small" label={provider.driver} />
+                            </Stack>
+                            <Typography variant="caption" color="text.secondary">
+                              {provider.id}
+                            </Typography>
+                            <Tooltip title={provider.description || "无描述"} arrow placement="top-start">
+                              <Typography
+                                variant="body2"
+                                color="text.secondary"
+                                noWrap
+                                sx={{ maxWidth: 340 }}
+                              >
+                                {provider.description || "—"}
+                              </Typography>
+                            </Tooltip>
+                          </Stack>
+                        </TableCell>
+                        <TableCell>
+                          <Tooltip
+                            title={provider.base_url || "使用默认地址"}
+                            arrow
+                            placement="top-start"
+                          >
+                            <Typography variant="body2" color="text.secondary" noWrap>
+                              {provider.base_url || "默认"}
+                            </Typography>
+                          </Tooltip>
+                        </TableCell>
+                        <TableCell>
+                          <Stack direction="row" spacing={1} alignItems="center">
+                            <Chip
+                              size="small"
+                              label={`总数 ${models.length}`}
+                              variant="outlined"
+                            />
+                            <Chip
+                              size="small"
+                              color="success"
+                              label={`已启用 ${activeModels}`}
+                            />
+                          </Stack>
+                        </TableCell>
+                        <TableCell>
+                          <Chip
+                            size="small"
+                            color={provider.is_active ? "success" : "default"}
+                            label={provider.is_active ? "启用" : "停用"}
+                          />
+                        </TableCell>
+                        <TableCell align="right">
+                          <Stack direction="row" spacing={1} justifyContent="flex-end">
+                            <Button
+                              variant="contained"
+                              size="small"
+                              startIcon={<AddRoundedIcon fontSize="small" />}
+                              onClick={() => openCreateModelForm(provider.id)}
+                              disabled={busy}
+                            >
+                              新增模型
+                            </Button>
+                            <Button
+                              variant="outlined"
+                              size="small"
+                              onClick={() => openEditProviderDialog(provider)}
+                              disabled={busy}
+                            >
+                              编辑
+                            </Button>
+                            <Button
+                              variant="text"
+                              size="small"
+                              onClick={() => void handleToggleProviderActive(provider)}
+                              disabled={busy}
+                            >
+                              {provider.is_active ? "停用" : "启用"}
+                            </Button>
+                            <Button
+                              variant="text"
+                              size="small"
+                              color="error"
+                              startIcon={<DeleteForeverRoundedIcon fontSize="small" />}
+                              onClick={() => void handleDeleteProvider(provider)}
+                              disabled={busy}
+                            >
+                              删除
+                            </Button>
+                          </Stack>
+                        </TableCell>
+                      </TableRow>
+                      <TableRow sx={{ backgroundColor: isExpanded ? "action.hover" : "inherit" }}>
+                        <TableCell colSpan={6} sx={{ py: 0, border: 0 }}>
+                          <Collapse in={isExpanded} timeout="auto" unmountOnExit>
+                            <Box
+                              sx={{
+                                px: { xs: 2, sm: 3 },
+                                pb: 2,
+                                pt: 1.5,
+                                ml: { xs: 0, sm: 1 },
+                              }}
+                            >
+                              <Stack
+                                direction={{ xs: "column", sm: "row" }}
+                                spacing={1.5}
+                                alignItems={{ xs: "flex-start", sm: "center" }}
+                                justifyContent="space-between"
+                                sx={{ mb: 1 }}
+                              >
+                                <Stack spacing={0.5}>
+                                  <Typography variant="subtitle2" sx={{ fontWeight: 600 }}>
+                                    模型列表（{models.length}）
+                                  </Typography>
+                                  <Typography variant="caption" color="text.secondary">
+                                    展开后可直接新增或编辑模型，保持页面紧凑。
+                                  </Typography>
+                                </Stack>
+                                <Stack direction="row" spacing={1}>
+                                  <Button
+                                    variant="outlined"
+                                    size="small"
+                                    onClick={handleRefresh}
+                                    disabled={loading || busy}
+                                  >
+                                    刷新
+                                  </Button>
+                                  <Button
+                                    variant="contained"
+                                    size="small"
+                                    startIcon={<AddRoundedIcon fontSize="small" />}
+                                    onClick={() => openCreateModelForm(provider.id)}
+                                    disabled={busy}
+                                  >
+                                    新增模型
+                                  </Button>
+                                </Stack>
+                              </Stack>
+                              <Divider sx={{ mb: 1 }} />
+                              {models.length ? (
+                                <Table
+                                  size="small"
+                                  sx={{
+                                    backgroundColor: "background.paper",
+                                    borderRadius: 1,
+                                  }}
+                                >
+                                  <TableHead>
+                                    <TableRow>
+                                      <TableCell>模型</TableCell>
+                                      <TableCell>价格 / 描述</TableCell>
+                                      <TableCell>支持配置</TableCell>
+                                      <TableCell>状态</TableCell>
+                                      <TableCell align="right">操作</TableCell>
+                                    </TableRow>
+                                  </TableHead>
+                                  <TableBody>
+                                    {models.map((model) => (
+                                      <TableRow key={model.model_id} hover>
+                                        <TableCell>
+                                          <Stack spacing={0.25}>
+                                            <Typography variant="body2" sx={{ fontWeight: 600 }}>
+                                              {model.name || model.model_id}
+                                            </Typography>
+                                            <Typography variant="caption" color="text.secondary">
+                                              {model.model_id}
+                                            </Typography>
+                                          </Stack>
+                                        </TableCell>
+                                        <TableCell>
+                                          <Typography variant="body2" color="text.secondary" noWrap>
+                                            {model.price || model.description || "—"}
+                                          </Typography>
+                                        </TableCell>
+                                        <TableCell>
+                                          <Stack direction="row" spacing={0.5} flexWrap="wrap" useFlexGap>
+                                            {model.modalities?.map((item) => (
+                                              <Chip key={item} size="small" label={item} variant="outlined" />
+                                            ))}
+                                            {model.supported_sizes?.map((item) => (
+                                              <Chip key={item} size="small" label={item} color="info" variant="outlined" />
+                                            ))}
+                                            {model.max_images ? (
+                                              <Chip
+                                                size="small"
+                                                label={`参考图 ${model.max_images}`}
+                                                variant="outlined"
+                                              />
+                                            ) : null}
+                                            {!model.modalities?.length &&
+                                            !model.supported_sizes?.length &&
+                                            !model.max_images ? (
+                                              <Typography variant="caption" color="text.secondary">
+                                                无额外限制
+                                              </Typography>
+                                            ) : null}
+                                          </Stack>
+                                        </TableCell>
+                                        <TableCell>
+                                          <Chip
+                                            size="small"
+                                            color={model.is_active ? "success" : "default"}
+                                            label={model.is_active ? "启用" : "停用"}
+                                          />
+                                        </TableCell>
+                                        <TableCell align="right">
+                                          <Stack direction="row" spacing={1} justifyContent="flex-end">
+                                            <Button
+                                              variant="outlined"
+                                              size="small"
+                                              onClick={() => openEditModelForm(provider.id, model)}
+                                              disabled={busy}
+                                            >
+                                              编辑
+                                            </Button>
+                                            <Button
+                                              variant="text"
+                                              size="small"
+                                              onClick={() =>
+                                                void handleToggleModelActive(provider.id, model)
+                                              }
+                                              disabled={busy}
+                                            >
+                                              {model.is_active ? "停用" : "启用"}
+                                            </Button>
+                                            <Button
+                                              variant="text"
+                                              size="small"
+                                              color="error"
+                                              startIcon={
+                                                <DeleteForeverRoundedIcon fontSize="small" />
+                                              }
+                                              onClick={() =>
+                                                void handleDeleteModel(provider.id, model)
+                                              }
+                                              disabled={busy}
+                                            >
+                                              删除
+                                            </Button>
+                                          </Stack>
+                                        </TableCell>
+                                      </TableRow>
+                                    ))}
+                                  </TableBody>
+                                </Table>
+                              ) : (
+                                <Typography variant="body2" color="text.secondary">
+                                  暂无模型配置，点击“新增模型”补充。
+                                </Typography>
+                              )}
+                            </Box>
+                          </Collapse>
+                        </TableCell>
+                      </TableRow>
+                    </React.Fragment>
+                  );
+                })}
               </TableBody>
             </Table>
           </Box>
@@ -1041,150 +1229,6 @@ const ProviderManagementPage: React.FC = () => {
       </Dialog>
 
       <Dialog
-        open={modelDialogOpen}
-        onClose={closeModelDialog}
-        fullWidth
-        maxWidth="lg"
-      >
-        <DialogTitle>
-          模型管理
-          {modelManagerProvider ? `：${modelManagerProvider.name}` : ""}
-        </DialogTitle>
-        <DialogContent sx={{ display: "flex", flexDirection: "column", gap: 3 }}>
-          <Stack
-            direction={{ xs: "column", sm: "row" }}
-            spacing={2}
-            justifyContent="space-between"
-            alignItems={{ xs: "stretch", sm: "center" }}
-          >
-            <Box>
-              <Typography variant="subtitle1" sx={{ fontWeight: 600 }}>
-                已配置模型
-              </Typography>
-              <Typography variant="body2" color="text.secondary">
-                维护模型基础信息、开关状态及附加配置。
-              </Typography>
-            </Box>
-            <Stack direction="row" spacing={1}>
-              <Button
-                variant="outlined"
-                onClick={handleRefresh}
-                disabled={loading || busy}
-              >
-                刷新
-              </Button>
-              <Button
-                variant="contained"
-                startIcon={<AddRoundedIcon />}
-                onClick={openCreateModelForm}
-                disabled={!modelManagerProviderId || busy}
-              >
-                新增模型
-              </Button>
-            </Stack>
-          </Stack>
-
-          {(modelDialogError || modelDialogMessage) && (
-            <Stack spacing={2}>
-              {modelDialogError && (
-                <Alert severity="error">{modelDialogError}</Alert>
-              )}
-              {modelDialogMessage && (
-                <Alert severity="success">{modelDialogMessage}</Alert>
-              )}
-            </Stack>
-          )}
-
-          {modelManagerProvider && modelManagerProvider.models?.length ? (
-            <Box sx={{ overflowX: "auto" }}>
-              <Table>
-                <TableHead>
-                  <TableRow>
-                    <TableCell>模型 ID</TableCell>
-                    <TableCell>名称</TableCell>
-                    <TableCell>价格/描述</TableCell>
-                    <TableCell>状态</TableCell>
-                    <TableCell align="right">操作</TableCell>
-                  </TableRow>
-                </TableHead>
-                <TableBody>
-                  {modelManagerProvider.models?.map((model) => (
-                    <TableRow key={model.model_id} hover>
-                      <TableCell>
-                        <Typography variant="body2" sx={{ fontWeight: 600 }}>
-                          {model.model_id}
-                        </Typography>
-                      </TableCell>
-                      <TableCell>{model.name}</TableCell>
-                      <TableCell>
-                        <Typography variant="body2" color="text.secondary">
-                          {model.price || model.description || "—"}
-                        </Typography>
-                      </TableCell>
-                      <TableCell>
-                        <Chip
-                          size="small"
-                          color={model.is_active ? "success" : "default"}
-                          label={model.is_active ? "启用" : "停用"}
-                        />
-                      </TableCell>
-                      <TableCell align="right">
-                        <Stack
-                          direction="row"
-                          spacing={1}
-                          justifyContent="flex-end"
-                        >
-                          <Button
-                            variant="outlined"
-                            size="small"
-                            onClick={() => openEditModelForm(model)}
-                            disabled={busy}
-                          >
-                            编辑
-                          </Button>
-                          <Button
-                            variant="text"
-                            size="small"
-                            onClick={() =>
-                              void handleToggleModelActive(model)
-                            }
-                            disabled={busy}
-                          >
-                            {model.is_active ? "停用" : "启用"}
-                          </Button>
-                          <Button
-                            variant="text"
-                            size="small"
-                            color="error"
-                            startIcon={
-                              <DeleteForeverRoundedIcon fontSize="small" />
-                            }
-                            onClick={() => void handleDeleteModel(model)}
-                            disabled={busy}
-                          >
-                            删除
-                          </Button>
-                        </Stack>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </Box>
-          ) : (
-            <Typography variant="body2" color="text.secondary">
-              暂无模型配置，可通过“新增模型”完成添加。
-            </Typography>
-          )}
-        </DialogContent>
-        <DialogActions sx={{ px: 3, pb: 3 }}>
-          <Button onClick={closeModelDialog} disabled={busy}>
-            关闭
-          </Button>
-        </DialogActions>
-      </Dialog>
-
-      <Dialog
         open={modelFormOpen}
         onClose={closeModelForm}
         fullWidth
@@ -1194,10 +1238,16 @@ const ProviderManagementPage: React.FC = () => {
           {modelFormMode === "create"
             ? "新增模型"
             : `编辑模型：${modelForm.model_id}`}
+          {modelFormProvider ? `（${modelFormProvider.name}）` : ""}
         </DialogTitle>
         <Box component="form" onSubmit={handleSubmitModelForm}>
           <DialogContent sx={{ display: "flex", flexDirection: "column", gap: 2 }}>
             {modelFormError && <Alert severity="error">{modelFormError}</Alert>}
+            {modelFormProvider && (
+              <Typography variant="caption" color="text.secondary">
+                归属厂商：{modelFormProvider.name}（{modelFormProvider.id}）
+              </Typography>
+            )}
             {modelFormMode === "create" ? (
               <TextField
                 label="模型 ID"
