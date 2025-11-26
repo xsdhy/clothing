@@ -52,7 +52,7 @@ const VIDEO_PRESETS: Record<
   },
   "wanx2.1-i2v-turbo": {
     resolutions: ["480P", "720P"],
-    durations: [3, 4, 5],
+    durations: [3, 4, 5,10],
   },
   "wanx2.1-i2v-plus": {
     resolutions: ["720P"],
