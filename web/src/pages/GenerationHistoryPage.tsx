@@ -6,7 +6,6 @@ import {
   ButtonBase,
   Card,
   CardContent,
-  CardHeader,
   Chip,
   CircularProgress,
   Container,
@@ -660,8 +659,6 @@ const GenerationHistoryPage: React.FC = () => {
         <Stack spacing={3} sx={{ opacity: loading ? 0.7 : 1 }}>
           {records.map((record) => {
             const hasError = Boolean(record.error_message);
-            const ownerName =
-              record.user?.display_name || record.user?.email || "未知用户";
             const canEditRecordTags =
               isAdmin || (user && record.user && record.user.id === user.id);
             const recordTagOptionsMap = new Map<number, Tag>();

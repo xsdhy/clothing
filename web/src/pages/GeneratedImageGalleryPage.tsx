@@ -71,7 +71,16 @@ const GeneratedImageGalleryPage: React.FC = () => {
         });
       });
     });
-    return items;
+    return items.sort((a, b) => {
+      const timeDiff = (Date.parse(b.createdAt) || 0) - (Date.parse(a.createdAt) || 0);
+      if (timeDiff !== 0) {
+        return timeDiff;
+      }
+      if (b.recordId !== a.recordId) {
+        return b.recordId - a.recordId;
+      }
+      return a.imageIndex - b.imageIndex;
+    });
   }, [records]);
 
   const viewerItems = useMemo<ImageViewerItem[]>(
@@ -134,7 +143,11 @@ const GeneratedImageGalleryPage: React.FC = () => {
       }
 
       try {
-        const result = await fetchUsageRecords(pageToLoad, PAGE_SIZE, { result: 'success', tags: tagFilter });
+        const result = await fetchUsageRecords(pageToLoad, PAGE_SIZE, {
+          result: 'success',
+          tags: tagFilter,
+          hasImages: true,
+        });
 
         let mergedRecords: UsageRecord[] = [];
         setRecords((prev) => {
@@ -482,8 +495,15 @@ const GeneratedImageGalleryPage: React.FC = () => {
         ) : (
           <Box
             sx={{
-              columnCount: { xs: 1, sm: 2, md: 3, lg: 4 },
-              columnGap: 2,
+              display: 'grid',
+              gridTemplateColumns: {
+                xs: 'repeat(1, minmax(0, 1fr))',
+                sm: 'repeat(2, minmax(0, 1fr))',
+                md: 'repeat(3, minmax(0, 1fr))',
+                lg: 'repeat(4, minmax(0, 1fr))',
+              },
+              gap: 2,
+              alignItems: 'start',
             }}
           >
             {galleryItems.map((item, index) => {
@@ -491,7 +511,7 @@ const GeneratedImageGalleryPage: React.FC = () => {
               const record = recordMap.get(item.recordId);
               const recordTags = record?.tags ?? [];
               return (
-                <Box key={`${item.recordId}-${item.imageIndex}-${item.url}`} sx={{ breakInside: 'avoid', mb: 2 }}>
+                <Box key={`${item.recordId}-${item.imageIndex}-${item.url}`}>
                   <Card elevation={1} sx={{ overflow: 'hidden' }}>
                     <ButtonBase
                       onClick={() => handleOpenViewer(index)}
@@ -582,7 +602,7 @@ const GeneratedImageGalleryPage: React.FC = () => {
 
         {!hasMore && galleryItems.length > 0 && (
           <Typography variant="caption" color="text.secondary" sx={{ display: 'block', textAlign: 'center', py: 2 }}>
-            已加载全部 {metaTotal} 条生成媒体
+            已加载全部 {galleryItems.length} 个生成媒体（{metaTotal || records.length} 条记录）
           </Typography>
         )}
 

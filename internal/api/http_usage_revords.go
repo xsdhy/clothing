@@ -36,6 +36,12 @@ func (h *HTTPHandler) ListUsageRecords(c *gin.Context) {
 		c.Query("tags"),
 		c.Query("tag_ids"),
 	)
+	if !params.HasOutputImages {
+		params.HasOutputImages = parseBoolParam(
+			c.Query("has_output_images"),
+			c.Query("has_images"),
+		)
+	}
 
 	params.Result = strings.ToLower(strings.TrimSpace(params.Result))
 	if params.Result == "" {
@@ -266,4 +272,16 @@ func parseUintListParam(values []string, fallbacks ...string) []uint {
 		}
 	}
 	return result
+}
+
+func parseBoolParam(values ...string) bool {
+	for _, raw := range values {
+		switch strings.ToLower(strings.TrimSpace(raw)) {
+		case "1", "true", "yes", "on":
+			return true
+		case "0", "false", "no", "off":
+			return false
+		}
+	}
+	return false
 }

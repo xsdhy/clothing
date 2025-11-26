@@ -43,6 +43,7 @@ export interface UsageRecordFilters {
   model?: string;
   result?: UsageRecordResultFilter;
   tags?: number[];
+  hasImages?: boolean;
 }
 
 export const generateImage = async (
@@ -384,6 +385,9 @@ export const fetchUsageRecords = async (
   }
   if (tagIDs.length > 0) {
     params.set("tags", tagIDs.join(","));
+  }
+  if (filters?.hasImages) {
+    params.set("has_output_images", "true");
   }
 
   if (resultFilter === "failure") {

@@ -55,6 +55,9 @@ func (r *GormRepository) ListUsageRecords(ctx context.Context, params *entity.Us
 				Group("usage_records.id").
 				Having("COUNT(DISTINCT usage_record_tags.tag_id) >= ?", len(params.TagIDs))
 		}
+		if params.HasOutputImages {
+			query = r.applyHasOutputImagesFilter(query)
+		}
 	}
 
 	var totalCount int64
@@ -79,12 +82,34 @@ func (r *GormRepository) ListUsageRecords(ctx context.Context, params *entity.Us
 	}
 
 	var records []entity.DbUsageRecord
-	if err := query.Order("id DESC").Offset(offset).Limit(pageSize).Find(&records).Error; err != nil {
+	if err := query.Order("created_at DESC, id DESC").Offset(offset).Limit(pageSize).Find(&records).Error; err != nil {
 		return nil, nil, err
 	}
 
 	meta := r.calculatePagination(totalCount, page, pageSize)
 	return records, meta, nil
+}
+
+func (r *GormRepository) applyHasOutputImagesFilter(query *gorm.DB) *gorm.DB {
+	if query == nil {
+		return query
+	}
+
+	dialect := ""
+	if r != nil && r.db != nil && r.db.Dialector != nil {
+		dialect = strings.ToLower(r.db.Dialector.Name())
+	}
+
+	switch dialect {
+	case "mysql":
+		return query.Where("JSON_LENGTH(output_images) > 0")
+	case "sqlite":
+		return query.Where("json_array_length(output_images) > 0")
+	case "postgres":
+		return query.Where("json_array_length(output_images::json) > 0")
+	default:
+		return query.Where("output_images IS NOT NULL AND output_images <> '' AND output_images <> '[]'")
+	}
 }
 
 // GetUsageRecord retrieves a single usage record by ID.
