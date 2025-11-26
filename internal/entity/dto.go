@@ -10,6 +10,7 @@ type GenerateImageRequest struct {
 	Duration int      `json:"duration,omitempty"`
 	Provider string   `json:"provider" binding:"required"` //供应商ID
 	Model    string   `json:"model" binding:"required"`    //模型ID
+	TagIDs   []uint   `json:"tag_ids"`
 }
 
 type GenerateImageResponse struct {
@@ -56,6 +57,7 @@ type UsageRecordQuery struct {
 	Result     string `json:"result" form:"result" query:"result"`
 	UserID     uint   `json:"-" form:"-" query:"-"`
 	IncludeAll bool   `json:"-" form:"-" query:"-"`
+	TagIDs     []uint `json:"-" form:"-" query:"-"`
 }
 
 type UsageImage struct {
@@ -75,6 +77,7 @@ type UsageRecordItem struct {
 	InputImages  []UsageImage `json:"input_images"`
 	OutputImages []UsageImage `json:"output_images"`
 	User         UserSummary  `json:"user"`
+	Tags         []Tag        `json:"tags"`
 }
 
 type UsageRecordListResponse struct {
@@ -84,4 +87,21 @@ type UsageRecordListResponse struct {
 
 type UsageRecordDetailResponse struct {
 	Record UsageRecordItem `json:"record"`
+}
+
+type Tag struct {
+	ID          uint      `json:"id"`
+	Name        string    `json:"name"`
+	UsageCount  int64     `json:"usage_count,omitempty"`
+	CreatedAt   time.Time `json:"created_at,omitempty"`
+	UpdatedAt   time.Time `json:"updated_at,omitempty"`
+	Description string    `json:"description,omitempty"`
+}
+
+type TagListResponse struct {
+	Tags []Tag `json:"tags"`
+}
+
+type TagDetailResponse struct {
+	Tag Tag `json:"tag"`
 }

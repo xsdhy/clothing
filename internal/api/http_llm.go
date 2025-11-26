@@ -122,6 +122,23 @@ func (h *HTTPHandler) GenerateImage(c *gin.Context) {
 		return
 	}
 
+	tagIDs := deduplicatePositiveIDs(request.TagIDs)
+	if len(tagIDs) > 0 {
+		validateCtx, cancel := context.WithTimeout(ctx, 3*time.Second)
+		defer cancel()
+
+		tags, err := h.repo.FindTagsByIDs(validateCtx, tagIDs)
+		if err != nil {
+			logrus.WithError(err).Error("failed to validate tags")
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to validate tags"})
+			return
+		}
+		if len(tags) != len(tagIDs) {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "one or more tags do not exist"})
+			return
+		}
+	}
+
 	// 独立的生成上下文：与前端连接解耦，最长 10 分钟，避免客户端关闭后任务被取消。
 	genCtx, cancelGen := context.WithTimeout(context.Background(), 10*time.Minute)
 
@@ -140,6 +157,7 @@ func (h *HTTPHandler) GenerateImage(c *gin.Context) {
 	}
 
 	messages := make(chan sseMessage, 4)
+	tagIDsCopy := append([]uint(nil), tagIDs...)
 
 	userID := requestUser.ID
 
@@ -182,7 +200,7 @@ func (h *HTTPHandler) GenerateImage(c *gin.Context) {
 			if len(storageIssues) > 0 {
 				record.ErrorMessage = appendStorageNotes(record.ErrorMessage, storageIssues)
 			}
-			h.persistUsageRecord(&record)
+			h.persistUsageRecord(&record, tagIDsCopy)
 			messages <- sseMessage{event: "error", data: gin.H{"error": err.Error()}}
 			return
 		}
@@ -212,7 +230,7 @@ func (h *HTTPHandler) GenerateImage(c *gin.Context) {
 			record.ErrorMessage = appendStorageNotes(record.ErrorMessage, storageIssues)
 		}
 
-		h.persistUsageRecord(&record)
+		h.persistUsageRecord(&record, tagIDsCopy)
 
 		response := entity.GenerateImageResponse{
 			Text:   text,
@@ -362,7 +380,7 @@ func (h *HTTPHandler) resolveImagePayload(ctx context.Context, payload string) (
 	return data, ext, nil
 }
 
-func (h *HTTPHandler) persistUsageRecord(record *entity.DbUsageRecord) {
+func (h *HTTPHandler) persistUsageRecord(record *entity.DbUsageRecord, tagIDs []uint) {
 	if h.repo == nil || record == nil {
 		return
 	}
@@ -374,6 +392,15 @@ func (h *HTTPHandler) persistUsageRecord(record *entity.DbUsageRecord) {
 			"provider": record.ProviderID,
 			"model":    record.ModelID,
 		}).Error("failed to persist usage record")
+		return
+	}
+
+	if len(tagIDs) > 0 {
+		if err := h.repo.SetUsageRecordTags(ctx, record.ID, tagIDs); err != nil {
+			logrus.WithError(err).WithFields(logrus.Fields{
+				"record_id": record.ID,
+			}).Warn("failed to set tags for usage record")
+		}
 	}
 }
 
@@ -403,4 +430,23 @@ func buildOutputBaseName(model string, idx int) string {
 	}
 	suffix := time.Now().UTC().UnixNano()
 	return fmt.Sprintf("%s_%d_%d", token, suffix, idx)
+}
+
+func deduplicatePositiveIDs(values []uint) []uint {
+	if len(values) == 0 {
+		return []uint{}
+	}
+	result := make([]uint, 0, len(values))
+	seen := make(map[uint]struct{}, len(values))
+	for _, v := range values {
+		if v == 0 {
+			continue
+		}
+		if _, ok := seen[v]; ok {
+			continue
+		}
+		seen[v] = struct{}{}
+		result = append(result, v)
+	}
+	return result
 }

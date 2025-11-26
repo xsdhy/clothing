@@ -38,6 +38,9 @@ const AdvancedSettingsPage: React.FC = () => {
                 <Button variant="outlined" onClick={() => navigate("/users")}>
                   前往用户管理
                 </Button>
+                <Button variant="outlined" onClick={() => navigate("/tags")}>
+                  前往标签管理
+                </Button>
               </Stack>
             </Box>
           )}

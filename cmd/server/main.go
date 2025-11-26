@@ -82,6 +82,9 @@ func main() {
 	protected.GET("/usage-records", httpHandler.ListUsageRecords)
 	protected.GET("/usage-records/:id", httpHandler.GetUsageRecord)
 	protected.DELETE("/usage-records/:id", httpHandler.DeleteUsageRecord)
+	protected.PUT("/usage-records/:id/tags", httpHandler.UpdateUsageRecordTags)
+
+	protected.GET("/tags", httpHandler.ListTags)
 
 	userAdmin := protected.Group("/users")
 	userAdmin.Use(httpHandler.RequireAdmin())
@@ -103,6 +106,12 @@ func main() {
 	modelAdmin.POST("", httpHandler.CreateProviderModel)
 	modelAdmin.PATCH("/:model_id", httpHandler.UpdateProviderModel)
 	modelAdmin.DELETE("/:model_id", httpHandler.DeleteProviderModel)
+
+	tagAdmin := protected.Group("/tags")
+	tagAdmin.Use(httpHandler.RequireAdmin())
+	tagAdmin.POST("", httpHandler.CreateTag)
+	tagAdmin.PATCH("/:id", httpHandler.UpdateTag)
+	tagAdmin.DELETE("/:id", httpHandler.DeleteTag)
 
 	if localProvider, ok := store.(storage.LocalBaseDirProvider); ok {
 		publicPrefix := strings.TrimSpace(cfg.StoragePublicBaseURL)

@@ -8,6 +8,9 @@ import type {
   UsageRecord,
   PaginationMeta,
   UsageRecordDetailResponse,
+  Tag,
+  TagListResponse,
+  TagDetailResponse,
 } from "./types";
 import type { SSEEventPayload } from "./utils/sse";
 import { appendSanitizedImages, sanitizeImages } from "./utils/images";
@@ -19,6 +22,14 @@ import { safeParseJSON } from "./utils/json";
 const LLM_GENERATE_ENDPOINT = "/api/llm";
 const LLM_PROVIDERS_ENDPOINT = `/api/llm/providers`;
 const USAGE_RECORDS_ENDPOINT = "/api/usage-records";
+const TAGS_ENDPOINT = "/api/tags";
+
+const normaliseUsageRecord = (record: UsageRecord): UsageRecord => ({
+  ...record,
+  tags: Array.isArray((record as unknown as { tags?: Tag[] }).tags)
+    ? ((record as unknown as { tags?: Tag[] }).tags as Tag[])
+    : [],
+});
 
 export interface UsageRecordsResult {
   records: UsageRecord[];
@@ -31,6 +42,7 @@ export interface UsageRecordFilters {
   provider?: string;
   model?: string;
   result?: UsageRecordResultFilter;
+  tags?: number[];
 }
 
 export const generateImage = async (
@@ -355,12 +367,23 @@ export const fetchUsageRecords = async (
 
   const provider = normaliseFilterValue(filters?.provider);
   const model = normaliseFilterValue(filters?.model);
+  const rawTagIDs = Array.isArray(filters?.tags) ? filters?.tags ?? [] : [];
+  const tagIDs = Array.from(
+    new Set(
+      rawTagIDs
+        .map((id) => Number(id))
+        .filter((id) => Number.isFinite(id) && id > 0),
+    ),
+  );
 
   if (provider) {
     params.set("provider", provider);
   }
   if (model) {
     params.set("model", model);
+  }
+  if (tagIDs.length > 0) {
+    params.set("tags", tagIDs.join(","));
   }
 
   if (resultFilter === "failure") {
@@ -403,14 +426,18 @@ export const fetchUsageRecords = async (
     throw new Error(message);
   }
 
-  const records = Array.isArray(payload.records) ? payload.records : [];
+  const records = Array.isArray(payload.records)
+    ? (payload.records as UsageRecord[])
+    : [];
   const meta = payload.meta ?? {
     page: safePage,
     page_size: safePageSize,
     total: records.length,
   };
 
-  return { records, meta };
+  const normalisedRecords = records.map((record) => normaliseUsageRecord(record));
+
+  return { records: normalisedRecords, meta };
 };
 
 export const deleteUsageRecord = async (id: number): Promise<void> => {
@@ -486,5 +513,222 @@ export const fetchUsageRecordDetail = async (
     throw new Error("后端未返回有效的记录详情");
   }
 
-  return payload.record;
+  return normaliseUsageRecord(payload.record as UsageRecord);
+};
+
+export const fetchTags = async (): Promise<Tag[]> => {
+  let response: Response;
+  try {
+    response = await requestWithTimeout(TAGS_ENDPOINT, {
+      headers: {
+        Accept: "application/json",
+      },
+    });
+  } catch (error) {
+    throw new Error(
+      `获取标签失败: ${error instanceof Error ? error.message : "未知错误"}`,
+    );
+  }
+
+  let payload: Partial<TagListResponse> & { error?: string };
+  try {
+    payload = (await response.json()) as Partial<TagListResponse> & {
+      error?: string;
+    };
+  } catch {
+    payload = {};
+  }
+
+  if (!response.ok) {
+    const message =
+      payload?.error ??
+      `服务请求失败: ${response.status} ${response.statusText}`;
+    throw new Error(message);
+  }
+
+  return Array.isArray(payload.tags) ? payload.tags : [];
+};
+
+export const createTag = async (name: string): Promise<Tag> => {
+  const trimmed = name.trim();
+  if (!trimmed) {
+    throw new Error("请输入标签名称");
+  }
+
+  let response: Response;
+  try {
+    response = await requestWithTimeout(TAGS_ENDPOINT, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Accept: "application/json",
+      },
+      body: JSON.stringify({ name: trimmed }),
+    });
+  } catch (error) {
+    throw new Error(
+      `创建标签失败: ${error instanceof Error ? error.message : "未知错误"}`,
+    );
+  }
+
+  let payload: Partial<TagDetailResponse> & { error?: string };
+  try {
+    payload = (await response.json()) as Partial<TagDetailResponse> & {
+      error?: string;
+    };
+  } catch {
+    payload = {};
+  }
+
+  if (!response.ok) {
+    const message =
+      payload?.error ??
+      `服务请求失败: ${response.status} ${response.statusText}`;
+    throw new Error(message);
+  }
+
+  if (!payload.tag) {
+    throw new Error("后端未返回有效的标签");
+  }
+
+  return payload.tag;
+};
+
+export const updateTag = async (id: number, name: string): Promise<Tag> => {
+  if (!Number.isFinite(id) || id <= 0) {
+    throw new Error("无效的标签 ID");
+  }
+  const trimmed = name.trim();
+  if (!trimmed) {
+    throw new Error("请输入标签名称");
+  }
+
+  let response: Response;
+  try {
+    response = await requestWithTimeout(`${TAGS_ENDPOINT}/${id}`, {
+      method: "PATCH",
+      headers: {
+        "Content-Type": "application/json",
+        Accept: "application/json",
+      },
+      body: JSON.stringify({ name: trimmed }),
+    });
+  } catch (error) {
+    throw new Error(
+      `更新标签失败: ${error instanceof Error ? error.message : "未知错误"}`,
+    );
+  }
+
+  let payload: Partial<TagDetailResponse> & { error?: string };
+  try {
+    payload = (await response.json()) as Partial<TagDetailResponse> & {
+      error?: string;
+    };
+  } catch {
+    payload = {};
+  }
+
+  if (!response.ok) {
+    const message =
+      payload?.error ??
+      `服务请求失败: ${response.status} ${response.statusText}`;
+    throw new Error(message);
+  }
+
+  if (!payload.tag) {
+    throw new Error("后端未返回有效的标签");
+  }
+
+  return payload.tag;
+};
+
+export const deleteTag = async (id: number): Promise<void> => {
+  if (!Number.isFinite(id) || id <= 0) {
+    throw new Error("无效的标签 ID");
+  }
+
+  let response: Response;
+  try {
+    response = await requestWithTimeout(`${TAGS_ENDPOINT}/${id}`, {
+      method: "DELETE",
+      headers: {
+        Accept: "application/json",
+      },
+    });
+  } catch (error) {
+    throw new Error(
+      `删除标签失败: ${error instanceof Error ? error.message : "未知错误"}`,
+    );
+  }
+
+  if (!response.ok) {
+    let message = `服务请求失败: ${response.status} ${response.statusText}`;
+    try {
+      const payload = (await response.json()) as { error?: string };
+      if (payload?.error) {
+        message = payload.error;
+      }
+    } catch {
+      // ignore
+    }
+    throw new Error(message);
+  }
+};
+
+export const updateUsageRecordTags = async (
+  recordId: number,
+  tagIds: number[],
+): Promise<UsageRecord> => {
+  if (!Number.isFinite(recordId) || recordId <= 0) {
+    throw new Error("无效的记录 ID");
+  }
+
+  const uniqueTagIds = Array.from(
+    new Set(
+      tagIds
+        .map((id) => Number(id))
+        .filter((id) => Number.isFinite(id) && id > 0),
+    ),
+  );
+
+  let response: Response;
+  try {
+    response = await requestWithTimeout(
+      `${USAGE_RECORDS_ENDPOINT}/${recordId}/tags`,
+      {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          Accept: "application/json",
+        },
+        body: JSON.stringify({ tag_ids: uniqueTagIds }),
+      },
+    );
+  } catch (error) {
+    throw new Error(
+      `更新记录标签失败: ${error instanceof Error ? error.message : "未知错误"}`,
+    );
+  }
+
+  let payload: Partial<UsageRecordDetailResponse> & { error?: string };
+  try {
+    payload = (await response.json()) as Partial<UsageRecordDetailResponse> & {
+      error?: string;
+    };
+  } catch {
+    payload = {};
+  }
+
+  if (!response.ok) {
+    const message =
+      payload?.error ??
+      `服务请求失败: ${response.status} ${response.statusText}`;
+    throw new Error(message);
+  }
+
+  if (!payload.record) {
+    throw new Error("后端未返回更新后的记录");
+  }
+
+  return normaliseUsageRecord(payload.record as UsageRecord);
 };

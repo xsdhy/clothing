@@ -1,18 +1,20 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import {
   Alert,
   Box,
   Button,
   ButtonBase,
+  Chip,
   CircularProgress,
+  Autocomplete,
   Dialog,
   DialogActions,
   DialogContent,
   DialogTitle,
   IconButton,
   Stack,
+  TextField,
   Typography,
-  Chip,
 } from "@mui/material";
 import CloseIcon from "@mui/icons-material/Close";
 import InputIcon from "@mui/icons-material/Input";
@@ -20,9 +22,10 @@ import ReplayIcon from "@mui/icons-material/Replay";
 import DeleteOutlineIcon from "@mui/icons-material/DeleteOutline";
 
 
-import { fetchUsageRecordDetail } from "../ai";
-import type { UsageRecord } from "../types";
+import { fetchUsageRecordDetail, fetchTags, updateUsageRecordTags } from "../ai";
+import type { UsageRecord, Tag } from "../types";
 import { isVideoUrl } from "../utils/media";
+import { useAuth } from "../contexts/AuthContext";
 
 const formatDateTime = (value: string): string => {
   const date = new Date(value);
@@ -45,6 +48,7 @@ export interface UsageRecordDetailDialogProps {
     index: number,
   ) => void | Promise<void>;
   onPreviewOutputImage?: (record: UsageRecord, index: number) => void;
+  onTagsUpdated?: (record: UsageRecord) => void;
   actionState?: {
     retrying?: boolean;
     deleting?: boolean;
@@ -62,14 +66,22 @@ const UsageRecordDetailDialog: React.FC<UsageRecordDetailDialogProps> = ({
   onDelete,
   onUseOutputImage,
   onPreviewOutputImage,
+  onTagsUpdated,
   actionState,
 }) => {
+  const { user, isAdmin } = useAuth();
   const [record, setRecord] = useState<UsageRecord | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [selectedImageIndex, setSelectedImageIndex] = useState<
     number | undefined
   >(initialImageIndex);
+  const [tagOptions, setTagOptions] = useState<Tag[]>([]);
+  const [tagsLoading, setTagsLoading] = useState(false);
+  const [tagsError, setTagsError] = useState<string | null>(null);
+  const [selectedTagIds, setSelectedTagIds] = useState<number[]>([]);
+  const [pendingTagIds, setPendingTagIds] = useState<number[]>([]);
+  const [savingTags, setSavingTags] = useState(false);
 
   useEffect(() => {
     if (open) {
@@ -123,6 +135,51 @@ const UsageRecordDetailDialog: React.FC<UsageRecordDetailDialogProps> = ({
   }, [open, recordId]);
 
   useEffect(() => {
+    if (!open) {
+      return;
+    }
+
+    let cancelled = false;
+    const loadTags = async () => {
+      setTagsLoading(true);
+      setTagsError(null);
+      try {
+        const list = await fetchTags();
+        if (!cancelled) {
+          setTagOptions(list);
+        }
+      } catch (err) {
+        if (!cancelled) {
+          setTagsError(err instanceof Error ? err.message : "加载标签失败");
+        }
+      } finally {
+        if (!cancelled) {
+          setTagsLoading(false);
+        }
+      }
+    };
+
+    void loadTags();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [open]);
+
+  useEffect(() => {
+    if (!record) {
+      setSelectedTagIds([]);
+      setPendingTagIds([]);
+      return;
+    }
+    const ids =
+      record.tags?.map((tag) => tag.id).filter((id) => Number.isFinite(id)) ??
+      [];
+    setSelectedTagIds(ids);
+    setPendingTagIds(ids);
+  }, [record]);
+
+  useEffect(() => {
     if (!record) {
       return;
     }
@@ -155,6 +212,56 @@ const UsageRecordDetailDialog: React.FC<UsageRecordDetailDialogProps> = ({
     await onDelete(record);
   };
 
+  const mergedTagOptions = useMemo(() => {
+    const map = new Map<number, Tag>();
+    tagOptions.forEach((tag) => map.set(tag.id, tag));
+    (record?.tags ?? []).forEach((tag) => {
+      if (!map.has(tag.id)) {
+        map.set(tag.id, tag);
+      }
+    });
+    return Array.from(map.values()).sort((a, b) =>
+      a.name.localeCompare(b.name),
+    );
+  }, [record?.tags, tagOptions]);
+
+  const selectedTagOptions = useMemo(
+    () => mergedTagOptions.filter((tag) => pendingTagIds.includes(tag.id)),
+    [mergedTagOptions, pendingTagIds],
+  );
+
+  const hasTagChanges =
+    selectedTagIds.length !== pendingTagIds.length ||
+    selectedTagIds.some((id) => !pendingTagIds.includes(id)) ||
+    pendingTagIds.some((id) => !selectedTagIds.includes(id));
+
+  const canEditTags =
+    Boolean(record) &&
+    (isAdmin || (user && record?.user?.id && record.user.id === user.id));
+
+  const handleSaveTags = async () => {
+    if (!record || !canEditTags) {
+      return;
+    }
+    setSavingTags(true);
+    setTagsError(null);
+    try {
+      const updated = await updateUsageRecordTags(record.id, pendingTagIds);
+      setRecord(updated);
+      setSelectedTagIds(pendingTagIds);
+      onTagsUpdated?.(updated);
+    } catch (err) {
+      setTagsError(err instanceof Error ? err.message : "更新标签失败");
+    } finally {
+      setSavingTags(false);
+    }
+  };
+
+  const handleTagSelectionChange = (_: unknown, value: Tag[]) => {
+    setTagsError(null);
+    setPendingTagIds(value.map((tag) => tag.id));
+  };
+
   return (
     <Dialog open={open} onClose={onClose} maxWidth="md" fullWidth>
       <DialogTitle
@@ -183,6 +290,86 @@ const UsageRecordDetailDialog: React.FC<UsageRecordDetailDialogProps> = ({
 
         {!loading && !error && record && (
           <Stack spacing={3}>
+            <Box>
+              <Stack
+                direction="row"
+                spacing={1}
+                alignItems="center"
+                flexWrap="wrap"
+                useFlexGap
+              >
+                <Typography variant="subtitle2" color="text.secondary">
+                  关联标签
+                </Typography>
+                {(record.tags ?? []).length === 0 && (
+                  <Chip label="未设置" size="small" variant="outlined" />
+                )}
+                {(record.tags ?? []).map((tag) => (
+                  <Chip key={tag.id} label={tag.name} size="small" />
+                ))}
+              </Stack>
+
+              {canEditTags && (
+                <Stack spacing={1} sx={{ mt: 1.5 }}>
+                  <Autocomplete
+                    multiple
+                    size="small"
+                    options={mergedTagOptions}
+                    value={selectedTagOptions}
+                    onChange={handleTagSelectionChange}
+                    loading={tagsLoading}
+                    disableCloseOnSelect
+                    getOptionLabel={(option) => option.name ?? ""}
+                    isOptionEqualToValue={(option, value) =>
+                      option.id === value.id
+                    }
+                    renderTags={(value, getTagProps) =>
+                      value.map((option, index) => (
+                        <Chip
+                          {...getTagProps({ index })}
+                          key={option.id}
+                          size="small"
+                          label={option.name}
+                        />
+                      ))
+                    }
+                    renderInput={(params) => (
+                      <TextField
+                        {...params}
+                        label="选择或搜索标签"
+                        placeholder="选择标签"
+                      />
+                    )}
+                  />
+                  <Stack direction="row" spacing={1} alignItems="center">
+                    <Button
+                      variant="contained"
+                      size="small"
+                      disabled={!hasTagChanges || savingTags}
+                      onClick={() => {
+                        void handleSaveTags();
+                      }}
+                    >
+                      {savingTags ? (
+                        <CircularProgress size={16} color="inherit" />
+                      ) : (
+                        "保存标签"
+                      )}
+                    </Button>
+                    <Button
+                      variant="text"
+                      size="small"
+                      disabled={!hasTagChanges || savingTags}
+                      onClick={() => setPendingTagIds(selectedTagIds)}
+                    >
+                      还原
+                    </Button>
+                  </Stack>
+                  {tagsError && <Alert severity="warning">{tagsError}</Alert>}
+                </Stack>
+              )}
+            </Box>
+
             {record.output_images.length > 0 && (
               <Box>
                 <Typography

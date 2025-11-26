@@ -587,7 +587,7 @@ func dashscopeVideoModelConfig(model string) dashscopeVideoConfig {
 		return dashscopeVideoConfig{
 			Resolutions:       []string{"480P", "720P"},
 			DefaultResolution: "720P",
-			Durations:         []int{3, 4, 5},
+			Durations:         []int{3, 4, 5, 10},
 			DefaultDuration:   5,
 		}
 	case strings.Contains(m, "wanx2.1-i2v-plus"):

@@ -116,9 +116,39 @@ type DbUsageRecord struct {
 
 	OutputText   string `gorm:"column:output_text;type:text" json:"output_text"`
 	ErrorMessage string `gorm:"column:error_message;type:text" json:"error_message"`
+
+	Tags []DbTag `gorm:"many2many:usage_record_tags;foreignKey:ID;joinForeignKey:UsageRecordID;references:ID;joinReferences:TagID" json:"tags"`
 }
 
 // TableName 指定表名
 func (DbUsageRecord) TableName() string {
 	return "usage_records"
+}
+
+// DbTag represents a user-defined tag.
+type DbTag struct {
+	ID        uint      `gorm:"primarykey" json:"id"`
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
+
+	Name        string `gorm:"size:64;uniqueIndex;not null" json:"name"`
+	UsageCount  int64  `gorm:"-" json:"usage_count,omitempty"`
+	Description string `gorm:"-" json:"description,omitempty"`
+}
+
+// TableName 指定表名
+func (DbTag) TableName() string {
+	return "tags"
+}
+
+// DbUsageRecordTag is the join table for usage records and tags.
+type DbUsageRecordTag struct {
+	UsageRecordID uint      `gorm:"primaryKey" json:"usage_record_id"`
+	TagID         uint      `gorm:"primaryKey" json:"tag_id"`
+	CreatedAt     time.Time `json:"created_at"`
+}
+
+// TableName 指定表名
+func (DbUsageRecordTag) TableName() string {
+	return "usage_record_tags"
 }

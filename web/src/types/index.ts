@@ -70,6 +70,14 @@ export interface UsageImage {
   url: string;
 }
 
+export interface Tag {
+  id: number;
+  name: string;
+  usage_count?: number;
+  created_at?: string;
+  updated_at?: string;
+}
+
 export interface UsageRecord {
   id: number;
   provider_id: string;
@@ -82,6 +90,7 @@ export interface UsageRecord {
   input_images: UsageImage[];
   output_images: UsageImage[];
   user?: UserSummary;
+  tags: Tag[];
 }
 
 export interface PaginationMeta {
@@ -174,4 +183,12 @@ export interface ProviderModelUpdatePayload {
   supported_sizes?: string[];
   settings?: Record<string, unknown>;
   is_active?: boolean;
+}
+
+export interface TagListResponse {
+  tags: Tag[];
+}
+
+export interface TagDetailResponse {
+  tag: Tag;
 }

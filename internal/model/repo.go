@@ -21,6 +21,12 @@ type Repository interface {
 	ListUsageRecords(ctx context.Context, params *entity.UsageRecordQuery) ([]entity.DbUsageRecord, *entity.Meta, error)
 	GetUsageRecord(ctx context.Context, id uint) (*entity.DbUsageRecord, error)
 	DeleteUsageRecord(ctx context.Context, id uint) error
+	SetUsageRecordTags(ctx context.Context, recordID uint, tagIDs []uint) error
+	ListTags(ctx context.Context) ([]entity.DbTag, error)
+	CreateTag(ctx context.Context, tag *entity.DbTag) error
+	UpdateTag(ctx context.Context, id uint, updates map[string]interface{}) error
+	DeleteTag(ctx context.Context, id uint) error
+	FindTagsByIDs(ctx context.Context, ids []uint) ([]entity.DbTag, error)
 
 	// Providers & models
 	CreateProvider(ctx context.Context, provider *entity.DbProvider) error

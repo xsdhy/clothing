@@ -16,6 +16,8 @@ import {
   MenuItem,
   Pagination,
   Select,
+  Autocomplete,
+  TextField,
   Stack,
   Tooltip,
   Typography,
@@ -30,11 +32,13 @@ import { useNavigate } from "react-router-dom";
 import {
   fetchUsageRecords,
   fetchProviders,
+  fetchTags,
+  updateUsageRecordTags,
   deleteUsageRecord,
   type UsageRecordsResult,
   type UsageRecordResultFilter,
 } from "../ai";
-import type { AIProvider, UsageRecord } from "../types";
+import type { AIProvider, UsageRecord, Tag } from "../types";
 import ImageViewer from "../components/ImageViewer";
 import UsageRecordDetailDialog from "../components/UsageRecordDetailDialog";
 import { useAuth } from "../contexts/AuthContext";
@@ -46,7 +50,7 @@ const DEFAULT_RESULT_FILTER: UsageRecordResultFilter = "success";
 type ModelOption = { id: string; name: string };
 
 const GenerationHistoryPage: React.FC = () => {
-  const { isAdmin } = useAuth();
+  const { isAdmin, user } = useAuth();
   const [records, setRecords] = useState<UsageRecord[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -58,6 +62,14 @@ const GenerationHistoryPage: React.FC = () => {
   const [resultFilter, setResultFilter] = useState<UsageRecordResultFilter>(
     DEFAULT_RESULT_FILTER,
   );
+  const [tags, setTags] = useState<Tag[]>([]);
+  const [tagsLoading, setTagsLoading] = useState(false);
+  const [tagFilter, setTagFilter] = useState<number[]>([]);
+  const [tagsLoadError, setTagsLoadError] = useState<string | null>(null);
+  const [tagSavingRecordId, setTagSavingRecordId] = useState<number | null>(
+    null,
+  );
+  const [tagActionError, setTagActionError] = useState<string | null>(null);
   const [page, setPage] = useState(1);
   const [meta, setMeta] = useState<UsageRecordsResult["meta"] | null>(null);
   const [previewImage, setPreviewImage] = useState<{
@@ -108,6 +120,11 @@ const GenerationHistoryPage: React.FC = () => {
     }));
   }, [providerFilter, providers]);
 
+  const selectedTagOptions = useMemo(
+    () => tags.filter((tag) => tagFilter.includes(tag.id)),
+    [tagFilter, tags],
+  );
+
   const loadRecords = useCallback(
     async (targetPage: number) => {
       setLoading(true);
@@ -117,6 +134,7 @@ const GenerationHistoryPage: React.FC = () => {
           provider: providerFilter !== ALL_VALUE ? providerFilter : undefined,
           model: modelFilter !== ALL_VALUE ? modelFilter : undefined,
           result: resultFilter,
+          tags: tagFilter,
         });
         setRecords(result.records);
         setMeta(result.meta);
@@ -134,7 +152,7 @@ const GenerationHistoryPage: React.FC = () => {
         setLoading(false);
       }
     },
-    [modelFilter, providerFilter, resultFilter],
+    [modelFilter, providerFilter, resultFilter, tagFilter],
   );
 
   useEffect(() => {
@@ -181,6 +199,35 @@ const GenerationHistoryPage: React.FC = () => {
     };
   }, []);
 
+  useEffect(() => {
+    let cancelled = false;
+
+    const loadTags = async () => {
+      setTagsLoading(true);
+      setTagsLoadError(null);
+      try {
+        const list = await fetchTags();
+        if (!cancelled) {
+          setTags(list);
+        }
+      } catch (err) {
+        if (!cancelled) {
+          setTagsLoadError(err instanceof Error ? err.message : "获取标签失败");
+        }
+      } finally {
+        if (!cancelled) {
+          setTagsLoading(false);
+        }
+      }
+    };
+
+    void loadTags();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   const handleRefresh = useCallback(() => {
     void loadRecords(page);
   }, [loadRecords, page]);
@@ -206,6 +253,14 @@ const GenerationHistoryPage: React.FC = () => {
     const nextValue: UsageRecordResultFilter =
       value === "failure" || value === "all" ? value : DEFAULT_RESULT_FILTER;
     setResultFilter(nextValue);
+    setPage(1);
+  }, []);
+
+  const handleTagFilterChange = useCallback((_event: unknown, value: Tag[]) => {
+    const ids = value
+      .map((tag) => tag.id)
+      .filter((id) => Number.isFinite(id) && id > 0);
+    setTagFilter(ids);
     setPage(1);
   }, []);
 
@@ -365,6 +420,56 @@ const GenerationHistoryPage: React.FC = () => {
     setSelectedDetail(null);
   }, []);
 
+  const handleTagsUpdated = useCallback((updated: UsageRecord) => {
+    setRecords((prev) =>
+      prev.map((item) => (item.id === updated.id ? updated : item)),
+    );
+  }, []);
+
+  const mergeTagsOptions = useCallback(
+    (items: Tag[]) => {
+      setTags((prev) => {
+        const map = new Map<number, Tag>();
+        prev.forEach((tag) => map.set(tag.id, tag));
+        items.forEach((tag) => map.set(tag.id, tag));
+        return Array.from(map.values()).sort((a, b) =>
+          a.name.localeCompare(b.name),
+        );
+      });
+    },
+    [setTags],
+  );
+
+  const handleUpdateRecordTags = useCallback(
+    async (record: UsageRecord, nextTags: Tag[]) => {
+      const canEdit =
+        isAdmin || (user && record.user && record.user.id === user.id);
+      if (!canEdit) {
+        return;
+      }
+
+      setTagSavingRecordId(record.id);
+      setTagActionError(null);
+      const ids = nextTags
+        .map((tag) => tag.id)
+        .filter((id) => Number.isFinite(id) && id > 0);
+      try {
+        const updated = await updateUsageRecordTags(record.id, ids);
+        mergeTagsOptions(updated.tags ?? []);
+        setRecords((prev) =>
+          prev.map((item) => (item.id === updated.id ? updated : item)),
+        );
+      } catch (err) {
+        setTagActionError(
+          err instanceof Error ? err.message : "更新标签失败",
+        );
+      } finally {
+        setTagSavingRecordId(null);
+      }
+    },
+    [isAdmin, mergeTagsOptions, user],
+  );
+
   const selectedRecordId = selectedDetail?.recordId ?? null;
   const preparingMatch =
     selectedRecordId !== null &&
@@ -468,6 +573,25 @@ const GenerationHistoryPage: React.FC = () => {
                 </Select>
               </FormControl>
 
+              <Autocomplete
+                multiple
+                size="small"
+                options={tags}
+                value={selectedTagOptions}
+                onChange={handleTagFilterChange}
+                loading={tagsLoading}
+                sx={{ minWidth: 220, flex: 1 }}
+                getOptionLabel={(option) => option.name}
+                isOptionEqualToValue={(option, value) => option.id === value.id}
+                renderInput={(params) => (
+                  <TextField
+                    {...params}
+                    label="标签"
+                    placeholder="按标签筛选"
+                  />
+                )}
+              />
+
               {providersLoading && (
                 <Stack
                   direction="row"
@@ -488,12 +612,22 @@ const GenerationHistoryPage: React.FC = () => {
                 {filtersError}
               </Alert>
             )}
+            {tagsLoadError && (
+              <Alert severity="warning" sx={{ mt: 2 }}>
+                {tagsLoadError}
+              </Alert>
+            )}
           </CardContent>
         </Card>
 
         {error && (
           <Alert severity="error" sx={{ mb: 3 }}>
             {error}
+          </Alert>
+        )}
+        {tagActionError && (
+          <Alert severity="warning" sx={{ mb: 3 }}>
+            {tagActionError}
           </Alert>
         )}
 
@@ -528,209 +662,287 @@ const GenerationHistoryPage: React.FC = () => {
             const hasError = Boolean(record.error_message);
             const ownerName =
               record.user?.display_name || record.user?.email || "未知用户";
+            const canEditRecordTags =
+              isAdmin || (user && record.user && record.user.id === user.id);
+            const recordTagOptionsMap = new Map<number, Tag>();
+            tags.forEach((tag) => recordTagOptionsMap.set(tag.id, tag));
+            (record.tags ?? []).forEach((tag) =>
+              recordTagOptionsMap.set(tag.id, tag),
+            );
+            const recordTagOptions = Array.from(recordTagOptionsMap.values());
+            const selectedRecordTags = recordTagOptions.filter((tag) =>
+              (record.tags ?? []).some((t) => t.id === tag.id),
+            );
+            const imageList = [
+              ...record.input_images.map((img, idx) => ({
+                ...img,
+                alt: `I${idx + 1}`,
+                isOutput: false,
+                index: idx,
+              })),
+              ...record.output_images.map((img, idx) => ({
+                ...img,
+                alt: `O${idx + 1}`,
+                isOutput: true,
+                index: idx,
+              })),
+            ];
 
             return (
-              <Card key={record.id} elevation={1}>
-                <CardHeader
-                  title={`${record.provider_id}/${record.model_id}`}
-                  subheader={isAdmin ? `提交人：${ownerName}` : undefined}
-                  action={
-                    <Stack direction="row" spacing={1} alignItems="center">
-                      <Button
-                        variant="text"
-                        size="small"
-                        onClick={() => handleOpenDetails(record)}
-                      >
-                        查看详情
-                      </Button>
-                      <Button
-                        variant="outlined"
-                        size="small"
-                        startIcon={
-                          retryingRecordId === record.id ? (
-                            <CircularProgress size={16} color="inherit" />
-                          ) : (
-                            <ReplayIcon fontSize="small" />
-                          )
-                        }
-                        onClick={() => {
-                          void handleRetry(record);
-                        }}
-                        disabled={retryingRecordId === record.id}
-                      >
-                        再来一次
-                      </Button>
-                      <Tooltip title="删除记录">
-                        <span>
-                          <IconButton
-                            size="small"
-                            color="error"
-                            onClick={() => {
-                              void handleDelete(record);
-                            }}
-                            disabled={deletingRecordId === record.id}
-                          >
-                            {deletingRecordId === record.id ? (
-                              <CircularProgress size={16} color="inherit" />
-                            ) : (
-                              <DeleteOutlineIcon fontSize="small" />
-                            )}
-                          </IconButton>
-                        </span>
-                      </Tooltip>
-                      <Chip
-                        color={hasError ? "error" : "success"}
-                        variant="outlined"
-                        label={hasError ? "生成异常" : "生成成功"}
-                      />
-                    </Stack>
-                  }
-                />
-                <CardContent>
-                  <Stack spacing={2}>
-                    {(record.input_images.length > 0 ||
-                      record.output_images.length > 0) && (
-                      <Box>
-                        {/* <Typography variant="subtitle2" color="text.primary">
-                            输入 / 输出图片
-                          </Typography> */}
+              <Card
+                key={record.id}
+                elevation={1}
+                sx={{
+                  overflow: "hidden",
+                }}
+              >
+                <CardContent sx={{ p: { xs: 2, md: 3 } }}>
+                  <Stack
+                    direction={{ xs: "column", md: "row" }}
+                    spacing={2}
+                    alignItems={{ xs: "stretch", md: "flex-start" }}
+                  >
+                    <Box
+                      sx={{
+                        display: "grid",
+                        gridTemplateColumns: "repeat(auto-fill, minmax(140px, 1fr))",
+                        gap: 1.5,
+                        flex: { md: "0 0 420px" },
+                        maxWidth: { md: 520 },
+                      }}
+                    >
+                      {imageList.length === 0 && (
                         <Box
                           sx={{
-                            display: "flex",
-                            flexWrap: "wrap",
-                            gap: 1,
-                            mt: 1,
+                            border: "1px dashed",
+                            borderColor: "divider",
+                            borderRadius: 2,
+                            p: 2,
+                            textAlign: "center",
+                            color: "text.secondary",
                           }}
                         >
-                          {record.input_images.map((image, index) => {
-                            const alt = `输入图片 ${index + 1}`;
-                            return (
-                              <ButtonBase
-                                key={`${record.id}-in-${index}`}
-                                onClick={() => handleImageClick(image.url, alt)}
-                                sx={{
-                                  width: 140,
-                                  height: 140,
-                                  borderRadius: 1,
-                                  overflow: "hidden",
-                                  border: "1px solid",
-                                  borderColor: "divider",
-                                  bgcolor: "background.paper",
-                                  position: "relative",
-                                }}
-                              >
-                                <Box
-                                  component="img"
-                                  src={image.url}
-                                  alt={alt}
-                                  loading="lazy"
-                                  sx={{
-                                    width: "100%",
-                                    height: "100%",
-                                    objectFit: "cover",
-                                  }}
-                                />
-                                <Chip
-                                  label={`${index + 1}`}
-                                  size="small"
-                                  color="default"
-                                  sx={{
-                                    position: "absolute",
-                                    top: 6,
-                                    left: 6,
-                                    bgcolor: "rgba(0,0,0,0.6)",
-                                    color: "common.white",
-                                  }}
-                                />
-                              </ButtonBase>
-                            );
-                          })}
-                          {record.output_images.map((image, index) => {
-                            const alt = `输出图片 ${index + 1}`;
-                            return (
-                              <ButtonBase
-                                key={`${record.id}-out-${index}`}
-                                onClick={() => handleImageClick(image.url, alt)}
-                                sx={{
-                                  width: 140,
-                                  height: 140,
-                                  borderRadius: 1,
-                                  overflow: "hidden",
-                                  border: "1px solid",
-                                  borderColor: "divider",
-                                  bgcolor: "background.paper",
-                                  position: "relative",
-                                }}
-                              >
-                                <Box
-                                  component="img"
-                                  src={image.url}
-                                  alt={alt}
-                                  loading="lazy"
-                                  sx={{
-                                    width: "100%",
-                                    height: "100%",
-                                    objectFit: "cover",
-                                  }}
-                                />
-                                <Chip
-                                  label={`${index + 1}`}
+                          无图片
+                        </Box>
+                      )}
+                      {imageList.map((image) => (
+                        <ButtonBase
+                          key={`${record.id}-${image.isOutput ? "out" : "in"}-${image.index}`}
+                          onClick={() => handleImageClick(image.url, image.alt)}
+                          sx={{
+                            width: "100%",
+                            borderRadius: 1.5,
+                            overflow: "hidden",
+                            border: "1px solid",
+                            borderColor: "divider",
+                            bgcolor: "background.paper",
+                            position: "relative",
+                            aspectRatio: "1/1",
+                          }}
+                        >
+                          <Box
+                            component="img"
+                            src={image.url}
+                            alt={image.alt}
+                            loading="lazy"
+                            sx={{
+                              width: "100%",
+                              height: "100%",
+                              objectFit: "cover",
+                            }}
+                          />
+                          <Chip
+                            label={image.alt}
+                            size="small"
+                            color={image.isOutput ? "primary" : "default"}
+                            sx={{
+                              position: "absolute",
+                              top: 6,
+                              left: 6,
+                              bgcolor: image.isOutput
+                                ? "primary.main"
+                                : "rgba(0,0,0,0.6)",
+                              color: "common.white",
+                            }}
+                          />
+                          {image.isOutput && (
+                            <Tooltip title="作为输入图片使用">
+                              <span>
+                                <IconButton
                                   size="small"
                                   color="primary"
                                   sx={{
                                     position: "absolute",
                                     top: 6,
-                                    left: 6,
+                                    right: 6,
+                                    bgcolor: "rgba(255,255,255,0.9)",
+                                    "&:hover": {
+                                      bgcolor: "rgba(255,255,255,1)",
+                                    },
                                   }}
+                                  onClick={(event) => {
+                                    event.stopPropagation();
+                                    void handleUseOutputImage(
+                                      record,
+                                      image.url,
+                                      image.index,
+                                    );
+                                  }}
+                                  disabled={
+                                    preparingOutputAsInput?.recordId ===
+                                      record.id &&
+                                    preparingOutputAsInput?.index ===
+                                      image.index
+                                  }
+                                >
+                                  {preparingOutputAsInput?.recordId ===
+                                    record.id &&
+                                  preparingOutputAsInput?.index ===
+                                    image.index ? (
+                                    <CircularProgress size={16} color="inherit" />
+                                  ) : (
+                                    <AddPhotoAlternateIcon fontSize="small" />
+                                  )}
+                                </IconButton>
+                              </span>
+                            </Tooltip>
+                          )}
+                        </ButtonBase>
+                      ))}
+                    </Box>
+
+                    <Stack spacing={1.5} sx={{ flex: 1 }}>
+                      <Stack
+                        direction="row"
+                        spacing={1}
+                        alignItems="center"
+                        flexWrap="wrap"
+                        useFlexGap
+                      >
+                        <Chip
+                          color={hasError ? "error" : "success"}
+                          variant="outlined"
+                          label={hasError ? "生成异常" : "生成成功"}
+                        />
+                        <Typography
+                          variant="subtitle2"
+                          color="text.secondary"
+                        >
+                          {new Date(record.created_at).toLocaleString()}
+                        </Typography>
+                        <Typography
+                          variant="subtitle2"
+                          color="text.secondary"
+                        >
+                          {record.provider_id}/{record.model_id}
+                        </Typography>
+                      </Stack>
+
+                      <Typography variant="body2" color="text.primary">
+                        提示词：{record.prompt || "（无）"}
+                      </Typography>
+                      {record.output_text && (
+                        <Typography variant="body2" color="text.secondary">
+                          文本输出：{record.output_text}
+                        </Typography>
+                      )}
+                      {record.error_message && (
+                        <Alert severity="error" variant="outlined">
+                          {record.error_message}
+                        </Alert>
+                      )}
+
+                      <Stack spacing={1}>
+                        
+
+                        {canEditRecordTags && (
+                          <Autocomplete
+                            multiple
+                            size="small"
+                            options={recordTagOptions}
+                            value={selectedRecordTags}
+                            onChange={(_event, value) => {
+                              void handleUpdateRecordTags(record, value);
+                            }}
+                            loading={tagsLoading}
+                            disableCloseOnSelect
+                            getOptionLabel={(option) => option.name ?? ""}
+                            isOptionEqualToValue={(option, value) =>
+                              option.id === value.id
+                            }
+                            renderTags={(value, getTagProps) =>
+                              value.map((option, index) => (
+                                <Chip
+                                  {...getTagProps({ index })}
+                                  key={option.id}
+                                  size="small"
+                                  label={option.name}
                                 />
-                                <Tooltip title="作为输入图片使用">
-                                  <span>
-                                    <IconButton
-                                      size="small"
-                                      color="primary"
-                                      sx={{
-                                        position: "absolute",
-                                        top: 6,
-                                        right: 6,
-                                        bgcolor: "rgba(255,255,255,0.85)",
-                                        "&:hover": {
-                                          bgcolor: "rgba(255,255,255,0.95)",
-                                        },
-                                      }}
-                                      onClick={(event) => {
-                                        event.stopPropagation();
-                                        void handleUseOutputImage(
-                                          record,
-                                          image.url,
-                                          index,
-                                        );
-                                      }}
-                                      disabled={
-                                        preparingOutputAsInput?.recordId ===
-                                          record.id &&
-                                        preparingOutputAsInput?.index === index
-                                      }
-                                    >
-                                      {preparingOutputAsInput?.recordId ===
-                                        record.id &&
-                                      preparingOutputAsInput?.index ===
-                                        index ? (
-                                        <CircularProgress
-                                          size={16}
-                                          color="inherit"
-                                        />
-                                      ) : (
-                                        <AddPhotoAlternateIcon fontSize="small" />
-                                      )}
-                                    </IconButton>
-                                  </span>
-                                </Tooltip>
-                              </ButtonBase>
-                            );
-                          })}
-                        </Box>
-                      </Box>
-                    )}
+                              ))
+                            }
+                            renderInput={(params) => (
+                              <TextField
+                                {...params}
+                                label="打标签"
+                                placeholder="选择或搜索标签"
+                              />
+                            )}
+                            disabled={
+                              tagSavingRecordId === record.id || tagsLoading
+                            }
+                          />
+                        )}
+                      </Stack>
+
+                      <Stack direction="row" spacing={1} flexWrap="wrap">
+                        <Button
+                          variant="contained"
+                          size="small"
+                          onClick={() => handleOpenDetails(record)}
+                        >
+                          查看详情
+                        </Button>
+                        <Button
+                          variant="outlined"
+                          size="small"
+                          startIcon={
+                            retryingRecordId === record.id ? (
+                              <CircularProgress size={16} color="inherit" />
+                            ) : (
+                              <ReplayIcon fontSize="small" />
+                            )
+                          }
+                          onClick={() => {
+                            void handleRetry(record);
+                          }}
+                          disabled={retryingRecordId === record.id}
+                        >
+                          再来一次
+                        </Button>
+                        <Tooltip title="删除记录">
+                          <span>
+                            <Button
+                              variant="text"
+                              color="error"
+                              size="small"
+                              startIcon={
+                                deletingRecordId === record.id ? (
+                                  <CircularProgress size={16} color="inherit" />
+                                ) : (
+                                  <DeleteOutlineIcon fontSize="small" />
+                                )
+                              }
+                              onClick={() => {
+                                void handleDelete(record);
+                              }}
+                              disabled={deletingRecordId === record.id}
+                            >
+                              删除
+                            </Button>
+                          </span>
+                        </Tooltip>
+                      </Stack>
+                    </Stack>
                   </Stack>
                 </CardContent>
               </Card>
@@ -794,6 +1006,7 @@ const GenerationHistoryPage: React.FC = () => {
                 ? preparingImageIndex
                 : undefined,
           }}
+          onTagsUpdated={handleTagsUpdated}
         />
 
         <ImageViewer

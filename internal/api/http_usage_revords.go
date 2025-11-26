@@ -31,6 +31,11 @@ func (h *HTTPHandler) ListUsageRecords(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid query parameters"})
 		return
 	}
+	params.TagIDs = parseUintListParam(
+		append(c.QueryArray("tags"), c.QueryArray("tag_ids")...),
+		c.Query("tags"),
+		c.Query("tag_ids"),
+	)
 
 	params.Result = strings.ToLower(strings.TrimSpace(params.Result))
 	if params.Result == "" {
@@ -103,6 +108,23 @@ func (h *HTTPHandler) makeUsageImages(paths []string) []entity.UsageImage {
 	return items
 }
 
+func (h *HTTPHandler) makeTags(tags []entity.DbTag) []entity.Tag {
+	if len(tags) == 0 {
+		return []entity.Tag{}
+	}
+	result := make([]entity.Tag, 0, len(tags))
+	for _, tag := range tags {
+		result = append(result, entity.Tag{
+			ID:         tag.ID,
+			Name:       tag.Name,
+			UsageCount: tag.UsageCount,
+			CreatedAt:  tag.CreatedAt,
+			UpdatedAt:  tag.UpdatedAt,
+		})
+	}
+	return result
+}
+
 func (h *HTTPHandler) makeUsageRecordItem(record entity.DbUsageRecord) entity.UsageRecordItem {
 	return entity.UsageRecordItem{
 		ID:           record.ID,
@@ -116,6 +138,7 @@ func (h *HTTPHandler) makeUsageRecordItem(record entity.DbUsageRecord) entity.Us
 		InputImages:  h.makeUsageImages(record.InputImages.ToSlice()),
 		OutputImages: h.makeUsageImages(record.OutputImages.ToSlice()),
 		User:         makeUserSummary(record.User),
+		Tags:         h.makeTags(record.Tags),
 	}
 }
 
@@ -209,4 +232,38 @@ func (h *HTTPHandler) DeleteUsageRecord(c *gin.Context) {
 	}
 
 	c.Status(http.StatusNoContent)
+}
+
+func parseUintListParam(values []string, fallbacks ...string) []uint {
+	items := make([]string, 0, len(values)+1)
+	for _, val := range values {
+		if trimmed := strings.TrimSpace(val); trimmed != "" {
+			items = append(items, trimmed)
+		}
+	}
+	for _, fallback := range fallbacks {
+		if trimmed := strings.TrimSpace(fallback); trimmed != "" {
+			items = append(items, trimmed)
+		}
+	}
+
+	result := make([]uint, 0, len(items))
+	seen := make(map[uint]struct{}, len(items))
+	for _, item := range items {
+		parts := strings.Split(item, ",")
+		for _, p := range parts {
+			trimmed := strings.TrimSpace(p)
+			if trimmed == "" {
+				continue
+			}
+			if parsed, err := strconv.ParseUint(trimmed, 10, 64); err == nil && parsed > 0 {
+				id := uint(parsed)
+				if _, ok := seen[id]; !ok {
+					seen[id] = struct{}{}
+					result = append(result, id)
+				}
+			}
+		}
+	}
+	return result
 }

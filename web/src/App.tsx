@@ -40,6 +40,7 @@ import LoginPage from "./pages/LoginPage";
 import RegisterPage from "./pages/RegisterPage";
 import UserManagementPage from "./pages/UserManagementPage";
 import ProviderManagementPage from "./pages/ProviderManagementPage";
+import TagManagementPage from "./pages/TagManagementPage";
 import { useAuth } from "./contexts/AuthContext";
 
 const theme = createTheme({
@@ -208,6 +209,7 @@ const AppLayout: React.FC = () => {
     ];
     if (isAdmin) {
       items.push({ label: "厂商管理", path: "/providers" });
+      items.push({ label: "标签管理", path: "/tags" });
       items.push({ label: "用户管理", path: "/users" });
     }
     return items;
@@ -606,6 +608,14 @@ const App: React.FC = () => (
           element={
             <RequireAdmin>
               <ProviderManagementPage />
+            </RequireAdmin>
+          }
+        />
+        <Route
+          path="tags"
+          element={
+            <RequireAdmin>
+              <TagManagementPage />
             </RequireAdmin>
           }
         />

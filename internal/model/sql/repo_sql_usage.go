@@ -26,7 +26,10 @@ func (r *GormRepository) ListUsageRecords(ctx context.Context, params *entity.Us
 		return nil, nil, fmt.Errorf("repository not initialised")
 	}
 
-	query := r.db.WithContext(ctx).Model(&entity.DbUsageRecord{}).Preload("User")
+	query := r.db.WithContext(ctx).
+		Model(&entity.DbUsageRecord{}).
+		Preload("User").
+		Preload("Tags")
 	if params != nil {
 		if trimmed := strings.TrimSpace(params.Provider); trimmed != "" {
 			query = query.Where("provider_id = ?", trimmed)
@@ -44,6 +47,13 @@ func (r *GormRepository) ListUsageRecords(ctx context.Context, params *entity.Us
 			case "failure":
 				query = query.Where("error_message IS NOT NULL AND error_message <> ''")
 			}
+		}
+
+		if len(params.TagIDs) > 0 {
+			query = query.Joins("JOIN usage_record_tags ON usage_record_tags.usage_record_id = usage_records.id").
+				Where("usage_record_tags.tag_id IN ?", params.TagIDs).
+				Group("usage_records.id").
+				Having("COUNT(DISTINCT usage_record_tags.tag_id) >= ?", len(params.TagIDs))
 		}
 	}
 
@@ -87,7 +97,7 @@ func (r *GormRepository) GetUsageRecord(ctx context.Context, id uint) (*entity.D
 	}
 
 	var record entity.DbUsageRecord
-	if err := r.db.WithContext(ctx).Preload("User").First(&record, id).Error; err != nil {
+	if err := r.db.WithContext(ctx).Preload("User").Preload("Tags").First(&record, id).Error; err != nil {
 		if err == gorm.ErrRecordNotFound {
 			return nil, err
 		}

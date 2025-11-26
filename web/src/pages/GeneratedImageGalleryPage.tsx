@@ -1,11 +1,11 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Alert, Box, Button, ButtonBase, Card, CardActions, CircularProgress, Container, Stack, Typography } from '@mui/material';
+import { Alert, Autocomplete, Box, Button, ButtonBase, Card, CardActions, Chip, CircularProgress, Container, Stack, TextField, Typography } from '@mui/material';
 import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
 import RefreshIcon from '@mui/icons-material/Refresh';
 import { useNavigate } from 'react-router-dom';
 
-import { deleteUsageRecord, fetchUsageRecords } from '../ai';
-import type { UsageRecord } from '../types';
+import { deleteUsageRecord, fetchUsageRecords, fetchTags } from '../ai';
+import type { Tag, UsageRecord } from '../types';
 import ImageViewer, { type ImageViewerItem } from '../components/ImageViewer';
 import UsageRecordDetailDialog from '../components/UsageRecordDetailDialog';
 import { buildDownloadName, isVideoUrl } from '../utils/media';
@@ -38,6 +38,10 @@ const GeneratedImageGalleryPage: React.FC = () => {
   const [hasMore, setHasMore] = useState(true);
   const [nextPage, setNextPage] = useState(1);
   const [metaTotal, setMetaTotal] = useState(0);
+  const [tags, setTags] = useState<Tag[]>([]);
+  const [tagsLoading, setTagsLoading] = useState(false);
+  const [tagsError, setTagsError] = useState<string | null>(null);
+  const [tagFilter, setTagFilter] = useState<number[]>([]);
   const [selectedDetail, setSelectedDetail] = useState<SelectedDetail | null>(null);
   const [viewerState, setViewerState] = useState<{ open: boolean; index: number }>({ open: false, index: 0 });
   const [retryingRecordId, setRetryingRecordId] = useState<number | null>(null);
@@ -46,6 +50,7 @@ const GeneratedImageGalleryPage: React.FC = () => {
   const sentinelRef = useRef<HTMLDivElement | null>(null);
 
   const recordMap = useMemo(() => new Map(records.map((record) => [record.id, record])), [records]);
+  const selectedTagOptions = useMemo(() => tags.filter((tag) => tagFilter.includes(tag.id)), [tagFilter, tags]);
 
   const galleryItems = useMemo<GalleryItem[]>(() => {
     const items: GalleryItem[] = [];
@@ -101,6 +106,23 @@ const GeneratedImageGalleryPage: React.FC = () => {
     });
   }, [viewerItems.length]);
 
+  const fetchTagsList = useCallback(async () => {
+    setTagsLoading(true);
+    setTagsError(null);
+    try {
+      const list = await fetchTags();
+      setTags(list);
+    } catch (err) {
+      setTagsError(err instanceof Error ? err.message : '加载标签失败');
+    } finally {
+      setTagsLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void fetchTagsList();
+  }, [fetchTagsList]);
+
   const loadRecords = useCallback(
     async (pageToLoad: number, append: boolean) => {
       if (append) {
@@ -112,7 +134,7 @@ const GeneratedImageGalleryPage: React.FC = () => {
       }
 
       try {
-        const result = await fetchUsageRecords(pageToLoad, PAGE_SIZE, { result: 'success' });
+        const result = await fetchUsageRecords(pageToLoad, PAGE_SIZE, { result: 'success', tags: tagFilter });
 
         let mergedRecords: UsageRecord[] = [];
         setRecords((prev) => {
@@ -159,19 +181,33 @@ const GeneratedImageGalleryPage: React.FC = () => {
           setInitialLoading(false);
         }
       }
-    },
-    []
-  );
+  }, [tagFilter]);
 
   useEffect(() => {
     void loadRecords(1, false);
   }, [loadRecords]);
 
+  const handleTagFilterChange = useCallback((_event: unknown, value: Tag[]) => {
+    const ids = value
+      .map((tag) => tag.id)
+      .filter((id) => Number.isFinite(id) && id > 0);
+    setTagFilter(ids);
+    setRecords([]);
+    setMetaTotal(0);
+    setNextPage(1);
+    setHasMore(true);
+    setError(null);
+    setLoadMoreError(null);
+  }, []);
+
   const handleRefresh = useCallback(() => {
     setNextPage(1);
     setHasMore(true);
+    setLoadMoreError(null);
+    setError(null);
+    void fetchTagsList();
     void loadRecords(1, false);
-  }, [loadRecords]);
+  }, [fetchTagsList, loadRecords]);
 
   const handleLoadMore = useCallback(() => {
     if (!hasMore || loadingMore || initialLoading) {
@@ -359,6 +395,10 @@ const GeneratedImageGalleryPage: React.FC = () => {
     setSelectedDetail(null);
   }, []);
 
+  const handleTagsUpdated = useCallback((updated: UsageRecord) => {
+    setRecords((prev) => prev.map((item) => (item.id === updated.id ? updated : item)));
+  }, []);
+
   const selectedRecordId = selectedDetail?.recordId ?? null;
   const preparingMatch =
     selectedRecordId !== null && preparingOutputAsInput?.recordId === selectedRecordId;
@@ -380,6 +420,45 @@ const GeneratedImageGalleryPage: React.FC = () => {
             刷新
           </Button>
         </Stack>
+
+        <Stack direction={{ xs: 'column', md: 'row' }} spacing={2} alignItems={{ xs: 'stretch', md: 'center' }} sx={{ mb: 3 }}>
+          <Autocomplete
+            multiple
+            size="small"
+            options={tags}
+            value={selectedTagOptions}
+            onChange={handleTagFilterChange}
+            loading={tagsLoading}
+            getOptionLabel={(option) => option.name}
+            isOptionEqualToValue={(option, value) => option.id === value.id}
+            renderInput={(params) => (
+              <TextField {...params} label="标签筛选" placeholder="选择标签过滤媒体" />
+            )}
+            sx={{ minWidth: 240, maxWidth: 420 }}
+          />
+          {tagsLoading && !initialLoading && (
+            <Stack direction="row" spacing={1} alignItems="center">
+              <CircularProgress size={18} />
+              <Typography variant="caption" color="text.secondary">
+                正在加载标签...
+              </Typography>
+            </Stack>
+          )}
+        </Stack>
+
+        {tagsError && (
+          <Alert
+            severity="warning"
+            sx={{ mb: 2 }}
+            action={
+              <Button color="inherit" size="small" onClick={() => void fetchTagsList()}>
+                重试
+              </Button>
+            }
+          >
+            {tagsError}
+          </Alert>
+        )}
 
         {error && (
           <Alert severity="error" sx={{ mb: 3 }} action={
@@ -409,6 +488,8 @@ const GeneratedImageGalleryPage: React.FC = () => {
           >
             {galleryItems.map((item, index) => {
               const mediaComponent = item.isVideo ? 'video' : 'img';
+              const record = recordMap.get(item.recordId);
+              const recordTags = record?.tags ?? [];
               return (
                 <Box key={`${item.recordId}-${item.imageIndex}-${item.url}`} sx={{ breakInside: 'avoid', mb: 2 }}>
                   <Card elevation={1} sx={{ overflow: 'hidden' }}>
@@ -442,7 +523,22 @@ const GeneratedImageGalleryPage: React.FC = () => {
                       />
                     </ButtonBase>
 
-                    <CardActions sx={{ justifyContent: 'space-between', flexWrap: 'wrap' }}>
+                    <CardActions sx={{ justifyContent: 'space-between', flexWrap: 'wrap', gap: 1 }}>
+                      <Stack direction="row" spacing={1} useFlexGap flexWrap="wrap" sx={{ flex: 1, minWidth: 200 }}>
+                        {recordTags.length === 0 ? (
+                          <Chip size="small" variant="outlined" label="未打标签" />
+                        ) : (
+                          recordTags.map((tag) => (
+                            <Chip
+                              key={`${item.recordId}-tag-${tag.id}`}
+                              size="small"
+                              label={tag.name}
+                              color="primary"
+                              variant="outlined"
+                            />
+                          ))
+                        )}
+                      </Stack>
                       <Button
                         size="small"
                         startIcon={<InfoOutlinedIcon fontSize="small" />}
@@ -527,6 +623,7 @@ const GeneratedImageGalleryPage: React.FC = () => {
             preparingOutput: typeof preparingImageIndex === 'number',
             preparingOutputIndex: typeof preparingImageIndex === 'number' ? preparingImageIndex : undefined,
           }}
+          onTagsUpdated={handleTagsUpdated}
         />
       </Container>
     </Box>

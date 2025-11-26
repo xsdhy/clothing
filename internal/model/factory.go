@@ -177,5 +177,7 @@ func (f *RepositoryFactory) migrateSchema(db *gorm.DB) error {
 		&entity.DbUsageRecord{},
 		&entity.DbProvider{},
 		&entity.DbModel{},
+		&entity.DbTag{},
+		&entity.DbUsageRecordTag{},
 	)
 }
