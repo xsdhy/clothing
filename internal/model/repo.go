@@ -36,6 +36,7 @@ type Repository interface {
 	GetProvider(ctx context.Context, id string) (*entity.DbProvider, error)
 	GetProviderWithModel(ctx context.Context, providerID, modelID string, includeInactive bool) (*entity.DbProvider, *entity.DbModel, error)
 
+	GetModel(ctx context.Context, providerID, modelID string) (*entity.DbModel, error)
 	CreateModel(ctx context.Context, model *entity.DbModel) error
 	UpdateModel(ctx context.Context, providerID, modelID string, updates map[string]interface{}) error
 	DeleteModel(ctx context.Context, providerID, modelID string) error

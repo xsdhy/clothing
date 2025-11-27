@@ -15,12 +15,9 @@ type OpenRouter struct {
 
 	apiKey   string
 	endpoint string
-
-	models      []entity.LlmModel
-	modelLookup map[string]struct{}
 }
 
-func NewOpenRouter(provider *entity.DbProvider, models []entity.DbModel) (*OpenRouter, error) {
+func NewOpenRouter(provider *entity.DbProvider) (*OpenRouter, error) {
 	if provider == nil {
 		return nil, errors.New("openrouter provider config is nil")
 	}
@@ -28,21 +25,6 @@ func NewOpenRouter(provider *entity.DbProvider, models []entity.DbModel) (*OpenR
 	apiKey := strings.TrimSpace(provider.APIKey)
 	if apiKey == "" {
 		return nil, errors.New("openrouter api key is not configured")
-	}
-
-	activeModels := make([]entity.LlmModel, 0, len(models))
-	modelLookup := make(map[string]struct{}, len(models))
-	for _, model := range models {
-		if !model.IsActive {
-			continue
-		}
-		llmModel := model.ToLlmModel()
-		activeModels = append(activeModels, llmModel)
-		modelLookup[llmModel.ID] = struct{}{}
-	}
-
-	if len(activeModels) == 0 {
-		return nil, errors.New("openrouter has no active models configured")
 	}
 
 	endpoint := strings.TrimSpace(provider.BaseURL)
@@ -60,36 +42,10 @@ func NewOpenRouter(provider *entity.DbProvider, models []entity.DbModel) (*OpenR
 		providerName: name,
 		apiKey:       apiKey,
 		endpoint:     endpoint,
-		models:       activeModels,
-		modelLookup:  modelLookup,
 	}, nil
 }
 
-func (o *OpenRouter) ProviderID() string {
-	return o.providerID
-}
-
-func (o *OpenRouter) Provider() entity.LlmProvider {
-	return entity.LlmProvider{
-		ID:     o.providerID,
-		Name:   o.providerName,
-		Models: o.Models(),
-	}
-}
-
-func (o *OpenRouter) Models() []entity.LlmModel {
-	return o.models
-}
-
-func (o *OpenRouter) SupportsModel(modelID string) bool {
-	if o == nil || modelID == "" {
-		return false
-	}
-	_, ok := o.modelLookup[modelID]
-	return ok
-}
-
-func (o *OpenRouter) GenerateContent(ctx context.Context, request entity.GenerateContentRequest) ([]string, string, error) {
+func (o *OpenRouter) GenerateContent(ctx context.Context, request entity.GenerateContentRequest, dbModel entity.DbModel) ([]string, string, error) {
 	logrus.WithFields(logrus.Fields{
 		"prompt_preview":      request.Prompt,
 		"reference_image_cnt": len(request.Inputs.Images),

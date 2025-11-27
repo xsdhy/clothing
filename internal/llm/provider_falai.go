@@ -40,12 +40,10 @@ type FalAI struct {
 	apiKey  string
 	apiBase string
 
-	httpClient  *http.Client
-	models      []entity.LlmModel
-	modelLookup map[string]falModelConfig
+	httpClient *http.Client
 }
 
-func NewFalAI(provider *entity.DbProvider, models []entity.DbModel) (*FalAI, error) {
+func NewFalAI(provider *entity.DbProvider) (*FalAI, error) {
 	if provider == nil {
 		return nil, errors.New("fal.ai provider config is nil")
 	}
@@ -66,100 +64,37 @@ func NewFalAI(provider *entity.DbProvider, models []entity.DbModel) (*FalAI, err
 	}
 	baseURL = strings.TrimRight(baseURL, "/")
 
-	activeModels := make([]entity.LlmModel, 0, len(models))
-	lookup := make(map[string]falModelConfig, len(models))
-
-	for _, model := range models {
-		if !model.IsActive {
-			continue
-		}
-
-		llmModel := model.ToLlmModel()
-		activeModels = append(activeModels, llmModel)
-
-		endpoint := ""
-		modeValue := ""
-
-		if model.Settings != nil {
-			if v, ok := model.Settings["endpoint"].(string); ok {
-				endpoint = v
-			}
-			if v, ok := model.Settings["mode"].(string); ok {
-				modeValue = v
-			}
-		}
-
-		endpoint = strings.TrimSpace(endpoint)
-		if endpoint == "" {
-			endpoint = "/" + strings.TrimLeft(llmModel.ID, "/")
-		}
-		if !strings.HasPrefix(endpoint, "/") {
-			endpoint = "/" + endpoint
-		}
-
-		mode := falMode(strings.TrimSpace(modeValue))
-		if mode == "" {
-			if strings.Contains(strings.ToLower(llmModel.ID), "image-to-image") ||
-				strings.Contains(strings.ToLower(llmModel.Name), "edit") {
-				mode = falModeImageToImage
-			} else {
-				mode = falModeTextToImage
-			}
-		}
-
-		lookup[llmModel.ID] = falModelConfig{
-			endpoint: endpoint,
-			mode:     mode,
-		}
-	}
-
-	if len(activeModels) == 0 {
-		return nil, errors.New("fal.ai has no active models configured")
-	}
-
 	return &FalAI{
 		providerID:   provider.ID,
 		providerName: name,
 		apiKey:       apiKey,
 		apiBase:      baseURL,
 		httpClient:   &http.Client{Timeout: 60 * time.Second},
-		models:       activeModels,
-		modelLookup:  lookup,
 	}, nil
 }
 
-func (f *FalAI) ProviderID() string {
-	return f.providerID
-}
-
-func (f *FalAI) Provider() entity.LlmProvider {
-	return entity.LlmProvider{
-		ID:     f.providerID,
-		Name:   f.providerName,
-		Models: f.Models(),
-	}
-}
-
-func (f *FalAI) Models() []entity.LlmModel {
-	return f.models
-}
-
-func (f *FalAI) SupportsModel(modelID string) bool {
-	if f == nil || modelID == "" {
-		return false
-	}
-	_, ok := f.modelLookup[modelID]
-	return ok
-}
-
-func (f *FalAI) GenerateContent(ctx context.Context, request entity.GenerateContentRequest) ([]string, string, error) {
+func (f *FalAI) GenerateContent(ctx context.Context, request entity.GenerateContentRequest, dbModel entity.DbModel) ([]string, string, error) {
 	if f == nil {
 		return nil, "", errors.New("fal.ai provider not initialised")
 	}
 
-	cfg, ok := f.modelLookup[request.ModelID]
-	if !ok {
-		return nil, "", fmt.Errorf("fal.ai model %q is not supported", request.ModelID)
+	endpoint := ""
+	endpoint = strings.TrimSpace(endpoint)
+	if endpoint == "" {
+		endpoint = "/" + strings.TrimLeft(dbModel.ModelID, "/")
+	}
+	if !strings.HasPrefix(endpoint, "/") {
+		endpoint = "/" + endpoint
+	}
+
+	mode := falMode(strings.TrimSpace(dbModel.ModelID))
+	if mode == "" {
+		if strings.Contains(strings.ToLower(dbModel.ModelID), "image-to-image") ||
+			strings.Contains(strings.ToLower(dbModel.ModelID), "edit") {
+			mode = falModeImageToImage
+		} else {
+			mode = falModeTextToImage
+		}
 	}
 
 	logrus.WithFields(logrus.Fields{
@@ -169,14 +104,14 @@ func (f *FalAI) GenerateContent(ctx context.Context, request entity.GenerateCont
 		"size":                strings.TrimSpace(request.Options.Size),
 	}).Info("falai_generate_content_start")
 
-	input, err := f.buildInputPayload(cfg.mode, request)
+	input, err := f.buildInputPayload(mode, request)
 	if err != nil {
 		return nil, "", err
 	}
 
 	payload := map[string]any{"input": input}
 
-	envelope, err := f.submitAndWait(ctx, cfg.endpoint, payload)
+	envelope, err := f.submitAndWait(ctx, endpoint, payload)
 	if err != nil {
 		return nil, "", err
 	}

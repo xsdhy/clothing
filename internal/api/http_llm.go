@@ -94,15 +94,15 @@ func (h *HTTPHandler) GenerateContent(c *gin.Context) {
 		return
 	}
 
-	var dbModel *entity.DbModel
-	for i := range dbProvider.Models {
-		model := &dbProvider.Models[i]
-		if strings.EqualFold(model.ModelID, request.ModelID) {
-			dbModel = model
-			break
-		}
+	dbModel, err := h.repo.GetModel(ctx, providerID, request.ModelID)
+	if err != nil {
+		logrus.WithError(err).WithFields(logrus.Fields{
+			"provider": providerID,
+			"model":    request.ModelID,
+		}).Error("failed to load model from database")
+		c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("unsupported model: %s", request.ModelID)})
+		return
 	}
-
 	if dbModel == nil || !dbModel.IsActive {
 		c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("unsupported model: %s", request.ModelID)})
 		return
@@ -114,11 +114,6 @@ func (h *HTTPHandler) GenerateContent(c *gin.Context) {
 			"provider": providerID,
 		}).Error("failed to initialise provider service")
 		c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("provider %s is temporarily unavailable", request.ProviderID)})
-		return
-	}
-
-	if !service.SupportsModel(request.ModelID) {
-		c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("unsupported model: %s", request.ModelID)})
 		return
 	}
 
@@ -190,7 +185,7 @@ func (h *HTTPHandler) GenerateContent(c *gin.Context) {
 			}
 		}
 
-		outputs, text, err := service.GenerateContent(genCtx, request)
+		outputs, text, err := service.GenerateContent(genCtx, request, *dbModel)
 		if err != nil {
 			logrus.WithError(err).WithFields(logrus.Fields{
 				"provider": providerID,

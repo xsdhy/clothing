@@ -17,12 +17,9 @@ type AiHubMix struct {
 	endpoint string
 	// Optional custom Gemini base endpoint (e.g. https://aihubmix.com/gemini).
 	geminiEndpoint string
-
-	models      []entity.LlmModel
-	modelLookup map[string]struct{}
 }
 
-func NewAiHubMix(provider *entity.DbProvider, models []entity.DbModel) (*AiHubMix, error) {
+func NewAiHubMix(provider *entity.DbProvider) (*AiHubMix, error) {
 	if provider == nil {
 		return nil, errors.New("aihubmix provider config is nil")
 	}
@@ -30,20 +27,6 @@ func NewAiHubMix(provider *entity.DbProvider, models []entity.DbModel) (*AiHubMi
 	apiKey := strings.TrimSpace(provider.APIKey)
 	if apiKey == "" {
 		return nil, errors.New("aihubmix api key is not configured")
-	}
-
-	activeModels := make([]entity.LlmModel, 0, len(models))
-	modelLookup := make(map[string]struct{}, len(models))
-	for _, model := range models {
-		if !model.IsActive {
-			continue
-		}
-		llmModel := model.ToLlmModel()
-		activeModels = append(activeModels, llmModel)
-		modelLookup[llmModel.ID] = struct{}{}
-	}
-	if len(activeModels) == 0 {
-		return nil, errors.New("aihubmix has no active models configured")
 	}
 
 	baseURL := strings.TrimSpace(provider.BaseURL)
@@ -72,36 +55,10 @@ func NewAiHubMix(provider *entity.DbProvider, models []entity.DbModel) (*AiHubMi
 		apiKey:         apiKey,
 		endpoint:       endpoint,
 		geminiEndpoint: geminiEndpoint,
-		models:         activeModels,
-		modelLookup:    modelLookup,
 	}, nil
 }
 
-func (o *AiHubMix) ProviderID() string {
-	return o.providerID
-}
-
-func (o *AiHubMix) Provider() entity.LlmProvider {
-	return entity.LlmProvider{
-		ID:     o.providerID,
-		Name:   o.providerName,
-		Models: o.Models(),
-	}
-}
-
-func (o *AiHubMix) Models() []entity.LlmModel {
-	return o.models
-}
-
-func (o *AiHubMix) SupportsModel(modelID string) bool {
-	if o == nil || modelID == "" {
-		return false
-	}
-	_, ok := o.modelLookup[modelID]
-	return ok
-}
-
-func (o *AiHubMix) GenerateContent(ctx context.Context, request entity.GenerateContentRequest) ([]string, string, error) {
+func (o *AiHubMix) GenerateContent(ctx context.Context, request entity.GenerateContentRequest, dbModel entity.DbModel) ([]string, string, error) {
 	logrus.WithFields(logrus.Fields{
 		"prompt_preview":      request.Prompt,
 		"reference_image_cnt": len(request.Inputs.Images),

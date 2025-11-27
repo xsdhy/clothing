@@ -17,21 +17,19 @@ func NewService(provider *entity.DbProvider) (AIService, error) {
 		driver = strings.ToLower(strings.TrimSpace(provider.ID))
 	}
 
-	models := provider.Models
-
 	switch driver {
 	case entity.ProviderDriverOpenRouter:
-		return NewOpenRouter(provider, models)
+		return NewOpenRouter(provider)
 	case entity.ProviderDriverGemini:
-		return NewGeminiService(provider, models)
+		return NewGeminiService(provider)
 	case entity.ProviderDriverAiHubMix:
-		return NewAiHubMix(provider, models)
+		return NewAiHubMix(provider)
 	case entity.ProviderDriverDashscope:
-		return NewDashscope(provider, models)
+		return NewDashscope(provider)
 	case entity.ProviderDriverFal:
-		return NewFalAI(provider, models)
+		return NewFalAI(provider)
 	case entity.ProviderDriverVolcengine:
-		return NewVolcengine(provider, models)
+		return NewVolcengine(provider)
 	default:
 		return nil, fmt.Errorf("unsupported provider driver: %s", provider.Driver)
 	}

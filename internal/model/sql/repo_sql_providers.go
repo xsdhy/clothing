@@ -166,6 +166,26 @@ func (r *GormRepository) GetProviderWithModel(ctx context.Context, providerID, m
 	return &provider, &model, nil
 }
 
+// 获取模版详情
+func (r *GormRepository) GetModel(ctx context.Context, providerID, modelID string) (*entity.DbModel, error) {
+	if r == nil || r.db == nil {
+		return nil, fmt.Errorf("repository not initialised")
+	}
+	providerID = strings.TrimSpace(providerID)
+	modelID = strings.TrimSpace(modelID)
+	if providerID == "" || modelID == "" {
+		return nil, fmt.Errorf("provider and model id are required")
+	}
+
+	var model entity.DbModel
+	modelQuery := r.db.WithContext(ctx).
+		Where("provider_id = ? AND model_id = ?", providerID, modelID)
+	if err := modelQuery.First(&model).Error; err != nil {
+		return nil, err
+	}
+	return &model, nil
+}
+
 // CreateModel inserts a new model row.
 func (r *GormRepository) CreateModel(ctx context.Context, model *entity.DbModel) error {
 	if r == nil || r.db == nil {

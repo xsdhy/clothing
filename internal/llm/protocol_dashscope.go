@@ -147,7 +147,7 @@ func (o dashscopeVideoOutput) collectAssets() []string {
 	return out
 }
 
-func GenerateContentByDashscopeProtocol(ctx context.Context, apiKey, endpoint string, model entity.LlmModel, prompt, size string, duration int, base64Images, videos []string) (assets []string, assistantText string, err error) {
+func GenerateImageByDashscopeProtocol(ctx context.Context, apiKey, endpoint string, model entity.LlmModel, prompt, size string, duration int, base64Images, videos []string) (assets []string, assistantText string, err error) {
 	if strings.TrimSpace(apiKey) == "" {
 		return nil, "", errors.New("api key missing")
 	}
@@ -160,11 +160,6 @@ func GenerateContentByDashscopeProtocol(ctx context.Context, apiKey, endpoint st
 	targetEndpoint := strings.TrimSpace(endpoint)
 	if targetEndpoint == "" {
 		targetEndpoint = defaultDashscopeGenerationURL
-	}
-
-	if isDashscopeVideoModel(model) {
-		cfg := videoConfigFromModel(model)
-		return generateDashscopeVideo(ctx, apiKey, targetEndpoint, model, cfg, trimmedPrompt, size, duration, base64Images)
 	}
 
 	logrus.WithFields(logrus.Fields{
@@ -321,7 +316,8 @@ func GenerateContentByDashscopeProtocol(ctx context.Context, apiKey, endpoint st
 	return assets, assistantText, nil
 }
 
-func generateDashscopeVideo(ctx context.Context, apiKey, endpoint string, model entity.LlmModel, cfg dashscopeVideoConfig, prompt, size string, duration int, images []string) (assets []string, assistantText string, err error) {
+func GenerateDashscopeVideo(ctx context.Context, apiKey, endpoint string, model entity.LlmModel, prompt, size string, duration int, images []string) (assets []string, assistantText string, err error) {
+	cfg := videoConfigFromModel(model)
 	if len(images) == 0 {
 		return nil, "", errors.New("dashscope video model requires at least one reference image")
 	}
