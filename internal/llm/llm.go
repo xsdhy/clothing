@@ -11,5 +11,5 @@ type AIService interface {
 	Models() []entity.LlmModel
 	SupportsModel(modelID string) bool
 
-	GenerateImages(ctx context.Context, request entity.GenerateImageRequest) ([]string, string, error)
+	GenerateContent(ctx context.Context, request entity.GenerateContentRequest) ([]string, string, error)
 }

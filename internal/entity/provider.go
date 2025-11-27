@@ -47,8 +47,11 @@ type DbModel struct {
 	Description string `gorm:"type:text" json:"description"`
 	Price       string `gorm:"type:varchar(64)" json:"price"`
 
-	MaxImages          int         `gorm:"column:max_images" json:"max_images"`
-	Modalities         StringArray `gorm:"column:modalities;type:json" json:"modalities"`
+	MaxImages int `gorm:"column:max_images" json:"max_images"`
+	// Modalities 保持兼容旧字段，迁移后请使用 InputModalities/OutputModalities。
+	Modalities         StringArray `gorm:"column:modalities;type:json" json:"-"`
+	InputModalities    StringArray `gorm:"column:input_modalities;type:json" json:"input_modalities"`
+	OutputModalities   StringArray `gorm:"column:output_modalities;type:json" json:"output_modalities"`
 	SupportedSizes     StringArray `gorm:"column:supported_sizes;type:json" json:"supported_sizes"`
 	SupportedDurations IntArray    `gorm:"column:supported_durations;type:json" json:"supported_durations"`
 	DefaultSize        string      `gorm:"column:default_size;type:varchar(64)" json:"default_size"`
@@ -67,19 +70,17 @@ func (DbModel) TableName() string {
 
 // ToLlmModel converts DbModel into LlmModel DTO.
 func (m DbModel) ToLlmModel() LlmModel {
-	var modalities []Modality
-	for _, item := range m.Modalities {
-		trimmed := strings.TrimSpace(item)
-		if trimmed != "" {
-			modalities = append(modalities, Modality(trimmed))
-		}
-	}
+	inputModalities := toModalities(m.InputModalities, m.Modalities)
+	outputModalities := toModalities(m.OutputModalities, m.Modalities)
 
 	inputs := Inputs{
 		MaxImages: m.MaxImages,
 	}
-	if len(modalities) > 0 {
-		inputs.Modalities = modalities
+	if len(inputModalities) > 0 {
+		inputs.InputModalities = inputModalities
+	}
+	if len(outputModalities) > 0 {
+		inputs.OutputModalities = outputModalities
 	}
 	if len(m.SupportedSizes) > 0 {
 		inputs.SupportedSizes = m.SupportedSizes.ToSlice()
@@ -249,4 +250,19 @@ func parseDefaultString(settings JSONMap, keys ...string) string {
 		}
 	}
 	return ""
+}
+
+func toModalities(values StringArray, fallback StringArray) []Modality {
+	var modalities []Modality
+	source := values
+	if len(source) == 0 {
+		source = fallback
+	}
+	for _, item := range source {
+		trimmed := strings.TrimSpace(item)
+		if trimmed != "" {
+			modalities = append(modalities, Modality(trimmed))
+		}
+	}
+	return modalities
 }

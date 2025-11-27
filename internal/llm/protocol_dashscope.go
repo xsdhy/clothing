@@ -147,7 +147,7 @@ func (o dashscopeVideoOutput) collectAssets() []string {
 	return out
 }
 
-func GenerateImagesByDashscopeProtocol(ctx context.Context, apiKey, endpoint string, model entity.LlmModel, prompt, size string, duration int, base64Images, videos []string) (assets []string, assistantText string, err error) {
+func GenerateContentByDashscopeProtocol(ctx context.Context, apiKey, endpoint string, model entity.LlmModel, prompt, size string, duration int, base64Images, videos []string) (assets []string, assistantText string, err error) {
 	if strings.TrimSpace(apiKey) == "" {
 		return nil, "", errors.New("api key missing")
 	}
@@ -173,7 +173,7 @@ func GenerateImagesByDashscopeProtocol(ctx context.Context, apiKey, endpoint str
 		"image_count":     len(base64Images),
 		"video_count":     len(videos),
 		"reference_media": len(base64Images) + len(videos),
-	}).Info("dashscope_generate_images_start")
+	}).Info("dashscope_generate_content_start")
 
 	messageContents := make([]dashscopeContent, 0, len(base64Images)+len(videos)+1)
 	for idx, img := range base64Images {
@@ -263,7 +263,7 @@ func GenerateImagesByDashscopeProtocol(ctx context.Context, apiKey, endpoint str
 		logrus.WithFields(logrus.Fields{
 			"status": resp.StatusCode,
 			"body":   buf.String(),
-		}).Error("dashscope generate images http error")
+		}).Error("dashscope generate content http error")
 		return nil, "", fmt.Errorf("dashscope http %d: %s", resp.StatusCode, buf.String())
 	}
 
@@ -550,10 +550,21 @@ func inlineDashscopeImage(ctx context.Context, payload string) (string, error) {
 }
 
 func isDashscopeVideoModel(model entity.LlmModel) bool {
-	for _, modality := range model.Inputs.Modalities {
-		if strings.EqualFold(string(modality), "video") {
-			return true
+	hasVideoModality := func(mods []entity.Modality) bool {
+		for _, modality := range mods {
+			if strings.EqualFold(string(modality), "video") {
+				return true
+			}
 		}
+		return false
+	}
+
+	if hasVideoModality(model.Inputs.OutputModalities) || hasVideoModality(model.Inputs.InputModalities) {
+		return true
+	}
+
+	if len(model.Inputs.SupportedDurations) > 0 || model.Inputs.DefaultDuration > 0 {
+		return true
 	}
 
 	m := strings.ToLower(strings.TrimSpace(model.ID))

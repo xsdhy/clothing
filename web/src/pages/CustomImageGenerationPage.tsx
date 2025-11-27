@@ -29,7 +29,7 @@ import type {
   AIProvider,
   AIModel,
 } from "../types";
-import { generateImage, fetchProviders } from "../ai";
+import { generateContent, fetchProviders } from "../ai";
 import ImageUpload from "../components/ImageUpload";
 import ImageViewer from "../components/ImageViewer";
 import { buildDownloadName, isVideoUrl } from "../utils/media";
@@ -117,9 +117,17 @@ const ImageGenerator: React.FC<ImageGeneratorProps> = ({
 
   const isVideoModel = React.useMemo(() => {
     const id = selectedModel?.id?.toLowerCase() ?? "";
-    const modalities =
-      selectedModel?.inputs?.modalities?.map((m) => m.toLowerCase()) ?? [];
-    if (modalities.includes("video")) {
+    const outputModalities =
+      selectedModel?.inputs?.output_modalities?.map((m) => m.toLowerCase()) ??
+      selectedModel?.inputs?.input_modalities?.map((m) => m.toLowerCase()) ??
+      [];
+    if (outputModalities.includes("video")) {
+      return true;
+    }
+    if (
+      selectedModel?.inputs?.supported_durations?.length ||
+      selectedModel?.inputs?.default_duration
+    ) {
       return true;
     }
     return id.includes("i2v") || id.includes("video");
@@ -279,24 +287,28 @@ const ImageGenerator: React.FC<ImageGeneratorProps> = ({
     setError(null);
 
     try {
+      const options: GenerationRequest["options"] = {};
+      if (resolutionOptions.length > 0 && selectedSize) {
+        options.size = selectedSize;
+      }
+      if (
+        typeof selectedDuration === "number" &&
+        selectedDuration > 0
+      ) {
+        options.duration = selectedDuration;
+      }
+
       const request: GenerationRequest = {
         prompt: prompt.trim(),
-        images,
+        inputs: { images },
         provider: selectedProvider,
         model: selectedModel.id,
-        size:
-          resolutionOptions.length > 0 && selectedSize
-            ? selectedSize
-            : undefined,
-        duration:
-          typeof selectedDuration === "number" && selectedDuration > 0
-            ? selectedDuration
-            : undefined,
+        options,
       };
 
-      const result = await generateImage(request);
+      const result = await generateContent(request);
       onGenerate(result);
-      if (result.images.length > 0) {
+      if (result.outputs.length > 0) {
         setResultViewerIndex(0);
       }
       setResultViewerOpen(false);
@@ -841,7 +853,7 @@ const CustomImageGenerationPage: React.FC = () => {
   }, [location]);
 
   const handleGenerate = (result: GenerationResult) => {
-    setLastGeneratedImages(result.images);
+    setLastGeneratedImages(result.outputs);
     setLastGenerationText(result.text ?? null);
   };
 

@@ -152,22 +152,22 @@ func (f *FalAI) SupportsModel(modelID string) bool {
 	return ok
 }
 
-func (f *FalAI) GenerateImages(ctx context.Context, request entity.GenerateImageRequest) ([]string, string, error) {
+func (f *FalAI) GenerateContent(ctx context.Context, request entity.GenerateContentRequest) ([]string, string, error) {
 	if f == nil {
 		return nil, "", errors.New("fal.ai provider not initialised")
 	}
 
-	cfg, ok := f.modelLookup[request.Model]
+	cfg, ok := f.modelLookup[request.ModelID]
 	if !ok {
-		return nil, "", fmt.Errorf("fal.ai model %q is not supported", request.Model)
+		return nil, "", fmt.Errorf("fal.ai model %q is not supported", request.ModelID)
 	}
 
 	logrus.WithFields(logrus.Fields{
-		"model":               request.Model,
+		"model":               request.ModelID,
 		"prompt_preview":      request.Prompt,
-		"reference_image_cnt": len(request.Images),
-		"size":                strings.TrimSpace(request.Size),
-	}).Info("falai_generate_images_start")
+		"reference_image_cnt": len(request.Inputs.Images),
+		"size":                strings.TrimSpace(request.Options.Size),
+	}).Info("falai_generate_content_start")
 
 	input, err := f.buildInputPayload(cfg.mode, request)
 	if err != nil {
@@ -192,7 +192,7 @@ func (f *FalAI) GenerateImages(ctx context.Context, request entity.GenerateImage
 	return images, text, nil
 }
 
-func (f *FalAI) buildInputPayload(mode falMode, request entity.GenerateImageRequest) (map[string]any, error) {
+func (f *FalAI) buildInputPayload(mode falMode, request entity.GenerateContentRequest) (map[string]any, error) {
 	prompt := strings.TrimSpace(request.Prompt)
 	if prompt == "" {
 		return nil, errors.New("prompt is required")
@@ -200,7 +200,7 @@ func (f *FalAI) buildInputPayload(mode falMode, request entity.GenerateImageRequ
 
 	input := map[string]any{"prompt": prompt}
 
-	size := strings.TrimSpace(request.Size)
+	size := strings.TrimSpace(request.Options.Size)
 	if size == "" {
 		size = falDefaultImageSize
 	}
@@ -210,7 +210,7 @@ func (f *FalAI) buildInputPayload(mode falMode, request entity.GenerateImageRequ
 		input["image_size"] = size
 		input["num_images"] = 1
 	case falModeImageToImage:
-		imageURL, base64Payload := f.pickReferenceImage(request.Images)
+		imageURL, base64Payload := f.pickReferenceImage(request.Inputs.Images)
 		if imageURL == "" && base64Payload == "" {
 			return nil, errors.New("image-to-image model requires at least one reference image")
 		}

@@ -93,29 +93,29 @@ func (d *Dashscope) SupportsModel(modelID string) bool {
 	return ok
 }
 
-func (d *Dashscope) GenerateImages(ctx context.Context, request entity.GenerateImageRequest) ([]string, string, error) {
+func (d *Dashscope) GenerateContent(ctx context.Context, request entity.GenerateContentRequest) ([]string, string, error) {
 
 	logrus.WithFields(logrus.Fields{
 
 		"prompt_preview":      request.Prompt,
-		"reference_image_cnt": len(request.Images),
-		"reference_video_cnt": len(request.Videos),
-		"size":                strings.TrimSpace(request.Size),
-		"duration":            request.Duration,
-	}).Info("llm_generate_images_start")
+		"reference_image_cnt": len(request.Inputs.Images),
+		"reference_video_cnt": len(request.Inputs.Videos),
+		"size":                strings.TrimSpace(request.Options.Size),
+		"duration":            request.Options.Duration,
+	}).Info("llm_generate_content_start")
 
-	if !d.SupportsModel(request.Model) {
-		err := fmt.Errorf("dashscope model %q is not supported", request.Model)
-		logrus.WithError(err).Warn("llm_generate_images_invalid_model")
+	if !d.SupportsModel(request.ModelID) {
+		err := fmt.Errorf("dashscope model %q is not supported", request.ModelID)
+		logrus.WithError(err).Warn("llm_generate_content_invalid_model")
 		return nil, "", err
 	}
 
-	modelConfig, ok := d.modelByID[normalizeModelID(request.Model)]
+	modelConfig, ok := d.modelByID[normalizeModelID(request.ModelID)]
 	if !ok {
-		modelConfig = entity.LlmModel{ID: request.Model}
+		modelConfig = entity.LlmModel{ID: request.ModelID}
 	}
 
-	return GenerateImagesByDashscopeProtocol(ctx, d.apiKey, d.endpoint, modelConfig, request.Prompt, request.Size, request.Duration, request.Images, request.Videos)
+	return GenerateContentByDashscopeProtocol(ctx, d.apiKey, d.endpoint, modelConfig, request.Prompt, request.Options.Size, request.Options.Duration, request.Inputs.Images, request.Inputs.Videos)
 }
 
 func normalizeModelID(id string) string {

@@ -40,14 +40,14 @@ func (h *HTTPHandler) ListProviders(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"providers": results})
 }
 
-func (h *HTTPHandler) GenerateImage(c *gin.Context) {
+func (h *HTTPHandler) GenerateContent(c *gin.Context) {
 	requestUser := CurrentUser(c)
 	if requestUser == nil {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "authentication required"})
 		return
 	}
 
-	var request entity.GenerateImageRequest
+	var request entity.GenerateContentRequest
 	if err := c.ShouldBindJSON(&request); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request payload"})
 		return
@@ -59,21 +59,21 @@ func (h *HTTPHandler) GenerateImage(c *gin.Context) {
 		return
 	}
 
-	request.Size = strings.TrimSpace(request.Size)
+	request.Options.Size = strings.TrimSpace(request.Options.Size)
 
 	if h.repo == nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "provider repository not configured"})
 		return
 	}
 
-	providerID := strings.TrimSpace(request.Provider)
+	providerID := strings.TrimSpace(request.ProviderID)
 	if providerID == "" {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "provider is required"})
 		return
 	}
 
-	request.Model = strings.TrimSpace(request.Model)
-	if request.Model == "" {
+	request.ModelID = strings.TrimSpace(request.ModelID)
+	if request.ModelID == "" {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "model is required"})
 		return
 	}
@@ -86,25 +86,25 @@ func (h *HTTPHandler) GenerateImage(c *gin.Context) {
 		logrus.WithError(err).WithFields(logrus.Fields{
 			"provider": providerID,
 		}).Error("failed to load provider from database")
-		c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("unsupported provider: %s", request.Provider)})
+		c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("unsupported provider: %s", request.ProviderID)})
 		return
 	}
 	if dbProvider == nil || !dbProvider.IsActive {
-		c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("provider %s is disabled", request.Provider)})
+		c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("provider %s is disabled", request.ProviderID)})
 		return
 	}
 
 	var dbModel *entity.DbModel
 	for i := range dbProvider.Models {
 		model := &dbProvider.Models[i]
-		if strings.EqualFold(model.ModelID, request.Model) {
+		if strings.EqualFold(model.ModelID, request.ModelID) {
 			dbModel = model
 			break
 		}
 	}
 
 	if dbModel == nil || !dbModel.IsActive {
-		c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("unsupported model: %s", request.Model)})
+		c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("unsupported model: %s", request.ModelID)})
 		return
 	}
 
@@ -113,12 +113,12 @@ func (h *HTTPHandler) GenerateImage(c *gin.Context) {
 		logrus.WithError(err).WithFields(logrus.Fields{
 			"provider": providerID,
 		}).Error("failed to initialise provider service")
-		c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("provider %s is temporarily unavailable", request.Provider)})
+		c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("provider %s is temporarily unavailable", request.ProviderID)})
 		return
 	}
 
-	if !service.SupportsModel(request.Model) {
-		c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("unsupported model: %s", request.Model)})
+	if !service.SupportsModel(request.ModelID) {
+		c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("unsupported model: %s", request.ModelID)})
 		return
 	}
 
@@ -169,15 +169,15 @@ func (h *HTTPHandler) GenerateImage(c *gin.Context) {
 		record := entity.DbUsageRecord{
 			UserID:     userID,
 			ProviderID: providerID,
-			ModelID:    request.Model,
+			ModelID:    request.ModelID,
 			Prompt:     request.Prompt,
-			Size:       request.Size,
+			Size:       request.Options.Size,
 		}
 
 		var storageIssues []string
 
-		if len(request.Images) > 0 {
-			inputPaths, err := h.saveImagesToStorage(genCtx, "inputs", request.Images, request.Model)
+		if len(request.Inputs.Images) > 0 {
+			inputPaths, err := h.saveMediaToStorage(genCtx, "inputs", request.Inputs.Images, request.ModelID)
 			if len(inputPaths) > 0 {
 				record.InputImages = entity.StringArray(inputPaths)
 			}
@@ -185,16 +185,16 @@ func (h *HTTPHandler) GenerateImage(c *gin.Context) {
 				storageIssues = append(storageIssues, fmt.Sprintf("input images: %v", err))
 				logrus.WithError(err).WithFields(logrus.Fields{
 					"provider": providerID,
-					"model":    request.Model,
+					"model":    request.ModelID,
 				}).Warn("failed to persist input images")
 			}
 		}
 
-		images, text, err := service.GenerateImages(genCtx, request)
+		outputs, text, err := service.GenerateContent(genCtx, request)
 		if err != nil {
 			logrus.WithError(err).WithFields(logrus.Fields{
 				"provider": providerID,
-				"model":    request.Model,
+				"model":    request.ModelID,
 			}).Error("failed to generate image")
 			record.ErrorMessage = err.Error()
 			if len(storageIssues) > 0 {
@@ -207,22 +207,22 @@ func (h *HTTPHandler) GenerateImage(c *gin.Context) {
 
 		logrus.WithFields(logrus.Fields{
 			"provider": providerID,
-			"model":    request.Model,
+			"model":    request.ModelID,
 		}).Info("generated image")
 
 		record.OutputText = text
 
-		if len(images) > 0 {
-			outputPaths, err := h.saveImagesToStorage(genCtx, "outputs", images, request.Model)
+		if len(outputs) > 0 {
+			outputPaths, err := h.saveMediaToStorage(genCtx, "outputs", outputs, request.ModelID)
 			if len(outputPaths) > 0 {
 				record.OutputImages = entity.StringArray(outputPaths)
 			}
 			if err != nil {
-				storageIssues = append(storageIssues, fmt.Sprintf("output images: %v", err))
+				storageIssues = append(storageIssues, fmt.Sprintf("output assets: %v", err))
 				logrus.WithError(err).WithFields(logrus.Fields{
 					"provider": providerID,
-					"model":    request.Model,
-				}).Warn("failed to persist output images")
+					"model":    request.ModelID,
+				}).Warn("failed to persist output assets")
 			}
 		}
 
@@ -232,9 +232,9 @@ func (h *HTTPHandler) GenerateImage(c *gin.Context) {
 
 		h.persistUsageRecord(&record, tagIDsCopy)
 
-		response := entity.GenerateImageResponse{
-			Text:   text,
-			Images: images,
+		response := entity.GenerateContentResponse{
+			Text:    text,
+			Outputs: outputs,
 		}
 
 		messages <- sseMessage{event: "result", data: response}
@@ -248,8 +248,8 @@ func (h *HTTPHandler) GenerateImage(c *gin.Context) {
 		case <-streamCtx.Done():
 			logrus.WithFields(logrus.Fields{
 				"provider": providerID,
-				"model":    request.Model,
-			}).Warn("generate image request cancelled by client")
+				"model":    request.ModelID,
+			}).Warn("generate content request cancelled by client")
 			return false
 		case <-heartbeatTicker.C:
 			c.SSEvent("ping", gin.H{"ts": time.Now().UnixMilli()})
@@ -261,7 +261,7 @@ func (h *HTTPHandler) GenerateImage(c *gin.Context) {
 			logrus.WithFields(logrus.Fields{
 				"event": msg.event,
 				"data":  msg.data,
-			}).Info("generate image request received")
+			}).Info("generate content request received")
 			c.SSEvent(msg.event, msg.data)
 			if msg.event == "result" || msg.event == "error" {
 				return false
@@ -271,7 +271,7 @@ func (h *HTTPHandler) GenerateImage(c *gin.Context) {
 	})
 }
 
-func (h *HTTPHandler) saveImagesToStorage(parentCtx context.Context, category string, payloads []string, model string) ([]string, error) {
+func (h *HTTPHandler) saveMediaToStorage(parentCtx context.Context, category string, payloads []string, model string) ([]string, error) {
 	if h.storage == nil || len(payloads) == 0 {
 		return nil, nil
 	}
@@ -294,7 +294,7 @@ func (h *HTTPHandler) saveImagesToStorage(parentCtx context.Context, category st
 			continue
 		}
 
-		data, ext, err := h.resolveImagePayload(ctx, trimmed)
+		data, ext, err := h.resolveMediaPayload(ctx, trimmed)
 		if err != nil {
 			errs = append(errs, fmt.Sprintf("%d: %v", idx, err))
 			continue
@@ -326,7 +326,7 @@ func (h *HTTPHandler) saveImagesToStorage(parentCtx context.Context, category st
 	return paths, nil
 }
 
-func (h *HTTPHandler) resolveImagePayload(ctx context.Context, payload string) ([]byte, string, error) {
+func (h *HTTPHandler) resolveMediaPayload(ctx context.Context, payload string) ([]byte, string, error) {
 	trimmed := strings.TrimSpace(payload)
 	if trimmed == "" {
 		return nil, "", fmt.Errorf("empty payload")
@@ -361,18 +361,18 @@ func (h *HTTPHandler) resolveImagePayload(ctx context.Context, payload string) (
 			ext = utils.ExtensionFromMime(http.DetectContentType(data))
 		}
 		if ext == "" {
-			ext = "jpg"
+			ext = "bin"
 		}
 
 		return data, ext, nil
 	}
 
-	data, ext, err := utils.DecodeImagePayload(trimmed)
+	data, ext, err := utils.DecodeMediaPayload(trimmed)
 	if err == nil {
 		return data, ext, nil
 	}
 
-	data, ext, err = utils.DecodeImagePayload(utils.EnsureDataURL(trimmed))
+	data, ext, err = utils.DecodeMediaPayload(utils.EnsureDataURL(trimmed))
 	if err != nil {
 		return nil, "", err
 	}

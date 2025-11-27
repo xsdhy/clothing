@@ -330,7 +330,8 @@ func (h *HTTPHandler) CreateProviderModel(c *gin.Context) {
 		Description:        strings.TrimSpace(payload.Description),
 		Price:              strings.TrimSpace(payload.Price),
 		MaxImages:          0,
-		Modalities:         entity.StringArray(normaliseStringSlice(payload.Modalities)),
+		InputModalities:    entity.StringArray(normaliseStringSlice(payload.InputModalities)),
+		OutputModalities:   entity.StringArray(normaliseStringSlice(payload.OutputModalities)),
 		SupportedSizes:     entity.StringArray(normaliseStringSlice(payload.SupportedSizes)),
 		SupportedDurations: entity.IntArray(normaliseIntSlice(payload.SupportedDurations)),
 		DefaultSize:        strings.TrimSpace(payload.DefaultSize),
@@ -413,8 +414,11 @@ func (h *HTTPHandler) UpdateProviderModel(c *gin.Context) {
 	if payload.MaxImages != nil {
 		updates["max_images"] = *payload.MaxImages
 	}
-	if payload.Modalities != nil {
-		updates["modalities"] = entity.StringArray(normaliseStringSlice(*payload.Modalities))
+	if payload.InputModalities != nil {
+		updates["input_modalities"] = entity.StringArray(normaliseStringSlice(*payload.InputModalities))
+	}
+	if payload.OutputModalities != nil {
+		updates["output_modalities"] = entity.StringArray(normaliseStringSlice(*payload.OutputModalities))
 	}
 	if payload.SupportedSizes != nil {
 		updates["supported_sizes"] = entity.StringArray(normaliseStringSlice(*payload.SupportedSizes))

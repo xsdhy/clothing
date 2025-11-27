@@ -83,7 +83,7 @@ func (g *GeminiService) SupportsModel(modelID string) bool {
 	return ok
 }
 
-func (g *GeminiService) GenerateImages(ctx context.Context, request entity.GenerateImageRequest) ([]string, string, error) {
+func (g *GeminiService) GenerateContent(ctx context.Context, request entity.GenerateContentRequest) ([]string, string, error) {
 	// TODO: Implement Gemini API integration.
 	return nil, "", errors.New("gemini response did not include image data")
 }

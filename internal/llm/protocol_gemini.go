@@ -61,12 +61,12 @@ type (
 	}
 )
 
-// GenerateImagesByGeminiProtocol streams Gemini image generations via SSE.
-// It behaves similarly to GenerateImagesByOpenaiProtocol but understands Gemini
+// GenerateContentByGeminiProtocol streams Gemini image generations via SSE.
+// It behaves similarly to GenerateContentByOpenaiProtocol but understands Gemini
 // payloads (candidates/parts with inlineData). More verbose logs are emitted to
 // help diagnose integration issues, as Gemini responses can be picky about the
 // shape of image payloads.
-func GenerateImagesByGeminiProtocol(ctx context.Context, apiKey, endpoint, model, prompt string, refs []string) (imageDataURLs []string, assistantText string, err error) {
+func GenerateContentByGeminiProtocol(ctx context.Context, apiKey, endpoint, model, prompt string, refs []string) (imageDataURLs []string, assistantText string, err error) {
 	if strings.TrimSpace(apiKey) == "" {
 		return nil, "", errors.New("api key missing")
 	}
@@ -83,7 +83,7 @@ func GenerateImagesByGeminiProtocol(ctx context.Context, apiKey, endpoint, model
 		"prompt_preview":        truncateForLog(prompt, 64),
 		"prompt_length":         len(prompt),
 		"reference_image_count": len(refs),
-	}).Info("gemini_generate_images_start")
+	}).Info("gemini_generate_content_start")
 
 	parts, errs := buildGeminiParts(ctx, prompt, refs)
 	if len(parts) == 0 {

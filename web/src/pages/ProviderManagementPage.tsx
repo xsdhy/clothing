@@ -64,7 +64,8 @@ interface ModelDialogForm {
   description: string;
   price: string;
   max_images: string;
-  modalities: string;
+  input_modalities: string;
+  output_modalities: string;
   supported_sizes: string;
   supported_durations: string;
   default_size: string;
@@ -131,7 +132,8 @@ const defaultModelForm = (): ModelDialogForm => ({
   description: "",
   price: "",
   max_images: "",
-  modalities: "",
+  input_modalities: "",
+  output_modalities: "",
   supported_sizes: "",
   supported_durations: "",
   default_size: "",
@@ -149,7 +151,8 @@ const toModelDialogForm = (model: ProviderModelAdmin): ModelDialogForm => ({
     typeof model.max_images === "number" && Number.isFinite(model.max_images)
       ? String(model.max_images)
       : "",
-  modalities: model.modalities?.join(", ") ?? "",
+  input_modalities: model.input_modalities?.join(", ") ?? "",
+  output_modalities: model.output_modalities?.join(", ") ?? "",
   supported_sizes: model.supported_sizes?.join(", ") ?? "",
   supported_durations:
     model.supported_durations && model.supported_durations.length
@@ -547,7 +550,8 @@ const ProviderManagementPage: React.FC = () => {
         parsedMaxImages = parsed;
       }
 
-      const modalities = parseCommaSeparated(modelForm.modalities);
+      const inputModalities = parseCommaSeparated(modelForm.input_modalities);
+      const outputModalities = parseCommaSeparated(modelForm.output_modalities);
       const sizes = parseCommaSeparated(modelForm.supported_sizes);
       const durations = parseNumberList(modelForm.supported_durations);
       const parsedDefaultDuration = parsePositiveInt(modelForm.default_duration);
@@ -583,7 +587,9 @@ const ProviderManagementPage: React.FC = () => {
             description: trimmedDescription || undefined,
             price: trimmedPrice || undefined,
             max_images: parsedMaxImages,
-            modalities: modalities.length > 0 ? modalities : undefined,
+            input_modalities: inputModalities.length > 0 ? inputModalities : undefined,
+            output_modalities:
+              outputModalities.length > 0 ? outputModalities : undefined,
             supported_sizes: sizes.length > 0 ? sizes : undefined,
             supported_durations: durations.length > 0 ? durations : undefined,
             default_size: trimmedDefaultSize || undefined,
@@ -639,10 +645,16 @@ const ProviderManagementPage: React.FC = () => {
         payload.max_images = 0;
       }
       if (
-        JSON.stringify(modalities) !==
-        JSON.stringify(existingModel.modalities ?? [])
+        JSON.stringify(inputModalities) !==
+        JSON.stringify(existingModel.input_modalities ?? [])
       ) {
-        payload.modalities = modalities;
+        payload.input_modalities = inputModalities;
+      }
+      if (
+        JSON.stringify(outputModalities) !==
+        JSON.stringify(existingModel.output_modalities ?? [])
+      ) {
+        payload.output_modalities = outputModalities;
       }
       if (
         JSON.stringify(sizes) !==
@@ -1062,8 +1074,11 @@ const ProviderManagementPage: React.FC = () => {
                                         </TableCell>
                                         <TableCell>
                                           <Stack direction="row" spacing={0.5} flexWrap="wrap" useFlexGap>
-                                            {model.modalities?.map((item) => (
-                                              <Chip key={item} size="small" label={item} variant="outlined" />
+                                            {model.input_modalities?.map((item) => (
+                                              <Chip key={`in-${item}`} size="small" label={`入:${item}`} variant="outlined" />
+                                            ))}
+                                            {model.output_modalities?.map((item) => (
+                                              <Chip key={`out-${item}`} size="small" label={`出:${item}`} color="primary" variant="outlined" />
                                             ))}
                                             {model.supported_sizes?.map((item) => (
                                               <Chip key={item} size="small" label={item} color="info" variant="outlined" />
@@ -1100,7 +1115,8 @@ const ProviderManagementPage: React.FC = () => {
                                                 variant="outlined"
                                               />
                                             ) : null}
-                                            {!model.modalities?.length &&
+                                            {!model.input_modalities?.length &&
+                                            !model.output_modalities?.length &&
                                             !model.supported_sizes?.length &&
                                             !model.supported_durations?.length &&
                                             !model.default_size &&
@@ -1420,15 +1436,26 @@ const ProviderManagementPage: React.FC = () => {
               placeholder="可选，需为非负整数"
             />
             <TextField
-              label="支持模态（逗号分隔）"
-              value={modelForm.modalities}
+              label="支持输入模态（逗号分隔）"
+              value={modelForm.input_modalities}
               onChange={(event) =>
                 setModelForm((prev) => ({
                   ...prev,
-                  modalities: event.target.value,
+                  input_modalities: event.target.value,
                 }))
               }
               placeholder="例如 text, image"
+            />
+            <TextField
+              label="支持输出模态（逗号分隔）"
+              value={modelForm.output_modalities}
+              onChange={(event) =>
+                setModelForm((prev) => ({
+                  ...prev,
+                  output_modalities: event.target.value,
+                }))
+              }
+              placeholder="例如 image, video"
             />
             <TextField
               label="支持尺寸（逗号分隔）"

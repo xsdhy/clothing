@@ -169,6 +169,12 @@ func ExtensionFromMime(mimeType string) string {
 		return "heic"
 	case "image/heif":
 		return "heif"
+	case "video/mp4":
+		return "mp4"
+	case "video/webm":
+		return "webm"
+	case "video/ogg":
+		return "ogv"
 	default:
 		return ""
 	}

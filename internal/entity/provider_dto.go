@@ -35,7 +35,8 @@ type CreateModelRequest struct {
 	Description        string                 `json:"description"`
 	Price              string                 `json:"price"`
 	MaxImages          *int                   `json:"max_images"`
-	Modalities         []string               `json:"modalities"`
+	InputModalities    []string               `json:"input_modalities"`
+	OutputModalities   []string               `json:"output_modalities"`
 	SupportedSizes     []string               `json:"supported_sizes"`
 	SupportedDurations []int                  `json:"supported_durations"`
 	DefaultSize        string                 `json:"default_size"`
@@ -50,7 +51,8 @@ type UpdateModelRequest struct {
 	Description        *string                `json:"description"`
 	Price              *string                `json:"price"`
 	MaxImages          *int                   `json:"max_images"`
-	Modalities         *[]string              `json:"modalities"`
+	InputModalities    *[]string              `json:"input_modalities"`
+	OutputModalities   *[]string              `json:"output_modalities"`
 	SupportedSizes     *[]string              `json:"supported_sizes"`
 	SupportedDurations *[]int                 `json:"supported_durations"`
 	DefaultSize        *string                `json:"default_size"`
@@ -81,7 +83,8 @@ type ProviderModelSummary struct {
 	Description        string    `json:"description,omitempty"`
 	Price              string    `json:"price,omitempty"`
 	MaxImages          int       `json:"max_images,omitempty"`
-	Modalities         []string  `json:"modalities,omitempty"`
+	InputModalities    []string  `json:"input_modalities,omitempty"`
+	OutputModalities   []string  `json:"output_modalities,omitempty"`
 	SupportedSizes     []string  `json:"supported_sizes,omitempty"`
 	SupportedDurations []int     `json:"supported_durations,omitempty"`
 	DefaultSize        string    `json:"default_size,omitempty"`
@@ -121,7 +124,14 @@ func (p DbProvider) ToAdminView(includeModels bool) ProviderAdminView {
 
 // ToAdminView converts DbModel to ProviderModelSummary.
 func (m DbModel) ToAdminView() ProviderModelSummary {
-	modalities := []string(m.Modalities.ToSlice())
+	inputModalities := []string(m.InputModalities.ToSlice())
+	outputModalities := []string(m.OutputModalities.ToSlice())
+	if len(inputModalities) == 0 && len(m.Modalities) > 0 {
+		inputModalities = []string(m.Modalities.ToSlice())
+	}
+	if len(outputModalities) == 0 && len(m.Modalities) > 0 {
+		outputModalities = []string(m.Modalities.ToSlice())
+	}
 	sizes := []string(m.SupportedSizes.ToSlice())
 	durations := mergeDurations(m.SupportedDurations, parseDurations(m.Settings))
 	defaultSize := resolveDefaultSize(m.DefaultSize, sizes, m.Settings)
@@ -133,7 +143,8 @@ func (m DbModel) ToAdminView() ProviderModelSummary {
 		Description:        m.Description,
 		Price:              m.Price,
 		MaxImages:          m.MaxImages,
-		Modalities:         modalities,
+		InputModalities:    inputModalities,
+		OutputModalities:   outputModalities,
 		SupportedSizes:     sizes,
 		SupportedDurations: durations,
 		DefaultSize:        defaultSize,

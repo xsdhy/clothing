@@ -7,12 +7,12 @@ import (
 	"strings"
 )
 
-// DecodeImagePayload decodes an inline base64 or data URL payload and returns
-// the raw bytes together with a guessed file extension.
-func DecodeImagePayload(payload string) ([]byte, string, error) {
+// DecodeMediaPayload decodes an inline base64 or data URL payload and returns
+// the raw bytes together with a guessed file extension (image/video).
+func DecodeMediaPayload(payload string) ([]byte, string, error) {
 	trimmed := strings.TrimSpace(payload)
 	if trimmed == "" {
-		return nil, "", fmt.Errorf("empty image payload")
+		return nil, "", fmt.Errorf("empty media payload")
 	}
 
 	mimeType, base64Payload := SplitDataURL(trimmed)
@@ -31,7 +31,7 @@ func DecodeImagePayload(payload string) ([]byte, string, error) {
 		ext = ExtensionFromMime(http.DetectContentType(data))
 	}
 	if ext == "" {
-		ext = "png"
+		ext = "bin"
 	}
 
 	return data, ext, nil

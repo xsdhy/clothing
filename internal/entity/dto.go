@@ -2,20 +2,28 @@ package entity
 
 import "time"
 
-type GenerateImageRequest struct {
-	Prompt   string   `json:"prompt" binding:"required"`
-	Images   []string `json:"images"`
-	Videos   []string `json:"videos,omitempty"`
-	Size     string   `json:"size,omitempty"`
-	Duration int      `json:"duration,omitempty"`
-	Provider string   `json:"provider" binding:"required"` //供应商ID
-	Model    string   `json:"model" binding:"required"`    //模型ID
-	TagIDs   []uint   `json:"tag_ids"`
+type ContentInputs struct {
+	Images []string `json:"images,omitempty"`
+	Videos []string `json:"videos,omitempty"`
 }
 
-type GenerateImageResponse struct {
-	Images []string `json:"images,omitempty"`
-	Text   string   `json:"text,omitempty"`
+type ContentOptions struct {
+	Size     string `json:"size,omitempty"`
+	Duration int    `json:"duration,omitempty"`
+}
+
+type GenerateContentRequest struct {
+	Prompt     string         `json:"prompt" binding:"required"`
+	Inputs     ContentInputs  `json:"inputs"`
+	Options    ContentOptions `json:"options"`
+	ProviderID string         `json:"provider_id" binding:"required"` // 供应商ID
+	ModelID    string         `json:"model_id" binding:"required"`    // 模型ID
+	TagIDs     []uint         `json:"tag_ids"`
+}
+
+type GenerateContentResponse struct {
+	Outputs []string `json:"outputs,omitempty"`
+	Text    string   `json:"text,omitempty"`
 }
 
 // 模态枚举（可扩展到音频/视频）
@@ -28,7 +36,8 @@ const (
 )
 
 type Inputs struct {
-	Modalities         []Modality `json:"modalities,omitempty"`          // 支持的模态枚举，例: ["text"], ["image"], ["text","image"]
+	InputModalities    []Modality `json:"input_modalities,omitempty"`    // 支持的输入模态：text/image/video
+	OutputModalities   []Modality `json:"output_modalities,omitempty"`   // 支持的输出模态：text/image/video
 	MaxImages          int        `json:"max_images,omitempty"`          // 支持的最大输入图片数
 	SupportedSizes     []string   `json:"supported_sizes,omitempty"`     // 支持的图像尺寸/分辨率，留空表示不限预设
 	SupportedDurations []int      `json:"supported_durations,omitempty"` // 视频模型支持的时长（秒）

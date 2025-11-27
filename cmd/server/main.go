@@ -78,7 +78,7 @@ func main() {
 	protected := apiGroup.Group("")
 	protected.Use(httpHandler.AuthMiddleware())
 	protected.GET("/llm/providers", httpHandler.ListProviders)
-	protected.POST("/llm", httpHandler.GenerateImage)
+	protected.POST("/llm", httpHandler.GenerateContent)
 	protected.GET("/usage-records", httpHandler.ListUsageRecords)
 	protected.GET("/usage-records/:id", httpHandler.GetUsageRecord)
 	protected.DELETE("/usage-records/:id", httpHandler.DeleteUsageRecord)

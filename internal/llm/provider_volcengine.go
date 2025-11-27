@@ -91,25 +91,25 @@ func (v *Volcengine) SupportsModel(modelID string) bool {
 	return ok
 }
 
-func (v *Volcengine) GenerateImages(ctx context.Context, request entity.GenerateImageRequest) ([]string, string, error) {
+func (v *Volcengine) GenerateContent(ctx context.Context, request entity.GenerateContentRequest) ([]string, string, error) {
 	logrus.WithFields(logrus.Fields{
 		"prompt_preview":      request.Prompt,
-		"reference_image_cnt": len(request.Images),
-		"size":                strings.TrimSpace(request.Size),
-	}).Info("llm_generate_images_start")
+		"reference_image_cnt": len(request.Inputs.Images),
+		"size":                strings.TrimSpace(request.Options.Size),
+	}).Info("llm_generate_content_start")
 
-	if !v.SupportsModel(request.Model) {
-		err := fmt.Errorf("volcengine model %q is not supported", request.Model)
-		logrus.WithError(err).Warn("llm_generate_images_invalid_model")
+	if !v.SupportsModel(request.ModelID) {
+		err := fmt.Errorf("volcengine model %q is not supported", request.ModelID)
+		logrus.WithError(err).Warn("llm_generate_content_invalid_model")
 		return nil, "", err
 	}
 
-	requestedSize := strings.TrimSpace(request.Size)
-	model, ok := v.modelByID[request.Model]
+	requestedSize := strings.TrimSpace(request.Options.Size)
+	model, ok := v.modelByID[request.ModelID]
 	if requestedSize != "" {
 		if !ok || len(model.Inputs.SupportedSizes) == 0 {
-			err := fmt.Errorf("volcengine model %q does not allow custom size", request.Model)
-			logrus.WithError(err).Warn("llm_generate_images_invalid_size")
+			err := fmt.Errorf("volcengine model %q does not allow custom size", request.ModelID)
+			logrus.WithError(err).Warn("llm_generate_content_invalid_size")
 			return nil, "", err
 		}
 		valid := false
@@ -120,11 +120,11 @@ func (v *Volcengine) GenerateImages(ctx context.Context, request entity.Generate
 			}
 		}
 		if !valid {
-			err := fmt.Errorf("volcengine model %q does not support size %q", request.Model, request.Size)
-			logrus.WithError(err).Warn("llm_generate_images_invalid_size")
+			err := fmt.Errorf("volcengine model %q does not support size %q", request.ModelID, request.Options.Size)
+			logrus.WithError(err).Warn("llm_generate_content_invalid_size")
 			return nil, "", err
 		}
 	}
 
-	return GenerateImagesByVolcengineProtocol(ctx, v.apiKey, request.Model, request.Prompt, requestedSize, request.Images)
+	return GenerateContentByVolcengineProtocol(ctx, v.apiKey, request.ModelID, request.Prompt, requestedSize, request.Inputs.Images)
 }

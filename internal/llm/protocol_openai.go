@@ -111,7 +111,7 @@ func makeUserMessage(prompt string, refs, videos []string) orMessage {
 	return orMessage{Role: "user", Content: parts}
 }
 
-func GenerateImagesByOpenaiProtocol(ctx context.Context, apiKey, baseURL, model, prompt string, refs, videos []string) (imageDataURLs []string, assistantText string, err error) {
+func GenerateContentByOpenaiProtocol(ctx context.Context, apiKey, baseURL, model, prompt string, refs, videos []string) (imageDataURLs []string, assistantText string, err error) {
 	if strings.TrimSpace(apiKey) == "" {
 		return nil, "", errors.New("api key missing")
 	}
@@ -126,7 +126,7 @@ func GenerateImagesByOpenaiProtocol(ctx context.Context, apiKey, baseURL, model,
 		"reference_media_count": len(refs) + len(videos),
 		"prompt_preview":        trimmedPrompt,
 		"base_url":              truncateForLog(baseURL, 128),
-	}).Info("GenerateImagesOR called")
+	}).Info("GenerateContentOR called")
 
 	modalities := []string{"text"}
 	if len(refs) > 0 {
@@ -163,7 +163,7 @@ func GenerateImagesByOpenaiProtocol(ctx context.Context, apiKey, baseURL, model,
 			"baseURL": baseURL,
 			"status":  resp.StatusCode,
 			"body":    buf.String(),
-		}).Error("openai generate images failed")
+		}).Error("openai generate content failed")
 		return nil, "", fmt.Errorf("openai http %d: %s", resp.StatusCode, buf.String())
 	}
 	// 处理 SSE 流式响应

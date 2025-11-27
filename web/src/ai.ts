@@ -46,7 +46,7 @@ export interface UsageRecordFilters {
   hasImages?: boolean;
 }
 
-export const generateImage = async (
+export const generateContent = async (
   request: GenerationRequest,
 ): Promise<GenerationResult> => {
   const prompt = request.prompt.trim();
@@ -58,26 +58,34 @@ export const generateImage = async (
     throw new Error("请选择服务商");
   }
 
-  const images = sanitizeImages(request.images);
-  const videos = sanitizeImages(request.videos);
+  const images = sanitizeImages(request.inputs?.images ?? []);
+  const videos = sanitizeImages(request.inputs?.videos ?? []);
 
   const payload: Record<string, unknown> = {
     prompt,
-    images,
-    provider: request.provider.id,
-    model: request.model,
+    provider_id: request.provider.id,
+    model_id: request.model,
+    inputs: {
+      images,
+      ...(videos.length > 0 ? { videos } : {}),
+    },
   };
 
-  if (typeof request.duration === "number" && request.duration > 0) {
-    payload.duration = request.duration;
+  const size = request.options?.size?.trim();
+  const duration =
+    typeof request.options?.duration === "number"
+      ? request.options.duration
+      : undefined;
+
+  if (size || duration) {
+    payload.options = {
+      ...(size ? { size } : {}),
+      ...(duration && duration > 0 ? { duration } : {}),
+    };
   }
 
-  if (videos.length > 0) {
-    payload.videos = videos;
-  }
-
-  if (typeof request.size === "string" && request.size.trim()) {
-    payload.size = request.size.trim();
+  if (request.tag_ids?.length) {
+    payload.tag_ids = request.tag_ids;
   }
 
   const timeoutMs = DEFAULT_HTTP_TIMEOUT_MS;
@@ -167,17 +175,17 @@ export const generateImage = async (
 
     const imageSet = new Set<string>();
 
-    appendSanitizedImages(imageSet, body?.images);
+    appendSanitizedImages(imageSet, body?.outputs);
 
     if (imageSet.size === 0 && body?.text) {
-      return { images: [], text: body.text };
+      return { outputs: [], text: body.text };
     }
 
     if (imageSet.size === 0) {
-      throw new Error("后端未返回有效的图片数据");
+      throw new Error("后端未返回有效的内容数据");
     }
 
-    return { images: Array.from(imageSet), text: body?.text };
+    return { outputs: Array.from(imageSet), text: body?.text };
   }
 
   if (!response.ok) {
@@ -298,17 +306,17 @@ export const generateImage = async (
 
   const imageSet = new Set<string>();
 
-  appendSanitizedImages(imageSet, backendResponse.images);
+  appendSanitizedImages(imageSet, backendResponse.outputs);
 
   if (imageSet.size === 0 && backendResponse.text) {
-    return { images: [], text: backendResponse.text };
+    return { outputs: [], text: backendResponse.text };
   }
 
   if (imageSet.size === 0) {
-    throw new Error("后端未返回有效的图片数据");
+    throw new Error("后端未返回有效的内容数据");
   }
 
-  return { images: Array.from(imageSet), text: backendResponse.text };
+  return { outputs: Array.from(imageSet), text: backendResponse.text };
 };
 
 export const fetchProviders = async (): Promise<AIProvider[]> => {

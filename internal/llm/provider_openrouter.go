@@ -89,13 +89,13 @@ func (o *OpenRouter) SupportsModel(modelID string) bool {
 	return ok
 }
 
-func (o *OpenRouter) GenerateImages(ctx context.Context, request entity.GenerateImageRequest) ([]string, string, error) {
+func (o *OpenRouter) GenerateContent(ctx context.Context, request entity.GenerateContentRequest) ([]string, string, error) {
 	logrus.WithFields(logrus.Fields{
 		"prompt_preview":      request.Prompt,
-		"reference_image_cnt": len(request.Images),
-		"reference_video_cnt": len(request.Videos),
-		"size":                strings.TrimSpace(request.Size),
-	}).Info("llm_generate_images_start")
+		"reference_image_cnt": len(request.Inputs.Images),
+		"reference_video_cnt": len(request.Inputs.Videos),
+		"size":                strings.TrimSpace(request.Options.Size),
+	}).Info("llm_generate_content_start")
 
-	return GenerateImagesByOpenaiProtocol(ctx, o.apiKey, o.endpoint, request.Model, request.Prompt, request.Images, request.Videos)
+	return GenerateContentByOpenaiProtocol(ctx, o.apiKey, o.endpoint, request.ModelID, request.Prompt, request.Inputs.Images, request.Inputs.Videos)
 }
