@@ -9,7 +9,7 @@ const inlineAssets = (): Plugin => ({
   async generateBundle(_options, bundle) {
     let htmlAssetKey: string | undefined
     const cssSnippets: string[] = []
-    const jsSnippets: string[] = []
+    const jsChunks: { fileName: string; code: string }[] = []
 
     for (const [fileName, chunk] of Object.entries(bundle)) {
       if (fileName.endsWith('.html') && chunk.type === 'asset') {
@@ -22,8 +22,7 @@ const inlineAssets = (): Plugin => ({
         continue
       }
       if (fileName.endsWith('.js') && chunk.type === 'chunk') {
-        jsSnippets.push(chunk.code)
-        delete bundle[fileName]
+        jsChunks.push({ fileName, code: chunk.code })
       }
     }
 
@@ -41,10 +40,16 @@ const inlineAssets = (): Plugin => ({
       html = html.replace(/<\/head>/, (m) => `${styles}${m}`)
     }
 
-    if (jsSnippets.length > 0) {
-      const scripts = `<script type="module">${jsSnippets.join('\n')}</script>`
+    if (jsChunks.length === 1) {
+      const [onlyChunk] = jsChunks
+      const scripts = `<script type="module">${onlyChunk.code}</script>`
       html = html.replace(/<script[^>]*type="module"[^>]*src="[^"]+"[^>]*><\/script>\s*/g, '')
       html = html.replace(/<\/body>/, (m) => `${scripts}${m}`)
+      delete bundle[onlyChunk.fileName]
+    } else if (jsChunks.length > 1) {
+      this.warn(
+        `inline-assets: skipped inlining JavaScript because ${jsChunks.length} chunks were produced; consider enabling inlineDynamicImports if you want a single inline bundle.`
+      )
     }
 
     htmlAsset.source = await minifyHtml(html, {
@@ -95,6 +100,7 @@ export default defineConfig({
     minify: 'esbuild',
     rollupOptions: {
       output: {
+        inlineDynamicImports: true,
         manualChunks: undefined,
       },
     },
