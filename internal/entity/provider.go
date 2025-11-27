@@ -47,10 +47,13 @@ type DbModel struct {
 	Description string `gorm:"type:text" json:"description"`
 	Price       string `gorm:"type:varchar(64)" json:"price"`
 
-	MaxImages      int         `gorm:"column:max_images" json:"max_images"`
-	Modalities     StringArray `gorm:"column:modalities;type:json" json:"modalities"`
-	SupportedSizes StringArray `gorm:"column:supported_sizes;type:json" json:"supported_sizes"`
-	Settings       JSONMap     `gorm:"column:settings;type:json" json:"settings"`
+	MaxImages          int         `gorm:"column:max_images" json:"max_images"`
+	Modalities         StringArray `gorm:"column:modalities;type:json" json:"modalities"`
+	SupportedSizes     StringArray `gorm:"column:supported_sizes;type:json" json:"supported_sizes"`
+	SupportedDurations IntArray    `gorm:"column:supported_durations;type:json" json:"supported_durations"`
+	DefaultSize        string      `gorm:"column:default_size;type:varchar(64)" json:"default_size"`
+	DefaultDuration    int         `gorm:"column:default_duration" json:"default_duration"`
+	Settings           JSONMap     `gorm:"column:settings;type:json" json:"settings"`
 
 	IsActive  bool      `gorm:"column:is_active;default:true" json:"is_active"`
 	CreatedAt time.Time `json:"created_at"`
@@ -81,10 +84,18 @@ func (m DbModel) ToLlmModel() LlmModel {
 	if len(m.SupportedSizes) > 0 {
 		inputs.SupportedSizes = m.SupportedSizes.ToSlice()
 	}
-	if len(m.Settings) > 0 {
-		if durations := parseDurations(m.Settings); len(durations) > 0 {
-			inputs.SupportedDurations = durations
-		}
+
+	durations := mergeDurations(m.SupportedDurations, parseDurations(m.Settings))
+	if len(durations) > 0 {
+		inputs.SupportedDurations = durations
+	}
+
+	if defaultSize := resolveDefaultSize(m.DefaultSize, inputs.SupportedSizes, m.Settings); defaultSize != "" {
+		inputs.DefaultSize = defaultSize
+	}
+
+	if defaultDuration := resolveDefaultDuration(m.DefaultDuration, inputs.SupportedDurations, m.Settings); defaultDuration > 0 {
+		inputs.DefaultDuration = defaultDuration
 	}
 
 	return LlmModel{
@@ -146,4 +157,96 @@ func parseDurations(settings JSONMap) []int {
 		}
 	}
 	return out
+}
+
+func mergeDurations(values IntArray, fallback []int) []int {
+	out := make([]int, 0, len(values)+len(fallback))
+	seen := make(map[int]struct{})
+
+	add := func(v int) {
+		if v <= 0 {
+			return
+		}
+		if _, ok := seen[v]; ok {
+			return
+		}
+		seen[v] = struct{}{}
+		out = append(out, v)
+	}
+
+	for _, v := range values {
+		add(v)
+	}
+	for _, v := range fallback {
+		add(v)
+	}
+
+	return out
+}
+
+func resolveDefaultSize(candidate string, supported []string, settings JSONMap) string {
+	defaultSize := strings.TrimSpace(candidate)
+	if defaultSize == "" {
+		defaultSize = parseDefaultString(settings, "default_size", "default_resolution")
+	}
+	if len(supported) == 0 {
+		return defaultSize
+	}
+	for _, size := range supported {
+		if strings.EqualFold(defaultSize, size) {
+			return size
+		}
+	}
+	return supported[0]
+}
+
+func resolveDefaultDuration(candidate int, supported []int, settings JSONMap) int {
+	defaultDuration := candidate
+	if defaultDuration <= 0 {
+		defaultDuration = parseDefaultDuration(settings)
+	}
+	if len(supported) == 0 {
+		return defaultDuration
+	}
+	for _, duration := range supported {
+		if duration == defaultDuration {
+			return duration
+		}
+	}
+	return supported[0]
+}
+
+func parseDefaultDuration(settings JSONMap) int {
+	raw := settings["default_duration"]
+	switch v := raw.(type) {
+	case float64:
+		return int(v)
+	case int:
+		return v
+	case int64:
+		return int(v)
+	case string:
+		trim := strings.TrimSpace(v)
+		if trim == "" {
+			return 0
+		}
+		if num, err := strconv.Atoi(trim); err == nil {
+			return num
+		}
+	}
+	return 0
+}
+
+func parseDefaultString(settings JSONMap, keys ...string) string {
+	for _, key := range keys {
+		if raw, ok := settings[key]; ok {
+			switch v := raw.(type) {
+			case string:
+				if trimmed := strings.TrimSpace(v); trimmed != "" {
+					return trimmed
+				}
+			}
+		}
+	}
+	return ""
 }

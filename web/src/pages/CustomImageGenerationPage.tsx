@@ -34,32 +34,6 @@ import ImageUpload from "../components/ImageUpload";
 import ImageViewer from "../components/ImageViewer";
 import { buildDownloadName, isVideoUrl } from "../utils/media";
 
-const VIDEO_PRESETS: Record<
-  string,
-  { resolutions: string[]; durations: number[] }
-> = {
-  "wan2.5-i2v-preview": {
-    resolutions: ["480P", "720P", "1080P"],
-    durations: [5, 10],
-  },
-  "wan2.2-i2v-plus": {
-    resolutions: ["480P", "1080P"],
-    durations: [5],
-  },
-  "wan2.2-i2v-flash": {
-    resolutions: ["480P", "720P", "1080P"],
-    durations: [5],
-  },
-  "wanx2.1-i2v-turbo": {
-    resolutions: ["480P", "720P"],
-    durations: [3, 4, 5,10],
-  },
-  "wanx2.1-i2v-plus": {
-    resolutions: ["720P"],
-    durations: [5],
-  },
-};
-
 function downloadMedia(
   dataUrl: string,
   filename: string = "generated-media",
@@ -131,22 +105,14 @@ const ImageGenerator: React.FC<ImageGeneratorProps> = ({
     if (!selectedModel) {
       return [] as string[];
     }
-    if (selectedModel.inputs?.supported_sizes?.length) {
-      return selectedModel.inputs.supported_sizes;
-    }
-    const preset = VIDEO_PRESETS[selectedModel.id];
-    return preset?.resolutions ?? [];
+    return selectedModel.inputs?.supported_sizes ?? [];
   }, [selectedModel]);
 
   const durationOptions = React.useMemo(() => {
     if (!selectedModel) {
       return [] as number[];
     }
-    if (selectedModel.inputs?.supported_durations?.length) {
-      return selectedModel.inputs.supported_durations;
-    }
-    const preset = VIDEO_PRESETS[selectedModel.id];
-    return preset?.durations ?? [];
+    return selectedModel.inputs?.supported_durations ?? [];
   }, [selectedModel]);
 
   const isVideoModel = React.useMemo(() => {
@@ -169,8 +135,13 @@ const ImageGenerator: React.FC<ImageGeneratorProps> = ({
       setSelectedSize("");
       return;
     }
+    const defaultSize = selectedModel?.inputs?.default_size;
     setSelectedSize((current) =>
-      sizes.includes(current) ? current : sizes[0],
+      sizes.includes(current)
+        ? current
+        : defaultSize && sizes.includes(defaultSize)
+          ? defaultSize
+          : sizes[0],
     );
   }, [resolutionOptions, selectedModel]);
 
@@ -180,12 +151,15 @@ const ImageGenerator: React.FC<ImageGeneratorProps> = ({
       setSelectedDuration("");
       return;
     }
+    const defaultDuration = selectedModel?.inputs?.default_duration;
     setSelectedDuration((current) =>
       typeof current === "number" && durations.includes(current)
         ? current
-        : durations[0],
+        : defaultDuration && durations.includes(defaultDuration)
+          ? defaultDuration
+          : durations[0],
     );
-  }, [durationOptions]);
+  }, [durationOptions, selectedModel]);
 
   useEffect(() => {
     let cancelled = false;
@@ -252,29 +226,31 @@ const ImageGenerator: React.FC<ImageGeneratorProps> = ({
     setSelectedModel(model);
 
     let size = "";
-    const sizeOptions =
-      model?.inputs?.supported_sizes?.length && model.inputs.supported_sizes
-        ? model.inputs.supported_sizes
-        : model
-          ? VIDEO_PRESETS[model.id]?.resolutions ?? []
-          : [];
+    const sizeOptions = model?.inputs?.supported_sizes ?? [];
     if (sizeOptions.length > 0) {
-      size = sizeOptions[0];
+      const defaultSize = model?.inputs?.default_size;
       if (initialSize && sizeOptions.includes(initialSize)) {
         size = initialSize;
+      } else if (defaultSize && sizeOptions.includes(defaultSize)) {
+        size = defaultSize;
+      } else {
+        size = sizeOptions[0];
       }
     }
 
     let duration: number | "" = "";
-    const durationOptionsInit =
-      model?.inputs?.supported_durations?.length &&
-      model.inputs.supported_durations
-        ? model.inputs.supported_durations
-        : model
-          ? VIDEO_PRESETS[model.id]?.durations ?? []
-          : [];
+    const durationOptionsInit = model?.inputs?.supported_durations ?? [];
     if (durationOptionsInit.length > 0) {
-      duration = durationOptionsInit[0];
+      const defaultDuration = model?.inputs?.default_duration;
+      if (
+        typeof defaultDuration === "number" &&
+        defaultDuration > 0 &&
+        durationOptionsInit.includes(defaultDuration)
+      ) {
+        duration = defaultDuration;
+      } else {
+        duration = durationOptionsInit[0];
+      }
     }
 
     setSelectedSize(size);
@@ -488,10 +464,28 @@ const ImageGenerator: React.FC<ImageGeneratorProps> = ({
                     return;
                   }
                   setSelectedProvider(provider);
-                  setSelectedModel(provider.models[0] ?? null);
-                  setSelectedSize(
-                    provider.models[0]?.inputs?.supported_sizes?.[0] ?? "",
-                  );
+                  const nextModel = provider.models[0] ?? null;
+                  setSelectedModel(nextModel);
+                  const nextSizes = nextModel?.inputs?.supported_sizes ?? [];
+                  const nextDefaultSize = nextModel?.inputs?.default_size;
+                  const fallbackSize =
+                    nextSizes.length > 0 ? nextSizes[0] : "";
+                  const resolvedSize =
+                    nextDefaultSize && nextSizes.includes(nextDefaultSize)
+                      ? nextDefaultSize
+                      : fallbackSize;
+                  setSelectedSize(resolvedSize);
+                  const nextDurations =
+                    nextModel?.inputs?.supported_durations ?? [];
+                  const nextDefaultDuration = nextModel?.inputs?.default_duration;
+                  const fallbackDuration =
+                    nextDurations.length > 0 ? nextDurations[0] : "";
+                  const resolvedDuration =
+                    nextDefaultDuration &&
+                    nextDurations.includes(nextDefaultDuration)
+                      ? nextDefaultDuration
+                      : fallbackDuration;
+                  setSelectedDuration(resolvedDuration);
                 }}
               >
                 {providersLoading && providers.length === 0 && (
@@ -529,7 +523,25 @@ const ImageGenerator: React.FC<ImageGeneratorProps> = ({
                     return;
                   }
                   setSelectedModel(model);
-                  setSelectedSize(model.inputs?.supported_sizes?.[0] ?? "");
+                  const nextSizes = model.inputs?.supported_sizes ?? [];
+                  const nextDefaultSize = model.inputs?.default_size;
+                  const fallbackSize =
+                    nextSizes.length > 0 ? nextSizes[0] : "";
+                  const resolvedSize =
+                    nextDefaultSize && nextSizes.includes(nextDefaultSize)
+                      ? nextDefaultSize
+                      : fallbackSize;
+                  setSelectedSize(resolvedSize);
+                  const nextDurations = model.inputs?.supported_durations ?? [];
+                  const nextDefaultDuration = model.inputs?.default_duration;
+                  const fallbackDuration =
+                    nextDurations.length > 0 ? nextDurations[0] : "";
+                  const resolvedDuration =
+                    nextDefaultDuration &&
+                    nextDurations.includes(nextDefaultDuration)
+                      ? nextDefaultDuration
+                      : fallbackDuration;
+                  setSelectedDuration(resolvedDuration);
                 }}
               >
                 {(selectedProvider?.models ?? []).map((model) => (

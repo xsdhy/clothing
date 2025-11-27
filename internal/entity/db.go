@@ -57,6 +57,56 @@ func (a StringArray) ToSlice() []string {
 	return out
 }
 
+// IntArray stores a slice of ints in JSON format.
+type IntArray []int
+
+// Value implements the driver.Valuer interface.
+func (a IntArray) Value() (driver.Value, error) {
+	if len(a) == 0 {
+		return "[]", nil
+	}
+	raw, err := json.Marshal([]int(a))
+	if err != nil {
+		return nil, err
+	}
+	return string(raw), nil
+}
+
+// Scan implements the sql.Scanner interface.
+func (a *IntArray) Scan(value interface{}) error {
+	if value == nil {
+		*a = nil
+		return nil
+	}
+
+	switch v := value.(type) {
+	case []byte:
+		if len(v) == 0 {
+			*a = []int{}
+			return nil
+		}
+		return json.Unmarshal(v, (*[]int)(a))
+	case string:
+		if v == "" {
+			*a = []int{}
+			return nil
+		}
+		return json.Unmarshal([]byte(v), (*[]int)(a))
+	default:
+		return fmt.Errorf("unsupported type for IntArray: %T", value)
+	}
+}
+
+// ToSlice returns a copy of the underlying slice.
+func (a IntArray) ToSlice() []int {
+	if len(a) == 0 {
+		return []int{}
+	}
+	out := make([]int, len(a))
+	copy(out, a)
+	return out
+}
+
 // JSONMap stores a map as JSON text.
 type JSONMap map[string]interface{}
 

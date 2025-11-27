@@ -2,6 +2,7 @@ package llm
 
 import (
 	"bytes"
+	"clothing/internal/entity"
 	"context"
 	"encoding/json"
 	"errors"
@@ -146,7 +147,7 @@ func (o dashscopeVideoOutput) collectAssets() []string {
 	return out
 }
 
-func GenerateImagesByDashscopeProtocol(ctx context.Context, apiKey, endpoint, model, prompt, size string, duration int, base64Images, videos []string) (assets []string, assistantText string, err error) {
+func GenerateImagesByDashscopeProtocol(ctx context.Context, apiKey, endpoint string, model entity.LlmModel, prompt, size string, duration int, base64Images, videos []string) (assets []string, assistantText string, err error) {
 	if strings.TrimSpace(apiKey) == "" {
 		return nil, "", errors.New("api key missing")
 	}
@@ -161,12 +162,13 @@ func GenerateImagesByDashscopeProtocol(ctx context.Context, apiKey, endpoint, mo
 		targetEndpoint = defaultDashscopeGenerationURL
 	}
 
-	if isDashscopeVideoModel(strings.ToLower(model)) {
-		return generateDashscopeVideo(ctx, apiKey, targetEndpoint, model, trimmedPrompt, size, duration, base64Images)
+	if isDashscopeVideoModel(model) {
+		cfg := videoConfigFromModel(model)
+		return generateDashscopeVideo(ctx, apiKey, targetEndpoint, model, cfg, trimmedPrompt, size, duration, base64Images)
 	}
 
 	logrus.WithFields(logrus.Fields{
-		"model":           model,
+		"model":           model.ID,
 		"prompt_length":   len(trimmedPrompt),
 		"image_count":     len(base64Images),
 		"video_count":     len(videos),
@@ -219,7 +221,7 @@ func GenerateImagesByDashscopeProtocol(ctx context.Context, apiKey, endpoint, mo
 
 	watermark := false
 	reqBody := dashscopeRequest{
-		Model: model,
+		Model: model.ID,
 		Input: dashscopeInput{
 			Messages: []dashscopeMessage{
 				{
@@ -319,18 +321,17 @@ func GenerateImagesByDashscopeProtocol(ctx context.Context, apiKey, endpoint, mo
 	return assets, assistantText, nil
 }
 
-func generateDashscopeVideo(ctx context.Context, apiKey, endpoint, model, prompt, size string, duration int, images []string) (assets []string, assistantText string, err error) {
+func generateDashscopeVideo(ctx context.Context, apiKey, endpoint string, model entity.LlmModel, cfg dashscopeVideoConfig, prompt, size string, duration int, images []string) (assets []string, assistantText string, err error) {
 	if len(images) == 0 {
 		return nil, "", errors.New("dashscope video model requires at least one reference image")
 	}
 
-	modelLower := strings.ToLower(model)
-	cfg := dashscopeVideoModelConfig(modelLower)
+	modelLower := strings.ToLower(model.ID)
 	useKeyframe := strings.Contains(modelLower, "kf2v") || len(images) > 1
 	target := resolveDashscopeVideoEndpoint(endpoint, useKeyframe)
 
 	logrus.WithFields(logrus.Fields{
-		"model":           model,
+		"model":           model.ID,
 		"prompt_length":   len(prompt),
 		"image_count":     len(images),
 		"use_keyframe":    useKeyframe,
@@ -367,7 +368,7 @@ func generateDashscopeVideo(ctx context.Context, apiKey, endpoint, model, prompt
 	}
 
 	reqBody := dashscopeVideoRequest{
-		Model: model,
+		Model: model.ID,
 		Input: input,
 		Parameters: dashscopeVideoParamers{
 			Resolution:   resolution,
@@ -548,79 +549,98 @@ func inlineDashscopeImage(ctx context.Context, payload string) (string, error) {
 	return utils.EnsureDataURL(trimmed), nil
 }
 
-func isDashscopeVideoModel(model string) bool {
-	m := strings.ToLower(strings.TrimSpace(model))
+func isDashscopeVideoModel(model entity.LlmModel) bool {
+	for _, modality := range model.Inputs.Modalities {
+		if strings.EqualFold(string(modality), "video") {
+			return true
+		}
+	}
+
+	m := strings.ToLower(strings.TrimSpace(model.ID))
 	if m == "" {
 		return false
 	}
-	if strings.Contains(m, "i2v") || strings.Contains(m, "image2video") || strings.Contains(m, "kf2v") {
+	if strings.Contains(m, "i2v") || strings.Contains(m, "image2video") || strings.Contains(m, "kf2v") || strings.Contains(m, "video") {
 		return true
 	}
 	return false
 }
 
-func dashscopeVideoModelConfig(model string) dashscopeVideoConfig {
-	m := strings.ToLower(strings.TrimSpace(model))
-	switch {
-	case strings.Contains(m, "wan2.5-i2v-preview"):
-		return dashscopeVideoConfig{
-			Resolutions:       []string{"480P", "720P", "1080P"},
-			DefaultResolution: "1080P",
-			Durations:         []int{5, 10},
-			DefaultDuration:   5,
-		}
-	case strings.Contains(m, "wan2.2-i2v-plus"):
-		return dashscopeVideoConfig{
-			Resolutions:       []string{"480P", "1080P"},
-			DefaultResolution: "1080P",
-			Durations:         []int{5},
-			DefaultDuration:   5,
-		}
-	case strings.Contains(m, "wan2.2-i2v-flash"):
-		return dashscopeVideoConfig{
-			Resolutions:       []string{"480P", "720P", "1080P"},
-			DefaultResolution: "720P",
-			Durations:         []int{5},
-			DefaultDuration:   5,
-		}
-	case strings.Contains(m, "wanx2.1-i2v-turbo"):
-		return dashscopeVideoConfig{
-			Resolutions:       []string{"480P", "720P"},
-			DefaultResolution: "720P",
-			Durations:         []int{3, 4, 5, 10},
-			DefaultDuration:   5,
-		}
-	case strings.Contains(m, "wanx2.1-i2v-plus"):
-		return dashscopeVideoConfig{
-			Resolutions:       []string{"720P"},
-			DefaultResolution: "720P",
-			Durations:         []int{5},
-			DefaultDuration:   5,
-		}
-	default:
-		return dashscopeVideoConfig{
-			Resolutions:       []string{"720P"},
-			DefaultResolution: "720P",
-			Durations:         []int{5},
-			DefaultDuration:   5,
-		}
+func videoConfigFromModel(model entity.LlmModel) dashscopeVideoConfig {
+	cfg := dashscopeVideoConfig{
+		Resolutions:       normaliseResolutions(model.Inputs.SupportedSizes),
+		DefaultResolution: strings.ToUpper(strings.TrimSpace(model.Inputs.DefaultSize)),
+		Durations:         normaliseDurations(model.Inputs.SupportedDurations),
+		DefaultDuration:   model.Inputs.DefaultDuration,
 	}
+
+	if cfg.DefaultResolution == "" && len(cfg.Resolutions) > 0 {
+		cfg.DefaultResolution = cfg.Resolutions[0]
+	}
+	if len(cfg.Resolutions) == 0 && cfg.DefaultResolution != "" {
+		cfg.Resolutions = append(cfg.Resolutions, cfg.DefaultResolution)
+	}
+
+	if cfg.DefaultDuration <= 0 && len(cfg.Durations) > 0 {
+		cfg.DefaultDuration = cfg.Durations[0]
+	}
+	if len(cfg.Durations) == 0 && cfg.DefaultDuration > 0 {
+		cfg.Durations = append(cfg.Durations, cfg.DefaultDuration)
+	}
+
+	return cfg
+}
+
+func normaliseResolutions(values []string) []string {
+	seen := make(map[string]struct{})
+	out := make([]string, 0, len(values))
+	for _, value := range values {
+		normalized := strings.ToUpper(strings.TrimSpace(value))
+		if normalized == "" {
+			continue
+		}
+		if _, ok := seen[normalized]; ok {
+			continue
+		}
+		seen[normalized] = struct{}{}
+		out = append(out, normalized)
+	}
+	return out
+}
+
+func normaliseDurations(values []int) []int {
+	seen := make(map[int]struct{})
+	out := make([]int, 0, len(values))
+	for _, value := range values {
+		if value <= 0 {
+			continue
+		}
+		if _, ok := seen[value]; ok {
+			continue
+		}
+		seen[value] = struct{}{}
+		out = append(out, value)
+	}
+	return out
 }
 
 func normalizeDashscopeResolution(cfg dashscopeVideoConfig, requested string) string {
 	req := strings.ToUpper(strings.TrimSpace(requested))
 	for _, r := range cfg.Resolutions {
-		if strings.EqualFold(req, r) {
+		if req != "" && strings.EqualFold(req, r) {
 			return r
 		}
 	}
 	if len(cfg.Resolutions) > 0 {
 		for _, r := range cfg.Resolutions {
-			if strings.EqualFold(cfg.DefaultResolution, r) {
+			if cfg.DefaultResolution != "" && strings.EqualFold(cfg.DefaultResolution, r) {
 				return r
 			}
 		}
 		return cfg.Resolutions[0]
+	}
+	if cfg.DefaultResolution != "" {
+		return strings.ToUpper(cfg.DefaultResolution)
 	}
 	return "720P"
 }

@@ -66,6 +66,9 @@ interface ModelDialogForm {
   max_images: string;
   modalities: string;
   supported_sizes: string;
+  supported_durations: string;
+  default_size: string;
+  default_duration: string;
   settings: string;
   is_active: boolean;
 }
@@ -78,6 +81,27 @@ const parseCommaSeparated = (value: string): string[] =>
     .split(",")
     .map((item) => item.trim())
     .filter((item) => item.length > 0);
+
+const parseNumberList = (value: string): number[] => {
+  const seen = new Set<number>();
+  return value
+    .split(/,|，/)
+    .map((item) => item.trim())
+    .map((item) => Number.parseInt(item, 10))
+    .filter((num) => Number.isFinite(num) && num > 0 && !seen.has(num))
+    .map((num) => {
+      seen.add(num);
+      return num;
+    });
+};
+
+const parsePositiveInt = (value: string): number | undefined => {
+  const parsed = Number.parseInt(value.trim(), 10);
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    return undefined;
+  }
+  return parsed;
+};
 
 const defaultProviderForm = (): ProviderFormState => ({
   id: "",
@@ -109,6 +133,9 @@ const defaultModelForm = (): ModelDialogForm => ({
   max_images: "",
   modalities: "",
   supported_sizes: "",
+  supported_durations: "",
+  default_size: "",
+  default_duration: "",
   settings: "",
   is_active: true,
 });
@@ -124,6 +151,15 @@ const toModelDialogForm = (model: ProviderModelAdmin): ModelDialogForm => ({
       : "",
   modalities: model.modalities?.join(", ") ?? "",
   supported_sizes: model.supported_sizes?.join(", ") ?? "",
+  supported_durations:
+    model.supported_durations && model.supported_durations.length
+      ? model.supported_durations.join(", ")
+      : "",
+  default_size: model.default_size ?? "",
+  default_duration:
+    typeof model.default_duration === "number" && model.default_duration > 0
+      ? String(model.default_duration)
+      : "",
   settings: jsonStringify(model.settings as Record<string, unknown>),
   is_active: model.is_active,
 });
@@ -489,6 +525,7 @@ const ProviderManagementPage: React.FC = () => {
       const trimmedPrice = modelForm.price.trim();
       const trimmedSettings = modelForm.settings.trim();
       const trimmedMaxImages = modelForm.max_images.trim();
+      const trimmedDefaultSize = modelForm.default_size.trim();
 
       let settingsObject: Record<string, unknown> | undefined;
       if (trimmedSettings) {
@@ -512,6 +549,26 @@ const ProviderManagementPage: React.FC = () => {
 
       const modalities = parseCommaSeparated(modelForm.modalities);
       const sizes = parseCommaSeparated(modelForm.supported_sizes);
+      const durations = parseNumberList(modelForm.supported_durations);
+      const parsedDefaultDuration = parsePositiveInt(modelForm.default_duration);
+
+      if (
+        trimmedDefaultSize &&
+        sizes.length > 0 &&
+        !sizes.includes(trimmedDefaultSize)
+      ) {
+        setModelFormError("默认尺寸需包含在支持尺寸列表中");
+        return;
+      }
+
+      if (
+        parsedDefaultDuration !== undefined &&
+        durations.length > 0 &&
+        !durations.includes(parsedDefaultDuration)
+      ) {
+        setModelFormError("默认视频时长需包含在支持时长列表中");
+        return;
+      }
 
       if (modelFormMode === "create") {
         if (!trimmedModelId) {
@@ -528,6 +585,9 @@ const ProviderManagementPage: React.FC = () => {
             max_images: parsedMaxImages,
             modalities: modalities.length > 0 ? modalities : undefined,
             supported_sizes: sizes.length > 0 ? sizes : undefined,
+            supported_durations: durations.length > 0 ? durations : undefined,
+            default_size: trimmedDefaultSize || undefined,
+            default_duration: parsedDefaultDuration,
             settings: settingsObject,
             is_active: modelForm.is_active,
           });
@@ -589,6 +649,25 @@ const ProviderManagementPage: React.FC = () => {
         JSON.stringify(existingModel.supported_sizes ?? [])
       ) {
         payload.supported_sizes = sizes;
+      }
+      if (
+        JSON.stringify(durations) !==
+        JSON.stringify(existingModel.supported_durations ?? [])
+      ) {
+        payload.supported_durations = durations;
+      }
+      if (trimmedDefaultSize !== (existingModel.default_size ?? "")) {
+        payload.default_size = trimmedDefaultSize;
+      }
+      if (parsedDefaultDuration !== undefined) {
+        if (parsedDefaultDuration !== (existingModel.default_duration ?? 0)) {
+          payload.default_duration = parsedDefaultDuration;
+        }
+      } else if (
+        !modelForm.default_duration.trim() &&
+        (existingModel.default_duration ?? 0) > 0
+      ) {
+        payload.default_duration = 0;
       }
       if (settingsObject) {
         payload.settings = settingsObject;
@@ -989,6 +1068,31 @@ const ProviderManagementPage: React.FC = () => {
                                             {model.supported_sizes?.map((item) => (
                                               <Chip key={item} size="small" label={item} color="info" variant="outlined" />
                                             ))}
+                                            {model.supported_durations?.map((item) => (
+                                              <Chip
+                                                key={item}
+                                                size="small"
+                                                label={`${item}s`}
+                                                color="secondary"
+                                                variant="outlined"
+                                              />
+                                            ))}
+                                            {model.default_size ? (
+                                              <Chip
+                                                size="small"
+                                                label={`默认尺寸 ${model.default_size}`}
+                                                color="primary"
+                                                variant="filled"
+                                              />
+                                            ) : null}
+                                            {model.default_duration ? (
+                                              <Chip
+                                                size="small"
+                                                label={`默认 ${model.default_duration}s`}
+                                                color="success"
+                                                variant="filled"
+                                              />
+                                            ) : null}
                                             {model.max_images ? (
                                               <Chip
                                                 size="small"
@@ -998,6 +1102,9 @@ const ProviderManagementPage: React.FC = () => {
                                             ) : null}
                                             {!model.modalities?.length &&
                                             !model.supported_sizes?.length &&
+                                            !model.supported_durations?.length &&
+                                            !model.default_size &&
+                                            !model.default_duration &&
                                             !model.max_images ? (
                                               <Typography variant="caption" color="text.secondary">
                                                 无额外限制
@@ -1333,6 +1440,40 @@ const ProviderManagementPage: React.FC = () => {
                 }))
               }
               placeholder="例如 1K, 2K, 4K"
+            />
+            <TextField
+              label="支持视频时长（秒，逗号分隔）"
+              value={modelForm.supported_durations}
+              onChange={(event) =>
+                setModelForm((prev) => ({
+                  ...prev,
+                  supported_durations: event.target.value,
+                }))
+              }
+              placeholder="例如 3, 5, 10"
+              helperText="为视频模型提供固定的时长选项，空则不限制"
+            />
+            <TextField
+              label="默认尺寸/分辨率"
+              value={modelForm.default_size}
+              onChange={(event) =>
+                setModelForm((prev) => ({
+                  ...prev,
+                  default_size: event.target.value,
+                }))
+              }
+              placeholder="可选，需与支持尺寸匹配"
+            />
+            <TextField
+              label="默认视频时长（秒）"
+              value={modelForm.default_duration}
+              onChange={(event) =>
+                setModelForm((prev) => ({
+                  ...prev,
+                  default_duration: event.target.value,
+                }))
+              }
+              placeholder="可选，建议与支持时长保持一致"
             />
             <TextField
               label="附加配置 (JSON)"

@@ -19,6 +19,7 @@ type Dashscope struct {
 
 	models      []entity.LlmModel
 	modelLookup map[string]struct{}
+	modelByID   map[string]entity.LlmModel
 }
 
 func NewDashscope(provider *entity.DbProvider, models []entity.DbModel) (*Dashscope, error) {
@@ -33,13 +34,16 @@ func NewDashscope(provider *entity.DbProvider, models []entity.DbModel) (*Dashsc
 
 	activeModels := make([]entity.LlmModel, 0, len(models))
 	modelLookup := make(map[string]struct{}, len(models))
+	modelByID := make(map[string]entity.LlmModel, len(models))
 	for _, model := range models {
 		if !model.IsActive {
 			continue
 		}
 		llmModel := model.ToLlmModel()
 		activeModels = append(activeModels, llmModel)
-		modelLookup[llmModel.ID] = struct{}{}
+		key := normalizeModelID(llmModel.ID)
+		modelLookup[key] = struct{}{}
+		modelByID[key] = llmModel
 	}
 
 	if len(activeModels) == 0 {
@@ -58,6 +62,7 @@ func NewDashscope(provider *entity.DbProvider, models []entity.DbModel) (*Dashsc
 		endpoint:     strings.TrimSpace(provider.BaseURL),
 		models:       activeModels,
 		modelLookup:  modelLookup,
+		modelByID:    modelByID,
 	}, nil
 }
 
@@ -84,7 +89,7 @@ func (d *Dashscope) SupportsModel(modelID string) bool {
 	if len(d.modelLookup) == 0 {
 		return true
 	}
-	_, ok := d.modelLookup[modelID]
+	_, ok := d.modelLookup[normalizeModelID(modelID)]
 	return ok
 }
 
@@ -105,5 +110,14 @@ func (d *Dashscope) GenerateImages(ctx context.Context, request entity.GenerateI
 		return nil, "", err
 	}
 
-	return GenerateImagesByDashscopeProtocol(ctx, d.apiKey, d.endpoint, request.Model, request.Prompt, request.Size, request.Duration, request.Images, request.Videos)
+	modelConfig, ok := d.modelByID[normalizeModelID(request.Model)]
+	if !ok {
+		modelConfig = entity.LlmModel{ID: request.Model}
+	}
+
+	return GenerateImagesByDashscopeProtocol(ctx, d.apiKey, d.endpoint, modelConfig, request.Prompt, request.Size, request.Duration, request.Images, request.Videos)
+}
+
+func normalizeModelID(id string) string {
+	return strings.ToLower(strings.TrimSpace(id))
 }

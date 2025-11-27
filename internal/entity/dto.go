@@ -32,6 +32,8 @@ type Inputs struct {
 	MaxImages          int        `json:"max_images,omitempty"`          // 支持的最大输入图片数
 	SupportedSizes     []string   `json:"supported_sizes,omitempty"`     // 支持的图像尺寸/分辨率，留空表示不限预设
 	SupportedDurations []int      `json:"supported_durations,omitempty"` // 视频模型支持的时长（秒）
+	DefaultSize        string     `json:"default_size,omitempty"`        // 尺寸/分辨率默认值
+	DefaultDuration    int        `json:"default_duration,omitempty"`    // 视频默认时长（秒）
 }
 
 type LlmModel struct {

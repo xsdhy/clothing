@@ -38,6 +38,8 @@ type CreateModelRequest struct {
 	Modalities         []string               `json:"modalities"`
 	SupportedSizes     []string               `json:"supported_sizes"`
 	SupportedDurations []int                  `json:"supported_durations"`
+	DefaultSize        string                 `json:"default_size"`
+	DefaultDuration    *int                   `json:"default_duration"`
 	Settings           map[string]interface{} `json:"settings"`
 	IsActive           *bool                  `json:"is_active"`
 }
@@ -51,6 +53,8 @@ type UpdateModelRequest struct {
 	Modalities         *[]string              `json:"modalities"`
 	SupportedSizes     *[]string              `json:"supported_sizes"`
 	SupportedDurations *[]int                 `json:"supported_durations"`
+	DefaultSize        *string                `json:"default_size"`
+	DefaultDuration    *int                   `json:"default_duration"`
 	Settings           map[string]interface{} `json:"settings"`
 	IsActive           *bool                  `json:"is_active"`
 }
@@ -80,6 +84,8 @@ type ProviderModelSummary struct {
 	Modalities         []string  `json:"modalities,omitempty"`
 	SupportedSizes     []string  `json:"supported_sizes,omitempty"`
 	SupportedDurations []int     `json:"supported_durations,omitempty"`
+	DefaultSize        string    `json:"default_size,omitempty"`
+	DefaultDuration    int       `json:"default_duration,omitempty"`
 	Settings           JSONMap   `json:"settings,omitempty"`
 	IsActive           bool      `json:"is_active"`
 	CreatedAt          time.Time `json:"created_at"`
@@ -117,7 +123,9 @@ func (p DbProvider) ToAdminView(includeModels bool) ProviderAdminView {
 func (m DbModel) ToAdminView() ProviderModelSummary {
 	modalities := []string(m.Modalities.ToSlice())
 	sizes := []string(m.SupportedSizes.ToSlice())
-	durations := parseDurations(m.Settings)
+	durations := mergeDurations(m.SupportedDurations, parseDurations(m.Settings))
+	defaultSize := resolveDefaultSize(m.DefaultSize, sizes, m.Settings)
+	defaultDuration := resolveDefaultDuration(m.DefaultDuration, durations, m.Settings)
 
 	return ProviderModelSummary{
 		ModelID:            m.ModelID,
@@ -128,6 +136,8 @@ func (m DbModel) ToAdminView() ProviderModelSummary {
 		Modalities:         modalities,
 		SupportedSizes:     sizes,
 		SupportedDurations: durations,
+		DefaultSize:        defaultSize,
+		DefaultDuration:    defaultDuration,
 		Settings:           m.Settings,
 		IsActive:           m.IsActive,
 		CreatedAt:          m.CreatedAt,

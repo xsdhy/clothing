@@ -35,6 +35,22 @@ func normaliseStringSlice(values []string) []string {
 	return out
 }
 
+func normaliseIntSlice(values []int) []int {
+	out := make([]int, 0, len(values))
+	seen := make(map[int]struct{})
+	for _, value := range values {
+		if value <= 0 {
+			continue
+		}
+		if _, ok := seen[value]; ok {
+			continue
+		}
+		seen[value] = struct{}{}
+		out = append(out, value)
+	}
+	return out
+}
+
 func (h *HTTPHandler) AdminListProviders(c *gin.Context) {
 	if h.repo == nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "provider repository not configured"})
@@ -308,18 +324,24 @@ func (h *HTTPHandler) CreateProviderModel(c *gin.Context) {
 	}
 
 	model := &entity.DbModel{
-		ProviderID:     id,
-		ModelID:        modelID,
-		Name:           name,
-		Description:    strings.TrimSpace(payload.Description),
-		Price:          strings.TrimSpace(payload.Price),
-		MaxImages:      0,
-		Modalities:     entity.StringArray(normaliseStringSlice(payload.Modalities)),
-		SupportedSizes: entity.StringArray(normaliseStringSlice(payload.SupportedSizes)),
-		IsActive:       isActive,
+		ProviderID:         id,
+		ModelID:            modelID,
+		Name:               name,
+		Description:        strings.TrimSpace(payload.Description),
+		Price:              strings.TrimSpace(payload.Price),
+		MaxImages:          0,
+		Modalities:         entity.StringArray(normaliseStringSlice(payload.Modalities)),
+		SupportedSizes:     entity.StringArray(normaliseStringSlice(payload.SupportedSizes)),
+		SupportedDurations: entity.IntArray(normaliseIntSlice(payload.SupportedDurations)),
+		DefaultSize:        strings.TrimSpace(payload.DefaultSize),
+		DefaultDuration:    0,
+		IsActive:           isActive,
 	}
 	if payload.MaxImages != nil {
 		model.MaxImages = *payload.MaxImages
+	}
+	if payload.DefaultDuration != nil {
+		model.DefaultDuration = *payload.DefaultDuration
 	}
 	if payload.Settings != nil {
 		model.Settings = entity.JSONMap(payload.Settings)
@@ -396,6 +418,15 @@ func (h *HTTPHandler) UpdateProviderModel(c *gin.Context) {
 	}
 	if payload.SupportedSizes != nil {
 		updates["supported_sizes"] = entity.StringArray(normaliseStringSlice(*payload.SupportedSizes))
+	}
+	if payload.SupportedDurations != nil {
+		updates["supported_durations"] = entity.IntArray(normaliseIntSlice(*payload.SupportedDurations))
+	}
+	if payload.DefaultSize != nil {
+		updates["default_size"] = strings.TrimSpace(*payload.DefaultSize)
+	}
+	if payload.DefaultDuration != nil {
+		updates["default_duration"] = *payload.DefaultDuration
 	}
 	if payload.Settings != nil {
 		updates["settings"] = entity.JSONMap(payload.Settings)

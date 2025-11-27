@@ -43,6 +43,8 @@ export interface AIModelInput {
   max_images: number; // 支持的最大输入图片数
   supported_sizes?: string[]; // 支持的图像尺寸，留空表示不限预设
   supported_durations?: number[]; // 视频时长（秒）
+  default_size?: string;
+  default_duration?: number;
 }
 
 export interface UserSummary {
@@ -121,6 +123,9 @@ export interface ProviderModelAdmin {
   max_images?: number;
   modalities?: string[];
   supported_sizes?: string[];
+  supported_durations?: number[];
+  default_size?: string;
+  default_duration?: number;
   settings?: Record<string, unknown>;
   is_active: boolean;
   created_at: string;
@@ -170,6 +175,9 @@ export interface ProviderModelCreatePayload {
   max_images?: number;
   modalities?: string[];
   supported_sizes?: string[];
+  supported_durations?: number[];
+  default_size?: string;
+  default_duration?: number;
   settings?: Record<string, unknown>;
   is_active?: boolean;
 }
@@ -181,6 +189,9 @@ export interface ProviderModelUpdatePayload {
   max_images?: number;
   modalities?: string[];
   supported_sizes?: string[];
+  supported_durations?: number[];
+  default_size?: string;
+  default_duration?: number;
   settings?: Record<string, unknown>;
   is_active?: boolean;
 }
