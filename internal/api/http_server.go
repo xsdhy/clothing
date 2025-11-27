@@ -6,6 +6,7 @@ import (
 	"clothing/internal/model"
 	"clothing/internal/storage"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -15,6 +16,9 @@ type HTTPHandler struct {
 	storage           storage.Storage
 	storagePublicBase string
 	authManager       *auth.Manager
+
+	sseClients map[string][]chan sseMessage
+	sseMu      sync.Mutex
 }
 
 func NewHTTPHandler(cfg config.Config, repo model.Repository, store storage.Storage) (*HTTPHandler, error) {
@@ -30,6 +34,7 @@ func NewHTTPHandler(cfg config.Config, repo model.Repository, store storage.Stor
 		storage:           store,
 		storagePublicBase: normalisePublicBase(cfg.StoragePublicBaseURL),
 		authManager:       authManager,
+		sseClients:        make(map[string][]chan sseMessage),
 	}
 
 	return handler, nil

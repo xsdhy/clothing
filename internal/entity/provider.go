@@ -68,6 +68,11 @@ func (DbModel) TableName() string {
 	return "llm_models"
 }
 
+func (d *DbModel) IsVideoModel() bool {
+
+	return d.InputModalities.Contains("video")
+}
+
 // ToLlmModel converts DbModel into LlmModel DTO.
 func (m DbModel) ToLlmModel() LlmModel {
 	inputModalities := toModalities(m.InputModalities, m.Modalities)

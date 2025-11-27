@@ -147,7 +147,7 @@ func (o dashscopeVideoOutput) collectAssets() []string {
 	return out
 }
 
-func GenerateImageByDashscopeProtocol(ctx context.Context, apiKey, endpoint string, model entity.LlmModel, prompt, size string, duration int, base64Images, videos []string) (assets []string, assistantText string, err error) {
+func GenerateImageByDashscopeProtocol(ctx context.Context, apiKey, endpoint string, model entity.DbModel, prompt, size string, duration int, base64Images, videos []string) (assets []string, assistantText string, err error) {
 	if strings.TrimSpace(apiKey) == "" {
 		return nil, "", errors.New("api key missing")
 	}
@@ -216,7 +216,7 @@ func GenerateImageByDashscopeProtocol(ctx context.Context, apiKey, endpoint stri
 
 	watermark := false
 	reqBody := dashscopeRequest{
-		Model: model.ID,
+		Model: model.ModelID,
 		Input: dashscopeInput{
 			Messages: []dashscopeMessage{
 				{
@@ -316,13 +316,13 @@ func GenerateImageByDashscopeProtocol(ctx context.Context, apiKey, endpoint stri
 	return assets, assistantText, nil
 }
 
-func GenerateDashscopeVideo(ctx context.Context, apiKey, endpoint string, model entity.LlmModel, prompt, size string, duration int, images []string) (assets []string, assistantText string, err error) {
+func GenerateDashscopeVideo(ctx context.Context, apiKey, endpoint string, model entity.DbModel, prompt, size string, duration int, images []string) (assets []string, assistantText string, err error) {
 	cfg := videoConfigFromModel(model)
 	if len(images) == 0 {
 		return nil, "", errors.New("dashscope video model requires at least one reference image")
 	}
 
-	modelLower := strings.ToLower(model.ID)
+	modelLower := strings.ToLower(model.ModelID)
 	useKeyframe := strings.Contains(modelLower, "kf2v") || len(images) > 1
 	target := resolveDashscopeVideoEndpoint(endpoint, useKeyframe)
 
@@ -364,7 +364,7 @@ func GenerateDashscopeVideo(ctx context.Context, apiKey, endpoint string, model 
 	}
 
 	reqBody := dashscopeVideoRequest{
-		Model: model.ID,
+		Model: model.ModelID,
 		Input: input,
 		Parameters: dashscopeVideoParamers{
 			Resolution:   resolution,
@@ -573,12 +573,12 @@ func isDashscopeVideoModel(model entity.LlmModel) bool {
 	return false
 }
 
-func videoConfigFromModel(model entity.LlmModel) dashscopeVideoConfig {
+func videoConfigFromModel(model entity.DbModel) dashscopeVideoConfig {
 	cfg := dashscopeVideoConfig{
-		Resolutions:       normaliseResolutions(model.Inputs.SupportedSizes),
-		DefaultResolution: strings.ToUpper(strings.TrimSpace(model.Inputs.DefaultSize)),
-		Durations:         normaliseDurations(model.Inputs.SupportedDurations),
-		DefaultDuration:   model.Inputs.DefaultDuration,
+		Resolutions:       normaliseResolutions(model.SupportedSizes),
+		DefaultResolution: strings.ToUpper(strings.TrimSpace(model.DefaultSize)),
+		Durations:         normaliseDurations(model.SupportedDurations),
+		DefaultDuration:   model.DefaultDuration,
 	}
 
 	if cfg.DefaultResolution == "" && len(cfg.Resolutions) > 0 {

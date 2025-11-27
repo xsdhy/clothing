@@ -49,11 +49,11 @@ func (d *Dashscope) GenerateContent(ctx context.Context, request entity.Generate
 		"duration":            request.Options.Duration,
 	}).Info("llm_generate_content_start")
 
-	if isDashscopeVideoModel(modelConfig) {
-		return GenerateDashscopeVideo(ctx, d.apiKey, d.endpoint, modelConfig, request.Prompt, request.Options.Size, request.Options.Duration, request.Inputs.Images)
+	if dbModel.IsVideoModel() {
+		return GenerateDashscopeVideo(ctx, d.apiKey, d.endpoint, dbModel, request.Prompt, request.Options.Size, request.Options.Duration, request.Inputs.Images)
 	}
 
-	return GenerateImageByDashscopeProtocol(ctx, d.apiKey, d.endpoint, modelConfig, request.Prompt, request.Options.Size, request.Options.Duration, request.Inputs.Images, request.Inputs.Videos)
+	return GenerateImageByDashscopeProtocol(ctx, d.apiKey, d.endpoint, dbModel, request.Prompt, request.Options.Size, request.Options.Duration, request.Inputs.Images, request.Inputs.Videos)
 }
 
 func normalizeModelID(id string) string {

@@ -40,6 +40,62 @@ func (h *HTTPHandler) ListProviders(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"providers": results})
 }
 
+func (h *HTTPHandler) StreamGenerationEvents(c *gin.Context) {
+	requestUser := CurrentUser(c)
+	if requestUser == nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "authentication required"})
+		return
+	}
+
+	clientID := strings.TrimSpace(c.Query("client_id"))
+	if clientID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "client_id is required"})
+		return
+	}
+
+	ctx := c.Request.Context()
+	events := make(chan sseMessage, 8)
+	h.registerSSEClient(clientID, events)
+	defer h.unregisterSSEClient(clientID, events)
+
+	c.Writer.Header().Set("Content-Type", "text/event-stream")
+	c.Writer.Header().Set("Cache-Control", "no-cache")
+	c.Writer.Header().Set("Connection", "keep-alive")
+	c.Writer.Header().Set("X-Accel-Buffering", "no")
+
+	if flusher, ok := c.Writer.(http.Flusher); ok {
+		flusher.Flush()
+	}
+
+	heartbeatTicker := time.NewTicker(10 * time.Second)
+	defer heartbeatTicker.Stop()
+
+	logrus.WithFields(logrus.Fields{
+		"user_id":   requestUser.ID,
+		"client_id": clientID,
+	}).Info("generation sse connected")
+
+	c.Stream(func(w io.Writer) bool {
+		select {
+		case <-ctx.Done():
+			logrus.WithFields(logrus.Fields{
+				"user_id":   requestUser.ID,
+				"client_id": clientID,
+			}).Info("generation sse disconnected")
+			return false
+		case <-heartbeatTicker.C:
+			c.SSEvent("ping", gin.H{"ts": time.Now().UnixMilli()})
+			return true
+		case msg, ok := <-events:
+			if !ok {
+				return false
+			}
+			c.SSEvent(msg.event, msg.data)
+			return true
+		}
+	})
+}
+
 func (h *HTTPHandler) GenerateContent(c *gin.Context) {
 	requestUser := CurrentUser(c)
 	if requestUser == nil {
@@ -60,6 +116,7 @@ func (h *HTTPHandler) GenerateContent(c *gin.Context) {
 	}
 
 	request.Options.Size = strings.TrimSpace(request.Options.Size)
+	request.ClientID = strings.TrimSpace(request.ClientID)
 
 	if h.repo == nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "provider repository not configured"})
@@ -79,7 +136,6 @@ func (h *HTTPHandler) GenerateContent(c *gin.Context) {
 	}
 
 	ctx := c.Request.Context()
-	streamCtx := ctx
 
 	dbProvider, err := h.repo.GetProvider(ctx, providerID)
 	if err != nil {
@@ -134,136 +190,135 @@ func (h *HTTPHandler) GenerateContent(c *gin.Context) {
 		}
 	}
 
-	// 独立的生成上下文：与前端连接解耦，最长 10 分钟，避免客户端关闭后任务被取消。
-	genCtx, cancelGen := context.WithTimeout(context.Background(), 10*time.Minute)
-
-	c.Writer.Header().Set("Content-Type", "text/event-stream")
-	c.Writer.Header().Set("Cache-Control", "no-cache")
-	c.Writer.Header().Set("Connection", "keep-alive")
-	c.Writer.Header().Set("X-Accel-Buffering", "no")
-
-	if flusher, ok := c.Writer.(http.Flusher); ok {
-		flusher.Flush()
-	}
-
-	type sseMessage struct {
-		event string
-		data  interface{}
-	}
-
-	messages := make(chan sseMessage, 4)
-	tagIDsCopy := append([]uint(nil), tagIDs...)
-
 	userID := requestUser.ID
+	createCtx, cancelCreate := context.WithTimeout(ctx, 5*time.Second)
+	defer cancelCreate()
 
-	go func() {
-		defer cancelGen()
-		defer close(messages)
-		messages <- sseMessage{event: "status", data: gin.H{"state": "processing"}}
+	record := entity.DbUsageRecord{
+		UserID:     userID,
+		ProviderID: providerID,
+		ModelID:    request.ModelID,
+		Prompt:     request.Prompt,
+		Size:       request.Options.Size,
+	}
 
-		record := entity.DbUsageRecord{
-			UserID:     userID,
-			ProviderID: providerID,
-			ModelID:    request.ModelID,
-			Prompt:     request.Prompt,
-			Size:       request.Options.Size,
-		}
-
-		var storageIssues []string
-
-		if len(request.Inputs.Images) > 0 {
-			inputPaths, err := h.saveMediaToStorage(genCtx, "inputs", request.Inputs.Images, request.ModelID)
-			if len(inputPaths) > 0 {
-				record.InputImages = entity.StringArray(inputPaths)
-			}
-			if err != nil {
-				storageIssues = append(storageIssues, fmt.Sprintf("input images: %v", err))
-				logrus.WithError(err).WithFields(logrus.Fields{
-					"provider": providerID,
-					"model":    request.ModelID,
-				}).Warn("failed to persist input images")
-			}
-		}
-
-		outputs, text, err := service.GenerateContent(genCtx, request, *dbModel)
-		if err != nil {
-			logrus.WithError(err).WithFields(logrus.Fields{
-				"provider": providerID,
-				"model":    request.ModelID,
-			}).Error("failed to generate image")
-			record.ErrorMessage = err.Error()
-			if len(storageIssues) > 0 {
-				record.ErrorMessage = appendStorageNotes(record.ErrorMessage, storageIssues)
-			}
-			h.persistUsageRecord(&record, tagIDsCopy)
-			messages <- sseMessage{event: "error", data: gin.H{"error": err.Error()}}
-			return
-		}
-
-		logrus.WithFields(logrus.Fields{
+	if err := h.repo.CreateUsageRecord(createCtx, &record); err != nil {
+		logrus.WithError(err).WithFields(logrus.Fields{
 			"provider": providerID,
 			"model":    request.ModelID,
-		}).Info("generated image")
+			"user_id":  userID,
+		}).Error("failed to create usage record")
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to create usage record"})
+		return
+	}
 
-		record.OutputText = text
-
-		if len(outputs) > 0 {
-			outputPaths, err := h.saveMediaToStorage(genCtx, "outputs", outputs, request.ModelID)
-			if len(outputPaths) > 0 {
-				record.OutputImages = entity.StringArray(outputPaths)
-			}
-			if err != nil {
-				storageIssues = append(storageIssues, fmt.Sprintf("output assets: %v", err))
-				logrus.WithError(err).WithFields(logrus.Fields{
-					"provider": providerID,
-					"model":    request.ModelID,
-				}).Warn("failed to persist output assets")
-			}
+	if len(tagIDs) > 0 {
+		if err := h.repo.SetUsageRecordTags(createCtx, record.ID, tagIDs); err != nil {
+			logrus.WithError(err).WithFields(logrus.Fields{
+				"record_id": record.ID,
+			}).Warn("failed to set tags for usage record")
 		}
+	}
 
-		if len(storageIssues) > 0 {
-			record.ErrorMessage = appendStorageNotes(record.ErrorMessage, storageIssues)
-		}
+	logrus.WithFields(logrus.Fields{
+		"record_id": record.ID,
+		"provider":  providerID,
+		"model":     request.ModelID,
+		"user_id":   userID,
+	}).Info("queued generation task")
 
-		h.persistUsageRecord(&record, tagIDsCopy)
+	go h.handleAsyncGeneration(record, request, *dbModel, service)
 
-		response := entity.GenerateContentResponse{
-			Text:    text,
-			Outputs: outputs,
-		}
-
-		messages <- sseMessage{event: "result", data: response}
-	}()
-
-	heartbeatTicker := time.NewTicker(5 * time.Second)
-	defer heartbeatTicker.Stop()
-
-	c.Stream(func(w io.Writer) bool {
-		select {
-		case <-streamCtx.Done():
-			logrus.WithFields(logrus.Fields{
-				"provider": providerID,
-				"model":    request.ModelID,
-			}).Warn("generate content request cancelled by client")
-			return false
-		case <-heartbeatTicker.C:
-			c.SSEvent("ping", gin.H{"ts": time.Now().UnixMilli()})
-			return true
-		case msg, ok := <-messages:
-			if !ok {
-				return false
-			}
-			logrus.WithFields(logrus.Fields{
-				"event": msg.event,
-				"data":  msg.data,
-			}).Info("generate content request received")
-			c.SSEvent(msg.event, msg.data)
-			if msg.event == "result" || msg.event == "error" {
-				return false
-			}
-			return true
-		}
+	c.JSON(http.StatusAccepted, gin.H{
+		"record_id": record.ID,
+		"status":    "processing",
 	})
+}
+
+func (h *HTTPHandler) handleAsyncGeneration(record entity.DbUsageRecord, request entity.GenerateContentRequest, dbModel entity.DbModel, service llm.AIService) {
+	if h.repo == nil {
+		return
+	}
+
+	clientID := strings.TrimSpace(request.ClientID)
+	genCtx, cancelGen := context.WithTimeout(context.Background(), 10*time.Minute)
+	defer cancelGen()
+
+	updates := make(map[string]interface{})
+	completionError := ""
+	var storageIssues []string
+
+	if len(request.Inputs.Images) > 0 {
+		inputPaths, err := h.saveMediaToStorage(genCtx, "inputs", request.Inputs.Images, request.ModelID)
+		if len(inputPaths) > 0 {
+			updates["input_images"] = entity.StringArray(inputPaths)
+		}
+		if err != nil {
+			storageIssues = append(storageIssues, fmt.Sprintf("input images: %v", err))
+			logrus.WithError(err).WithFields(logrus.Fields{
+				"record_id": record.ID,
+				"provider":  record.ProviderID,
+				"model":     record.ModelID,
+			}).Warn("failed to persist input images")
+		}
+	}
+
+	outputs, text, err := service.GenerateContent(genCtx, request, dbModel)
+	if err != nil {
+		logrus.WithError(err).WithFields(logrus.Fields{
+			"record_id": record.ID,
+			"provider":  record.ProviderID,
+			"model":     record.ModelID,
+		}).Error("failed to generate content")
+
+		errMsg := err.Error()
+		if len(storageIssues) > 0 {
+			errMsg = appendStorageNotes(errMsg, storageIssues)
+		}
+
+		updates["error_message"] = errMsg
+		h.updateUsageRecord(record.ID, updates)
+		h.notifyGenerationComplete(clientID, record.ID, "failure", errMsg)
+		return
+	}
+
+	logrus.WithFields(logrus.Fields{
+		"record_id": record.ID,
+		"provider":  record.ProviderID,
+		"model":     record.ModelID,
+	}).Info("generated content")
+
+	if text != "" {
+		updates["output_text"] = text
+	}
+
+	if len(outputs) > 0 {
+		outputPaths, err := h.saveMediaToStorage(genCtx, "outputs", outputs, request.ModelID)
+		if len(outputPaths) > 0 {
+			updates["output_images"] = entity.StringArray(outputPaths)
+		}
+		if err != nil {
+			storageIssues = append(storageIssues, fmt.Sprintf("output assets: %v", err))
+			logrus.WithError(err).WithFields(logrus.Fields{
+				"record_id": record.ID,
+				"provider":  record.ProviderID,
+				"model":     record.ModelID,
+			}).Warn("failed to persist output assets")
+		}
+	}
+
+	if len(storageIssues) > 0 {
+		existingError := ""
+		if msg, ok := updates["error_message"].(string); ok {
+			existingError = msg
+		}
+		combined := appendStorageNotes(existingError, storageIssues)
+		updates["error_message"] = combined
+		completionError = combined
+	}
+
+	h.updateUsageRecord(record.ID, updates)
+	h.notifyGenerationComplete(clientID, record.ID, "success", completionError)
 }
 
 func (h *HTTPHandler) saveMediaToStorage(parentCtx context.Context, category string, payloads []string, model string) ([]string, error) {
@@ -375,28 +430,35 @@ func (h *HTTPHandler) resolveMediaPayload(ctx context.Context, payload string) (
 	return data, ext, nil
 }
 
-func (h *HTTPHandler) persistUsageRecord(record *entity.DbUsageRecord, tagIDs []uint) {
-	if h.repo == nil || record == nil {
+func (h *HTTPHandler) updateUsageRecord(recordID uint, updates map[string]interface{}) {
+	if h.repo == nil || recordID == 0 || len(updates) == 0 {
 		return
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	if err := h.repo.CreateUsageRecord(ctx, record); err != nil {
+	if err := h.repo.UpdateUsageRecord(ctx, recordID, updates); err != nil {
 		logrus.WithError(err).WithFields(logrus.Fields{
-			"provider": record.ProviderID,
-			"model":    record.ModelID,
-		}).Error("failed to persist usage record")
+			"record_id": recordID,
+		}).Error("failed to update usage record")
+	}
+}
+
+func (h *HTTPHandler) notifyGenerationComplete(clientID string, recordID uint, status string, errMsg string) {
+	if strings.TrimSpace(clientID) == "" {
 		return
 	}
-
-	if len(tagIDs) > 0 {
-		if err := h.repo.SetUsageRecordTags(ctx, record.ID, tagIDs); err != nil {
-			logrus.WithError(err).WithFields(logrus.Fields{
-				"record_id": record.ID,
-			}).Warn("failed to set tags for usage record")
-		}
+	payload := gin.H{
+		"record_id": recordID,
+		"status":    status,
 	}
+	if trimmed := strings.TrimSpace(errMsg); trimmed != "" {
+		payload["error"] = trimmed
+	}
+	h.publishSSEMessage(clientID, sseMessage{
+		event: "generation_completed",
+		data:  payload,
+	})
 }
 
 func appendStorageNotes(existing string, notes []string) string {

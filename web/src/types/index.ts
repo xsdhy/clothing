@@ -17,9 +17,24 @@ export interface GenerationRequest {
   tag_ids?: number[];
 }
 
+export interface GenerationJob {
+  record_id: number;
+  status?: string;
+}
+
+export type GenerationEventStatus = "success" | "failure";
+
+export interface GenerationEventPayload {
+  record_id: number;
+  status: GenerationEventStatus;
+  error?: string;
+}
+
 export interface GenerationResult {
   outputs: string[];
   text?: string;
+  record_id?: number;
+  error?: string;
 }
 
 export interface BackendResponse {

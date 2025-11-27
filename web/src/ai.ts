@@ -1,8 +1,8 @@
 import type {
   AIProvider,
   GenerationRequest,
-  GenerationResult,
-  BackendResponse,
+  GenerationJob,
+  GenerationEventPayload,
   ProvidersResponse,
   UsageRecordListResponse,
   UsageRecord,
@@ -12,14 +12,14 @@ import type {
   TagListResponse,
   TagDetailResponse,
 } from "./types";
-import type { SSEEventPayload } from "./utils/sse";
-import { appendSanitizedImages, sanitizeImages } from "./utils/images";
-import { DEFAULT_HTTP_TIMEOUT_MS, requestWithTimeout } from "./utils/http";
+import { sanitizeImages } from "./utils/images";
+import { requestWithTimeout } from "./utils/http";
 import { emitUnauthorized, getStoredToken } from "./utils/authStorage";
 import { parseSSEEvent } from "./utils/sse";
 import { safeParseJSON } from "./utils/json";
 
 const LLM_GENERATE_ENDPOINT = "/api/llm";
+const LLM_EVENTS_ENDPOINT = "/api/llm/events";
 const LLM_PROVIDERS_ENDPOINT = `/api/llm/providers`;
 const USAGE_RECORDS_ENDPOINT = "/api/usage-records";
 const TAGS_ENDPOINT = "/api/tags";
@@ -48,7 +48,8 @@ export interface UsageRecordFilters {
 
 export const generateContent = async (
   request: GenerationRequest,
-): Promise<GenerationResult> => {
+  clientId?: string,
+): Promise<GenerationJob> => {
   const prompt = request.prompt.trim();
   if (!prompt) {
     throw new Error("请输入图片描述");
@@ -88,235 +89,191 @@ export const generateContent = async (
     payload.tag_ids = request.tag_ids;
   }
 
-  const timeoutMs = DEFAULT_HTTP_TIMEOUT_MS;
-  const controller = new AbortController();
-  let timeoutId: number | undefined;
-  let timedOut = false;
-
-  const resetTimer = () => {
-    if (timeoutMs <= 0) {
-      return;
-    }
-    if (timeoutId !== undefined) {
-      window.clearTimeout(timeoutId);
-    }
-    timeoutId = window.setTimeout(() => {
-      timedOut = true;
-      controller.abort();
-    }, timeoutMs);
-  };
-
-  const clearTimer = () => {
-    if (timeoutId !== undefined) {
-      window.clearTimeout(timeoutId);
-      timeoutId = undefined;
-    }
-  };
-
-  resetTimer();
+  if (clientId?.trim()) {
+    payload.client_id = clientId.trim();
+  }
 
   let response: Response;
   try {
+    response = await requestWithTimeout(LLM_GENERATE_ENDPOINT, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Accept: "application/json",
+      },
+      body: JSON.stringify(payload),
+    });
+  } catch (error) {
+    const message =
+      error instanceof Error ? error.message : "请求后端服务失败";
+    throw new Error(message);
+  }
+
+  let body: Partial<GenerationJob> & { error?: string } = {};
+  try {
+    body = (await response.json()) as Partial<GenerationJob> & {
+      error?: string;
+    };
+  } catch {
+    body = {};
+  }
+
+  if (!response.ok) {
+    const message =
+      body?.error ??
+      `服务请求失败: ${response.status} ${response.statusText}`;
+    throw new Error(message);
+  }
+
+  const recordId = Number(body?.record_id);
+  if (!Number.isFinite(recordId) || recordId <= 0) {
+    throw new Error("后端未返回有效的记录ID");
+  }
+
+  return {
+    record_id: recordId,
+    status: body?.status,
+  };
+};
+
+export const subscribeGenerationEvents = (
+  clientId: string,
+  onEvent: (event: GenerationEventPayload) => void,
+  onError?: (error: Error) => void,
+): { close: () => void } => {
+  const trimmedClientId = clientId.trim();
+  const controller = new AbortController();
+
+  const emitError = (message: string | Error) => {
+    if (!onError) {
+      return;
+    }
+    const error =
+      message instanceof Error ? message : new Error(message || "未知错误");
+    onError(error);
+  };
+
+  if (!trimmedClientId) {
+    emitError("缺少客户端标识");
+    return { close: () => undefined };
+  }
+
+  const connect = async () => {
     const token = getStoredToken();
     const headers: Record<string, string> = {
-      "Content-Type": "application/json",
       Accept: "text/event-stream",
     };
     if (token) {
       headers.Authorization = `Bearer ${token}`;
     }
-    response = await fetch(LLM_GENERATE_ENDPOINT, {
-      method: "POST",
-      headers,
-      body: JSON.stringify(payload),
-      signal: controller.signal,
-    });
-  } catch (error) {
-    clearTimer();
-    const isAbortError =
-      error instanceof DOMException && error.name === "AbortError";
-    if (timedOut || isAbortError) {
-      const timeoutError = new Error("请求超时，请稍后重试");
-      timeoutError.name = "TimeoutError";
-      throw timeoutError;
-    }
-    throw new Error(
-      `请求后端服务失败: ${error instanceof Error ? error.message : "未知错误"}`,
-    );
-  }
-  resetTimer();
 
-  const contentType = response.headers.get("Content-Type")?.toLowerCase() ?? "";
-
-  if (response.status === 401) {
-    emitUnauthorized();
-  }
-
-  if (!contentType.includes("text/event-stream")) {
-    clearTimer();
-
-    let body: BackendResponse | undefined;
+    let response: Response;
     try {
-      body = await response.json();
-    } catch {
-      body = undefined;
+      response = await fetch(
+        `${LLM_EVENTS_ENDPOINT}?client_id=${encodeURIComponent(trimmedClientId)}`,
+        {
+          method: "GET",
+          headers,
+          signal: controller.signal,
+        },
+      );
+    } catch (error) {
+      if (controller.signal.aborted) {
+        return;
+      }
+      emitError(
+        `连接事件流失败: ${error instanceof Error ? error.message : "未知错误"}`,
+      );
+      return;
+    }
+
+    if (response.status === 401) {
+      emitUnauthorized();
+    }
+
+    const contentType = response.headers.get("Content-Type")?.toLowerCase() ?? "";
+    if (!contentType.includes("text/event-stream")) {
+      emitError("后端不支持事件流连接");
+      return;
     }
 
     if (!response.ok) {
-      const message =
-        body?.error ??
-        `服务请求失败: ${response.status} ${response.statusText}`;
-      throw new Error(message);
+      emitError(
+        `事件流连接失败: ${response.status} ${response.statusText}`,
+      );
+      return;
     }
 
-    if (body?.error) {
-      throw new Error(body.error);
+    const reader = response.body?.getReader();
+    if (!reader) {
+      emitError("当前环境不支持事件流");
+      return;
     }
 
-    const imageSet = new Set<string>();
+    const decoder = new TextDecoder();
+    let buffer = "";
 
-    appendSanitizedImages(imageSet, body?.outputs);
-
-    if (imageSet.size === 0 && body?.text) {
-      return { outputs: [], text: body.text };
-    }
-
-    if (imageSet.size === 0) {
-      throw new Error("后端未返回有效的内容数据");
-    }
-
-    return { outputs: Array.from(imageSet), text: body?.text };
-  }
-
-  if (!response.ok) {
-    clearTimer();
-    throw new Error(`服务请求失败: ${response.status} ${response.statusText}`);
-  }
-
-  const reader = response.body?.getReader();
-  if (!reader) {
-    clearTimer();
-    throw new Error("当前环境不支持流式响应");
-  }
-
-  const decoder = new TextDecoder();
-  let buffer = "";
-  let backendResponse: BackendResponse | undefined;
-
-  const processEvent = (
-    event: SSEEventPayload,
-  ): BackendResponse | undefined => {
-    const eventName = event.event || "message";
-    const data = event.data;
-
-    if (
-      eventName === "ping" ||
-      eventName === "status" ||
-      eventName === "message"
-    ) {
-      return undefined;
-    }
-
-    if (eventName === "error") {
-      const payload = safeParseJSON<BackendResponse>(data);
-      const message = payload?.error ?? data ?? "流式请求失败";
-      throw new Error(message);
-    }
-
-    if (eventName === "result") {
-      const payload = safeParseJSON<BackendResponse>(data);
-      if (!payload) {
-        throw new Error("流式响应解析失败");
+    const handleEvent = (rawEvent: string) => {
+      if (!rawEvent.trim()) {
+        return;
       }
-      return payload;
-    }
-
-    return undefined;
-  };
-
-  try {
-    while (true) {
-      const { value, done } = await reader.read();
-      if (done) {
-        break;
+      const parsed = parseSSEEvent(rawEvent);
+      if (!parsed) {
+        return;
       }
-
-      resetTimer();
-      buffer += decoder.decode(value, { stream: true });
-
-      let delimiter: number;
-      while ((delimiter = buffer.indexOf("\n\n")) !== -1) {
-        const rawEvent = buffer.slice(0, delimiter);
-        buffer = buffer.slice(delimiter + 2);
-
-        if (!rawEvent.trim()) {
-          continue;
+      const eventName = parsed.event || "message";
+      if (eventName === "ping" || eventName === "message") {
+        return;
+      }
+      if (eventName === "generation_completed") {
+        const payload = safeParseJSON<GenerationEventPayload>(parsed.data);
+        const recordId = Number(payload?.record_id);
+        if (!Number.isFinite(recordId) || recordId <= 0) {
+          return;
         }
+        const status =
+          payload?.status === "failure" ? "failure" : "success";
+        onEvent({
+          record_id: recordId,
+          status,
+          error: payload?.error,
+        });
+      }
+    };
 
-        const event = parseSSEEvent(rawEvent);
-        if (!event) {
-          continue;
-        }
-
-        const maybeResponse = processEvent(event);
-        if (maybeResponse) {
-          backendResponse = maybeResponse;
+    try {
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) {
           break;
         }
+        buffer += decoder.decode(value, { stream: true });
+        let delimiter: number;
+        while ((delimiter = buffer.indexOf("\n\n")) !== -1) {
+          const rawEvent = buffer.slice(0, delimiter);
+          buffer = buffer.slice(delimiter + 2);
+          handleEvent(rawEvent);
+        }
       }
-
-      if (backendResponse) {
-        break;
+      if (!controller.signal.aborted) {
+        emitError("事件流已关闭");
       }
-    }
-
-    if (!backendResponse && buffer.trim()) {
-      const event = parseSSEEvent(buffer);
-      if (event) {
-        backendResponse = processEvent(event);
+    } catch (error) {
+      if (!controller.signal.aborted) {
+        emitError(
+          `事件流中断: ${error instanceof Error ? error.message : "未知错误"}`,
+        );
       }
+    } finally {
+      void reader.cancel().catch(() => undefined);
     }
-  } catch (error) {
-    if (error instanceof DOMException && error.name === "AbortError") {
-      if (timedOut) {
-        const timeoutError = new Error("请求超时，请稍后重试");
-        timeoutError.name = "TimeoutError";
-        throw timeoutError;
-      }
-      throw new Error("请求被中断，请重试");
-    }
+  };
 
-    if (error instanceof Error && error.name === "TimeoutError") {
-      throw error;
-    }
+  void connect();
 
-    throw error;
-  } finally {
-    clearTimer();
-    void reader.cancel().catch(() => undefined);
-  }
-
-  if (!backendResponse) {
-    throw new Error("流式响应未返回结果");
-  }
-
-  if (backendResponse.error) {
-    throw new Error(backendResponse.error);
-  }
-
-  const imageSet = new Set<string>();
-
-  appendSanitizedImages(imageSet, backendResponse.outputs);
-
-  if (imageSet.size === 0 && backendResponse.text) {
-    return { outputs: [], text: backendResponse.text };
-  }
-
-  if (imageSet.size === 0) {
-    throw new Error("后端未返回有效的内容数据");
-  }
-
-  return { outputs: Array.from(imageSet), text: backendResponse.text };
+  return {
+    close: () => controller.abort(),
+  };
 };
 
 export const fetchProviders = async (): Promise<AIProvider[]> => {

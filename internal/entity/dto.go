@@ -13,6 +13,8 @@ type ContentOptions struct {
 }
 
 type GenerateContentRequest struct {
+	ClientID string `json:"client_id,omitempty"` // 客户端ID，结束后SSE推送使用
+
 	Prompt     string         `json:"prompt" binding:"required"`
 	Inputs     ContentInputs  `json:"inputs"`
 	Options    ContentOptions `json:"options"`

@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   Container,
   Typography,
@@ -26,10 +26,16 @@ import { useLocation } from "react-router-dom";
 import type {
   GenerationRequest,
   GenerationResult,
+  GenerationEventPayload,
   AIProvider,
   AIModel,
 } from "../types";
-import { generateContent, fetchProviders } from "../ai";
+import {
+  generateContent,
+  fetchProviders,
+  fetchUsageRecordDetail,
+  subscribeGenerationEvents,
+} from "../ai";
 import ImageUpload from "../components/ImageUpload";
 import ImageViewer from "../components/ImageViewer";
 import { buildDownloadName, isVideoUrl } from "../utils/media";
@@ -100,6 +106,20 @@ const ImageGenerator: React.FC<ImageGeneratorProps> = ({
   const [resultViewerOpen, setResultViewerOpen] = useState(false);
   const [resultViewerIndex, setResultViewerIndex] = useState(0);
   const [selectionInitialized, setSelectionInitialized] = useState(false);
+  const clientIdRef = useRef<string>("");
+  const activeRecordIdRef = useRef<number | null>(null);
+
+  const ensureClientId = useCallback((): string => {
+    if (clientIdRef.current) {
+      return clientIdRef.current;
+    }
+    const generated =
+      typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
+        ? crypto.randomUUID()
+        : `client-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+    clientIdRef.current = generated;
+    return generated;
+  }, []);
 
   const resolutionOptions = React.useMemo(() => {
     if (!selectedModel) {
@@ -132,6 +152,60 @@ const ImageGenerator: React.FC<ImageGeneratorProps> = ({
     }
     return id.includes("i2v") || id.includes("video");
   }, [selectedModel]);
+
+  const handleStreamEvent = useCallback(
+    async (event: GenerationEventPayload) => {
+      try {
+        const detail = await fetchUsageRecordDetail(event.record_id);
+        const outputs = (detail.output_images ?? [])
+          .map((item) => item.url || item.path)
+          .filter((src): src is string => Boolean(src));
+        onGenerate({
+          outputs,
+          text: detail.output_text || undefined,
+          record_id: detail.id,
+          error: detail.error_message || event.error,
+        });
+        if (event.status === "failure" || detail.error_message) {
+          setError(detail.error_message || event.error || "生成失败，请重试");
+        } else {
+          setError(null);
+        }
+        setResultViewerOpen(false);
+        if (outputs.length > 0) {
+          setResultViewerIndex(0);
+        }
+      } catch (err) {
+        const message =
+          event.error ??
+          (err instanceof Error ? err.message : "加载生成详情失败");
+        setError(message);
+      } finally {
+        if (activeRecordIdRef.current === event.record_id) {
+          activeRecordIdRef.current = null;
+        }
+        setIsGenerating(false);
+      }
+    },
+    [onGenerate],
+  );
+
+  useEffect(() => {
+    const clientId = ensureClientId();
+    const subscription = subscribeGenerationEvents(
+      clientId,
+      handleStreamEvent,
+      (err) => {
+        console.error("事件流连接异常", err);
+        setError((prev) => prev ?? err.message);
+        setIsGenerating((prev) => (prev ? false : prev));
+        activeRecordIdRef.current = null;
+      },
+    );
+    return () => {
+      subscription.close();
+    };
+  }, [ensureClientId, handleStreamEvent]);
 
   useEffect(() => {
     setSelectionInitialized(false);
@@ -285,6 +359,8 @@ const ImageGenerator: React.FC<ImageGeneratorProps> = ({
 
     setIsGenerating(true);
     setError(null);
+    setResultViewerOpen(false);
+    activeRecordIdRef.current = null;
 
     try {
       const options: GenerationRequest["options"] = {};
@@ -306,19 +382,14 @@ const ImageGenerator: React.FC<ImageGeneratorProps> = ({
         options,
       };
 
-      const result = await generateContent(request);
-      onGenerate(result);
-      if (result.outputs.length > 0) {
-        setResultViewerIndex(0);
-      }
-      setResultViewerOpen(false);
+      const job = await generateContent(request, ensureClientId());
+      activeRecordIdRef.current = job.record_id;
     } catch (err) {
       const errorMessage =
         err instanceof Error ? err.message : "生成失败，请重试";
       setError(errorMessage);
       console.error(`生成失败: ${errorMessage}`);
       console.error("Generation error:", err);
-    } finally {
       setIsGenerating(false);
     }
   };
@@ -852,10 +923,10 @@ const CustomImageGenerationPage: React.FC = () => {
     lastAppliedPrefillKeyRef.current = location.key;
   }, [location]);
 
-  const handleGenerate = (result: GenerationResult) => {
+  const handleGenerate = useCallback((result: GenerationResult) => {
     setLastGeneratedImages(result.outputs);
-    setLastGenerationText(result.text ?? null);
-  };
+    setLastGenerationText(result.text ?? result.error ?? null);
+  }, []);
 
   return (
     <Box sx={{ display: "flex", flexDirection: "column", minHeight: "100%" }}>

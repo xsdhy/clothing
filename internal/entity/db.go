@@ -57,6 +57,16 @@ func (a StringArray) ToSlice() []string {
 	return out
 }
 
+// Contains checks if the array contains the given string.
+func (a StringArray) Contains(s string) bool {
+	for _, v := range a {
+		if v == s {
+			return true
+		}
+	}
+	return false
+}
+
 // IntArray stores a slice of ints in JSON format.
 type IntArray []int
 
