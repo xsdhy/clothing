@@ -3,7 +3,6 @@ import {
   Alert,
   Box,
   Button,
-  ButtonBase,
   Card,
   CardContent,
   Chip,
@@ -26,7 +25,9 @@ import type { SelectChangeEvent } from "@mui/material/Select";
 import ReplayIcon from "@mui/icons-material/Replay";
 import AddPhotoAlternateIcon from "@mui/icons-material/AddPhotoAlternate";
 import DeleteOutlineIcon from "@mui/icons-material/DeleteOutline";
+import OpenInFullIcon from "@mui/icons-material/OpenInFull";
 import { useNavigate } from "react-router-dom";
+import ReactPlayer from "react-player";
 
 import {
   fetchUsageRecords,
@@ -41,6 +42,7 @@ import type { AIProvider, UsageRecord, Tag } from "../types";
 import ImageViewer from "../components/ImageViewer";
 import UsageRecordDetailDialog from "../components/UsageRecordDetailDialog";
 import { useAuth } from "../contexts/AuthContext";
+import { isVideoUrl } from "../utils/media";
 
 const PAGE_SIZE = 10;
 const ALL_VALUE = "all";
@@ -722,90 +724,126 @@ const GenerationHistoryPage: React.FC = () => {
                           无图片
                         </Box>
                       )}
-                      {imageList.map((image) => (
-                        <ButtonBase
-                          key={`${record.id}-${image.isOutput ? "out" : "in"}-${image.index}`}
-                          onClick={() => handleImageClick(image.url, image.alt)}
-                          sx={{
-                            width: "100%",
-                            borderRadius: 1.5,
-                            overflow: "hidden",
-                            border: "1px solid",
-                            borderColor: "divider",
-                            bgcolor: "background.paper",
-                            position: "relative",
-                            aspectRatio: "1/1",
-                          }}
-                        >
+                      {imageList.map((image) => {
+                        const isVideo = isVideoUrl(image.url);
+                        return (
                           <Box
-                            component="img"
-                            src={image.url}
-                            alt={image.alt}
-                            loading="lazy"
+                            key={`${record.id}-${image.isOutput ? "out" : "in"}-${image.index}`}
                             sx={{
                               width: "100%",
-                              height: "100%",
-                              objectFit: "cover",
+                              borderRadius: 1.5,
+                              overflow: "hidden",
+                              border: "1px solid",
+                              borderColor: "divider",
+                              bgcolor: "background.paper",
+                              position: "relative",
+                              aspectRatio: "1/1",
                             }}
-                          />
-                          <Chip
-                            label={image.alt}
-                            size="small"
-                            color={image.isOutput ? "primary" : "default"}
-                            sx={{
-                              position: "absolute",
-                              top: 6,
-                              left: 6,
-                              bgcolor: image.isOutput
-                                ? "primary.main"
-                                : "rgba(0,0,0,0.6)",
-                              color: "common.white",
-                            }}
-                          />
-                          {image.isOutput && (
-                            <Tooltip title="作为输入图片使用">
-                              <span>
+                          >
+                            {isVideo ? (
+                              <>
+                                <ReactPlayer
+                                  src={image.url}
+                                  controls
+                                  width="100%"
+                                  height="100%"
+                                  className="react-player"
+                                  style={{ position: "absolute", inset: 0 }}
+                                  playsInline
+                                  config={{ html: { controlsList: "nodownload" } }}
+                                />
                                 <IconButton
                                   size="small"
-                                  color="primary"
+                                  onClick={() => handleImageClick(image.url, image.alt)}
                                   sx={{
                                     position: "absolute",
-                                    top: 6,
+                                    bottom: 6,
                                     right: 6,
-                                    bgcolor: "rgba(255,255,255,0.9)",
+                                    bgcolor: "rgba(0,0,0,0.6)",
+                                    color: "common.white",
                                     "&:hover": {
-                                      bgcolor: "rgba(255,255,255,1)",
+                                      bgcolor: "rgba(0,0,0,0.8)",
                                     },
                                   }}
-                                  onClick={(event) => {
-                                    event.stopPropagation();
-                                    void handleUseOutputImage(
-                                      record,
-                                      image.url,
-                                      image.index,
-                                    );
-                                  }}
-                                  disabled={
-                                    preparingOutputAsInput?.recordId ===
+                                  aria-label={`预览 ${image.alt} 视频`}
+                                >
+                                  <OpenInFullIcon fontSize="small" />
+                                </IconButton>
+                              </>
+                            ) : (
+                              <Box
+                                component="img"
+                                src={image.url}
+                                alt={image.alt}
+                                loading="lazy"
+                                onClick={() => handleImageClick(image.url, image.alt)}
+                                sx={{
+                                  width: "100%",
+                                  height: "100%",
+                                  objectFit: "cover",
+                                  cursor: "pointer",
+                                }}
+                              />
+                            )}
+                            <Chip
+                              label={image.alt}
+                              size="small"
+                              color={image.isOutput ? "primary" : "default"}
+                              sx={{
+                                position: "absolute",
+                                top: 6,
+                                left: 6,
+                                bgcolor: image.isOutput
+                                  ? "primary.main"
+                                  : "rgba(0,0,0,0.6)",
+                                color: "common.white",
+                              }}
+                            />
+                            {image.isOutput && (
+                              <Tooltip title="作为输入图片使用">
+                                <span>
+                                  <IconButton
+                                    size="small"
+                                    color="primary"
+                                    sx={{
+                                      position: "absolute",
+                                      top: 6,
+                                      right: 6,
+                                      bgcolor: "rgba(255,255,255,0.9)",
+                                      "&:hover": {
+                                        bgcolor: "rgba(255,255,255,1)",
+                                      },
+                                    }}
+                                    onClick={(event) => {
+                                      event.stopPropagation();
+                                      void handleUseOutputImage(
+                                        record,
+                                        image.url,
+                                        image.index,
+                                      );
+                                    }}
+                                    disabled={
+                                      preparingOutputAsInput?.recordId ===
+                                        record.id &&
+                                      preparingOutputAsInput?.index ===
+                                        image.index
+                                    }
+                                  >
+                                    {preparingOutputAsInput?.recordId ===
                                       record.id &&
                                     preparingOutputAsInput?.index ===
-                                      image.index
-                                  }
-                                >
-                                  {preparingOutputAsInput?.recordId ===
-                                    record.id &&
-                                  preparingOutputAsInput?.index ===
-                                    image.index ? (
-                                    <CircularProgress size={16} color="inherit" />
-                                  ) : (
-                                    <AddPhotoAlternateIcon fontSize="small" />
-                                  )}
-                                </IconButton>
-                              </span>
-                            </Tooltip>
-                          )}
-                        </ButtonBase>
-                      ))}
+                                      image.index ? (
+                                      <CircularProgress size={16} color="inherit" />
+                                    ) : (
+                                      <AddPhotoAlternateIcon fontSize="small" />
+                                    )}
+                                  </IconButton>
+                                </span>
+                              </Tooltip>
+                            )}
+                          </Box>
+                        );
+                      })}
                     </Box>
 
                     <Stack spacing={1.5} sx={{ flex: 1 }}>

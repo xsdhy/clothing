@@ -1,8 +1,10 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Alert, Autocomplete, Box, Button, ButtonBase, Card, CardActions, Chip, CircularProgress, Container, Stack, TextField, Typography } from '@mui/material';
+import { Alert, Autocomplete, Box, Button, Card, CardActions, Chip, CircularProgress, Container, IconButton, Stack, TextField, Typography } from '@mui/material';
 import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
 import RefreshIcon from '@mui/icons-material/Refresh';
+import OpenInFullIcon from '@mui/icons-material/OpenInFull';
 import { useNavigate } from 'react-router-dom';
+import ReactPlayer from 'react-player';
 
 import { deleteUsageRecord, fetchUsageRecords, fetchTags } from '../ai';
 import type { Tag, UsageRecord } from '../types';
@@ -487,11 +489,11 @@ const GeneratedImageGalleryPage: React.FC = () => {
           <Stack alignItems="center" sx={{ py: 6 }}>
             <CircularProgress />
             <Typography variant="body2" color="text.secondary" sx={{ mt: 2 }}>
-              正在加载生成图片...
+              正在加载生成媒体...
             </Typography>
           </Stack>
         ) : galleryItems.length === 0 ? (
-          <Alert severity="info">暂无可展示的生成图片，尝试先进行一次图片生成。</Alert>
+          <Alert severity="info">暂无可展示的生成媒体，尝试先进行一次生成任务。</Alert>
         ) : (
           <Box
             sx={{
@@ -507,41 +509,73 @@ const GeneratedImageGalleryPage: React.FC = () => {
             }}
           >
             {galleryItems.map((item, index) => {
-              const mediaComponent = item.isVideo ? 'video' : 'img';
               const record = recordMap.get(item.recordId);
               const recordTags = record?.tags ?? [];
               return (
                 <Box key={`${item.recordId}-${item.imageIndex}-${item.url}`}>
                   <Card elevation={1} sx={{ overflow: 'hidden' }}>
-                    <ButtonBase
-                      onClick={() => handleOpenViewer(index)}
+                    <Box
                       sx={{
-                        display: 'block',
+                        position: 'relative',
                         width: '100%',
-                        '& img, & video': {
+                        backgroundColor: 'black',
+                        maxHeight: 560,
+                        aspectRatio: { xs: '1 / 1', sm: '4 / 5' },
+                        overflow: 'hidden',
+                        '& img, & .react-player': {
                           transition: 'transform 0.3s ease',
                         },
-                        '&:hover img, &:hover video': {
+                        '&:hover img, &:hover .react-player': {
                           transform: 'scale(1.02)',
                         },
                       }}
                     >
-                      <Box
-                        component={mediaComponent}
-                        src={item.url}
-                        alt={item.prompt || `记录 ${item.recordId} 生成媒体`}
-                        sx={{
-                          width: '100%',
-                          display: 'block',
-                          backgroundColor: 'black',
-                          maxHeight: 560,
-                          objectFit: 'cover',
-                        }}
-                        {...(item.isVideo
-                          ? { controls: true, muted: true, playsInline: true }
-                          : {})}
-                      />
-                    </ButtonBase>
+                      {item.isVideo ? (
+                        <>
+                          <ReactPlayer
+                            src={item.url}
+                            controls
+                            width="100%"
+                            height="100%"
+                            className="react-player"
+                            style={{ position: 'absolute', inset: 0 }}
+                            playsInline
+                            config={{ html: { controlsList: 'nodownload' } }}
+                          />
+                          <IconButton
+                            size="small"
+                            onClick={() => handleOpenViewer(index)}
+                            sx={{
+                              position: 'absolute',
+                              top: 8,
+                              right: 8,
+                              bgcolor: 'rgba(0,0,0,0.6)',
+                              color: 'common.white',
+                              '&:hover': {
+                                bgcolor: 'rgba(0,0,0,0.8)',
+                              },
+                            }}
+                            aria-label={`预览记录 ${item.recordId} 的视频`}
+                          >
+                            <OpenInFullIcon fontSize="small" />
+                          </IconButton>
+                        </>
+                      ) : (
+                        <Box
+                          component="img"
+                          src={item.url}
+                          alt={item.prompt || `记录 ${item.recordId} 生成媒体`}
+                          onClick={() => handleOpenViewer(index)}
+                          sx={{
+                            width: '100%',
+                            height: '100%',
+                            display: 'block',
+                            objectFit: 'cover',
+                            cursor: 'pointer',
+                          }}
+                        />
+                      )}
+                    </Box>
 
                     <CardActions sx={{ justifyContent: 'space-between', flexWrap: 'wrap', gap: 1 }}>
                       <Stack direction="row" spacing={1} useFlexGap flexWrap="wrap" sx={{ flex: 1, minWidth: 200 }}>
@@ -581,7 +615,7 @@ const GeneratedImageGalleryPage: React.FC = () => {
           <Stack direction="row" spacing={1} alignItems="center" justifyContent="center" sx={{ py: 3 }}>
             <CircularProgress size={20} />
             <Typography variant="body2" color="text.secondary">
-              正在加载更多图片...
+              正在加载更多媒体...
             </Typography>
           </Stack>
         )}

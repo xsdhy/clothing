@@ -14,14 +14,17 @@ import {
   InputLabel,
   Select,
   MenuItem,
+  IconButton,
 } from "@mui/material";
 import {
   Send,
   Download,
   AutoAwesome,
   Image as ImageIcon,
+  OpenInFull,
 } from "@mui/icons-material";
 import { useLocation } from "react-router-dom";
+import ReactPlayer from "react-player";
 
 import type {
   GenerationRequest,
@@ -812,7 +815,6 @@ const ImageGenerator: React.FC<ImageGeneratorProps> = ({
           >
             {lastGeneratedImages.map((image, index) => {
               const isVideo = isVideoUrl(image);
-              const mediaComponent = isVideo ? "video" : "img";
               return (
                 <Box
                   key={image + index}
@@ -823,32 +825,75 @@ const ImageGenerator: React.FC<ImageGeneratorProps> = ({
                   }}
                 >
                   <Box
-                    component={mediaComponent}
-                    src={image}
-                    alt={`AI生成的媒体 ${index + 1}`}
-                    onClick={() => handleOpenResultViewer(index)}
                     sx={{
+                      position: "relative",
                       width: "100%",
+                      aspectRatio: { xs: "4 / 5", sm: "16 / 9" },
                       maxHeight: 420,
-                      objectFit: "cover",
                       bgcolor: "grey.100",
-                      cursor: "pointer",
                       borderRadius: 2,
+                      overflow: "hidden",
+                      cursor: isVideo ? "default" : "pointer",
                       transition: "all 0.2s",
-                      display: "block",
-                      "&:hover": {
-                        filter: "brightness(1.05)",
+                      "& img, & .react-player": {
+                        transition: "transform 0.2s ease",
+                      },
+                      "&:hover img, &:hover .react-player": {
                         transform: "scale(1.01)",
                       },
                     }}
-                    {...(isVideo
-                      ? {
-                          controls: true,
-                          muted: true,
-                          playsInline: true,
-                        }
-                      : {})}
-                  />
+                    onClick={
+                      isVideo ? undefined : () => handleOpenResultViewer(index)
+                    }
+                  >
+                    {isVideo ? (
+                      <>
+                        <ReactPlayer
+                          src={image}
+                          controls
+                          width="100%"
+                          height="100%"
+                          className="react-player"
+                          style={{
+                            position: "absolute",
+                            inset: 0,
+                          }}
+                          playsInline
+                          config={{ html: { controlsList: "nodownload" } }}
+                        />
+                        <IconButton
+                          size="small"
+                          color="inherit"
+                          onClick={() => handleOpenResultViewer(index)}
+                          sx={{
+                            position: "absolute",
+                            top: 8,
+                            right: 8,
+                            bgcolor: "rgba(0,0,0,0.55)",
+                            color: "common.white",
+                            "&:hover": {
+                              bgcolor: "rgba(0,0,0,0.7)",
+                            },
+                          }}
+                          aria-label={`放大预览第 ${index + 1} 个视频`}
+                        >
+                          <OpenInFull fontSize="small" />
+                        </IconButton>
+                      </>
+                    ) : (
+                      <Box
+                        component="img"
+                        src={image}
+                        alt={`AI生成的媒体 ${index + 1}`}
+                        sx={{
+                          width: "100%",
+                          height: "100%",
+                          objectFit: "cover",
+                          display: "block",
+                        }}
+                      />
+                    )}
+                  </Box>
                   <Button
                     variant="outlined"
                     size="small"
