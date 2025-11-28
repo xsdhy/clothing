@@ -545,34 +545,6 @@ func inlineDashscopeImage(ctx context.Context, payload string) (string, error) {
 	return utils.EnsureDataURL(trimmed), nil
 }
 
-func isDashscopeVideoModel(model entity.LlmModel) bool {
-	hasVideoModality := func(mods []entity.Modality) bool {
-		for _, modality := range mods {
-			if strings.EqualFold(string(modality), "video") {
-				return true
-			}
-		}
-		return false
-	}
-
-	if hasVideoModality(model.Inputs.OutputModalities) || hasVideoModality(model.Inputs.InputModalities) {
-		return true
-	}
-
-	if len(model.Inputs.SupportedDurations) > 0 || model.Inputs.DefaultDuration > 0 {
-		return true
-	}
-
-	m := strings.ToLower(strings.TrimSpace(model.ID))
-	if m == "" {
-		return false
-	}
-	if strings.Contains(m, "i2v") || strings.Contains(m, "image2video") || strings.Contains(m, "kf2v") || strings.Contains(m, "video") {
-		return true
-	}
-	return false
-}
-
 func videoConfigFromModel(model entity.DbModel) dashscopeVideoConfig {
 	cfg := dashscopeVideoConfig{
 		Resolutions:       normaliseResolutions(model.SupportedSizes),

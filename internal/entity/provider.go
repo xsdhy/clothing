@@ -69,8 +69,7 @@ func (DbModel) TableName() string {
 }
 
 func (d *DbModel) IsVideoModel() bool {
-
-	return d.InputModalities.Contains("video")
+	return d.OutputModalities.Contains("video")
 }
 
 // ToLlmModel converts DbModel into LlmModel DTO.
