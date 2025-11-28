@@ -55,21 +55,25 @@ export interface AIProvider {
 }
 
 export interface AIModel {
-  id: string;
+  id: number;
+  provider_id: string;
+  model_id: string;
   name: string;
   description?: string;
+  price?: string;
 
-  inputs?: AIModelInput;
-}
-
-export interface AIModelInput {
-  input_modalities?: string[]; // 支持的输入模态
-  output_modalities?: string[]; // 支持的输出模态
-  max_images: number; // 支持的最大输入图片数
-  supported_sizes?: string[]; // 支持的图像尺寸，留空表示不限预设
-  supported_durations?: number[]; // 视频时长（秒）
+  max_images?: number;
+  input_modalities?: string[];
+  output_modalities?: string[];
+  supported_sizes?: string[];
+  supported_durations?: number[];
   default_size?: string;
   default_duration?: number;
+  settings?: Record<string, unknown>;
+
+  is_active?: boolean;
+  created_at?: string;
+  updated_at?: string;
 }
 
 export interface UserSummary {

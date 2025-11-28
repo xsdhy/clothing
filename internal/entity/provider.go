@@ -72,65 +72,6 @@ func (d *DbModel) IsVideoModel() bool {
 	return d.OutputModalities.Contains("video")
 }
 
-// ToLlmModel converts DbModel into LlmModel DTO.
-func (m DbModel) ToLlmModel() LlmModel {
-	inputModalities := toModalities(m.InputModalities, m.Modalities)
-	outputModalities := toModalities(m.OutputModalities, m.Modalities)
-
-	inputs := Inputs{
-		MaxImages: m.MaxImages,
-	}
-	if len(inputModalities) > 0 {
-		inputs.InputModalities = inputModalities
-	}
-	if len(outputModalities) > 0 {
-		inputs.OutputModalities = outputModalities
-	}
-	if len(m.SupportedSizes) > 0 {
-		inputs.SupportedSizes = m.SupportedSizes.ToSlice()
-	}
-
-	durations := mergeDurations(m.SupportedDurations, parseDurations(m.Settings))
-	if len(durations) > 0 {
-		inputs.SupportedDurations = durations
-	}
-
-	if defaultSize := resolveDefaultSize(m.DefaultSize, inputs.SupportedSizes, m.Settings); defaultSize != "" {
-		inputs.DefaultSize = defaultSize
-	}
-
-	if defaultDuration := resolveDefaultDuration(m.DefaultDuration, inputs.SupportedDurations, m.Settings); defaultDuration > 0 {
-		inputs.DefaultDuration = defaultDuration
-	}
-
-	return LlmModel{
-		ID:          m.ModelID,
-		Name:        m.Name,
-		Description: m.Description,
-		Price:       m.Price,
-		Inputs:      inputs,
-	}
-}
-
-// ToLlmProvider converts DbProvider with models into LlmProvider DTO.
-func (p DbProvider) ToLlmProvider(models []DbModel) LlmProvider {
-	out := LlmProvider{
-		ID:          p.ID,
-		Name:        p.Name,
-		Description: p.Description,
-	}
-
-	activeModels := make([]LlmModel, 0, len(models))
-	for _, model := range models {
-		if !model.IsActive {
-			continue
-		}
-		activeModels = append(activeModels, model.ToLlmModel())
-	}
-	out.Models = activeModels
-	return out
-}
-
 func parseDurations(settings JSONMap) []int {
 	raw := settings["durations"]
 	var out []int

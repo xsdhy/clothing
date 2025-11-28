@@ -102,8 +102,8 @@ const GenerationHistoryPage: React.FC = () => {
       const result = new Map<string, string>();
       providers.forEach((provider) => {
         provider.models.forEach((model) => {
-          if (!result.has(model.id)) {
-            result.set(model.id, model.name ?? model.id);
+          if (!result.has(model.model_id)) {
+            result.set(model.model_id, model.name ?? model.model_id);
           }
         });
       });
@@ -116,8 +116,8 @@ const GenerationHistoryPage: React.FC = () => {
     }
 
     return provider.models.map((model) => ({
-      id: model.id,
-      name: model.name ?? model.id,
+      id: model.model_id,
+      name: model.name ?? model.model_id,
     }));
   }, [providerFilter, providers]);
 
@@ -824,14 +824,14 @@ const GenerationHistoryPage: React.FC = () => {
                                     }}
                                     disabled={
                                       preparingOutputAsInput?.recordId ===
-                                        record.id &&
+                                      record.id &&
                                       preparingOutputAsInput?.index ===
-                                        image.index
+                                      image.index
                                     }
                                   >
                                     {preparingOutputAsInput?.recordId ===
                                       record.id &&
-                                    preparingOutputAsInput?.index ===
+                                      preparingOutputAsInput?.index ===
                                       image.index ? (
                                       <CircularProgress size={16} color="inherit" />
                                     ) : (
@@ -888,7 +888,7 @@ const GenerationHistoryPage: React.FC = () => {
                       )}
 
                       <Stack spacing={1}>
-                        
+
 
                         {canEditRecordTags && (
                           <Autocomplete

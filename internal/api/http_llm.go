@@ -20,7 +20,7 @@ import (
 
 func (h *HTTPHandler) ListProviders(c *gin.Context) {
 	if h.repo == nil {
-		c.JSON(http.StatusOK, gin.H{"providers": []entity.LlmProvider{}})
+		c.JSON(http.StatusOK, gin.H{"providers": []entity.DbProvider{}})
 		return
 	}
 
@@ -32,12 +32,7 @@ func (h *HTTPHandler) ListProviders(c *gin.Context) {
 		return
 	}
 
-	results := make([]entity.LlmProvider, 0, len(providers))
-	for _, provider := range providers {
-		results = append(results, provider.ToLlmProvider(provider.Models))
-	}
-
-	c.JSON(http.StatusOK, gin.H{"providers": results})
+	c.JSON(http.StatusOK, gin.H{"providers": providers})
 }
 
 func (h *HTTPHandler) StreamGenerationEvents(c *gin.Context) {

@@ -37,32 +37,6 @@ const (
 	ModVideo Modality = "video"
 )
 
-type Inputs struct {
-	InputModalities    []Modality `json:"input_modalities,omitempty"`    // 支持的输入模态：text/image/video
-	OutputModalities   []Modality `json:"output_modalities,omitempty"`   // 支持的输出模态：text/image/video
-	MaxImages          int        `json:"max_images,omitempty"`          // 支持的最大输入图片数
-	SupportedSizes     []string   `json:"supported_sizes,omitempty"`     // 支持的图像尺寸/分辨率，留空表示不限预设
-	SupportedDurations []int      `json:"supported_durations,omitempty"` // 视频模型支持的时长（秒）
-	DefaultSize        string     `json:"default_size,omitempty"`        // 尺寸/分辨率默认值
-	DefaultDuration    int        `json:"default_duration,omitempty"`    // 视频默认时长（秒）
-}
-
-type LlmModel struct {
-	ID          string `json:"id"`                    // 模型ID
-	Name        string `json:"name"`                  //显示名称
-	Price       string `json:"price"`                 // 价格
-	Description string `json:"description,omitempty"` //描述
-
-	Inputs Inputs `json:"inputs,omitempty"` //输入的配置、模型的能力等
-}
-
-type LlmProvider struct {
-	ID          string     `json:"id"`                    //供应商ID
-	Name        string     `json:"name"`                  //显示名称
-	Description string     `json:"description,omitempty"` //描述
-	Models      []LlmModel `json:"models"`
-}
-
 type UsageRecordQuery struct {
 	BaseParams
 	Provider        string `json:"provider" form:"provider" query:"provider"`
