@@ -5,8 +5,6 @@ import (
 	"context"
 	"errors"
 	"strings"
-
-	"github.com/sirupsen/logrus"
 )
 
 type OpenRouter struct {
@@ -45,13 +43,6 @@ func NewOpenRouter(provider *entity.DbProvider) (*OpenRouter, error) {
 	}, nil
 }
 
-func (o *OpenRouter) GenerateContent(ctx context.Context, request entity.GenerateContentRequest, dbModel entity.DbModel) ([]string, string, error) {
-	logrus.WithFields(logrus.Fields{
-		"prompt_preview":      request.Prompt,
-		"reference_image_cnt": len(request.Inputs.Images),
-		"reference_video_cnt": len(request.Inputs.Videos),
-		"size":                strings.TrimSpace(request.Options.Size),
-	}).Info("llm_generate_content_start")
-
-	return GenerateContentByOpenaiProtocol(ctx, o.apiKey, o.endpoint, request.ModelID, request.Prompt, request.Inputs.Images, request.Inputs.Videos)
+func (o *OpenRouter) GenerateContent(ctx context.Context, request entity.GenerateContentRequest, dbModel entity.DbModel) (*entity.GenerateContentResponse, error) {
+	return GenerateContentByOpenaiProtocol(ctx, o.apiKey, o.endpoint, dbModel.ModelID, request.Prompt, request.Inputs.Images, request.Inputs.Videos)
 }

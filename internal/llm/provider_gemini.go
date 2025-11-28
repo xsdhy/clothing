@@ -11,6 +11,7 @@ import (
 type GeminiService struct {
 	providerID   string
 	providerName string
+	endpoint     string
 
 	apiKey     string
 	httpClient *http.Client
@@ -34,12 +35,12 @@ func NewGeminiService(provider *entity.DbProvider) (*GeminiService, error) {
 	return &GeminiService{
 		providerID:   provider.ID,
 		providerName: name,
+		endpoint:     provider.BaseURL,
 		apiKey:       apiKey,
 		httpClient:   &http.Client{},
 	}, nil
 }
 
-func (g *GeminiService) GenerateContent(ctx context.Context, request entity.GenerateContentRequest, dbModel entity.DbModel) ([]string, string, error) {
-	// TODO: Implement Gemini API integration.
-	return nil, "", errors.New("gemini response did not include image data")
+func (p *GeminiService) GenerateContent(ctx context.Context, request entity.GenerateContentRequest, dbModel entity.DbModel) (*entity.GenerateContentResponse, error) {
+	return GenerateContentByGeminiProtocol(ctx, p.apiKey, p.endpoint, dbModel.ModelID, request.Prompt, request.Inputs.Images)
 }

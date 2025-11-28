@@ -73,9 +73,9 @@ func NewFalAI(provider *entity.DbProvider) (*FalAI, error) {
 	}, nil
 }
 
-func (f *FalAI) GenerateContent(ctx context.Context, request entity.GenerateContentRequest, dbModel entity.DbModel) ([]string, string, error) {
+func (f *FalAI) GenerateContent(ctx context.Context, request entity.GenerateContentRequest, dbModel entity.DbModel) (*entity.GenerateContentResponse, error) {
 	if f == nil {
-		return nil, "", errors.New("fal.ai provider not initialised")
+		return nil, errors.New("fal.ai provider not initialised")
 	}
 
 	endpoint := ""
@@ -106,25 +106,35 @@ func (f *FalAI) GenerateContent(ctx context.Context, request entity.GenerateCont
 
 	input, err := f.buildInputPayload(mode, request)
 	if err != nil {
-		return nil, "", err
+		return nil, err
 	}
 
 	payload := map[string]any{"input": input}
-
 	envelope, err := f.submitAndWait(ctx, endpoint, payload)
 	if err != nil {
-		return nil, "", err
+		return nil, err
 	}
 
-	images, text := f.extractImagesAndText(envelope)
-	if len(images) == 0 {
-		if text != "" {
-			return nil, text, errors.New("fal.ai response did not include images")
+	requestID := envelope.RequestID
+	if requestID == "" {
+		requestID = "fal-" + utils.GenerateUUID()
+	}
+
+	if envelope.Status != "COMPLETED" && envelope.Status != "OK" {
+		return &entity.GenerateContentResponse{RequestID: requestID}, fmt.Errorf("falai task failed status=%s error=%s", envelope.Status, envelope.Error)
+	}
+
+	var assets []string
+	if envelope.Images != nil && len(envelope.Images) > 0 {
+		for _, img := range envelope.Images {
+			assets = append(assets, img.URL)
 		}
-		return nil, "", errors.New("fal.ai response did not include images")
 	}
 
-	return images, text, nil
+	return &entity.GenerateContentResponse{
+		ImageAssets: assets,
+		RequestID:   requestID,
+	}, nil
 }
 
 func (f *FalAI) buildInputPayload(mode falMode, request entity.GenerateContentRequest) (map[string]any, error) {

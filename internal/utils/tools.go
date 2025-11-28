@@ -1,6 +1,10 @@
 package utils
 
-import "strings"
+import (
+	"fmt"
+	"strings"
+	"time"
+)
 
 func EnsureDataURL(value string) string {
 	if strings.HasPrefix(value, "data:") {
@@ -20,4 +24,8 @@ func SplitDataURL(value string) (string, string) {
 		return "image/jpeg", ""
 	}
 	return parts[0], parts[1]
+}
+
+func GenerateUUID() string {
+	return fmt.Sprintf("%d", time.Now().UnixNano())
 }

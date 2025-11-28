@@ -5,8 +5,6 @@ import (
 	"context"
 	"errors"
 	"strings"
-
-	"github.com/sirupsen/logrus"
 )
 
 type AiHubMix struct {
@@ -58,17 +56,17 @@ func NewAiHubMix(provider *entity.DbProvider) (*AiHubMix, error) {
 	}, nil
 }
 
-func (o *AiHubMix) GenerateContent(ctx context.Context, request entity.GenerateContentRequest, dbModel entity.DbModel) ([]string, string, error) {
-	logrus.WithFields(logrus.Fields{
-		"prompt_preview":      request.Prompt,
-		"reference_image_cnt": len(request.Inputs.Images),
-		"reference_video_cnt": len(request.Inputs.Videos),
-		"size":                strings.TrimSpace(request.Options.Size),
-	}).Info("llm_generate_content_start")
-
-	if strings.Contains(request.ModelID, "gemini") {
-		return GenerateContentByGeminiProtocol(ctx, o.apiKey, o.geminiEndpoint, request.ModelID, request.Prompt, request.Inputs.Images)
+func (p *AiHubMix) GenerateContent(ctx context.Context, request entity.GenerateContentRequest, dbModel entity.DbModel) (*entity.GenerateContentResponse, error) {
+	if dbModel.IsVideoModel() {
+		return nil, errors.New("aihubmix video not supported yet")
 	}
 
-	return GenerateContentByOpenaiProtocol(ctx, o.apiKey, o.endpoint, request.ModelID, request.Prompt, request.Inputs.Images, request.Inputs.Videos)
+	// AiHubMix uses Gemini-compatible protocol for image generation (as per current implementation assumption)
+	// or OpenAI compatible?
+	// Looking at previous implementation:
+	// return GenerateContentByGeminiProtocol(ctx, p.apiKey, p.endpoint, dbModel.ModelID, request.Prompt, request.Inputs.Images)
+	// Yes, it uses Gemini protocol.
+
+	// The GenerateContentByGeminiProtocol function returns (*entity.GenerateContentResponse, error).
+	return GenerateContentByGeminiProtocol(ctx, p.apiKey, p.endpoint, dbModel.ModelID, request.Prompt, request.Inputs.Images)
 }

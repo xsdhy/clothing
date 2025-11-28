@@ -1,6 +1,7 @@
 package llm
 
 import (
+	"clothing/internal/entity"
 	"encoding/json"
 	"strings"
 
@@ -111,9 +112,9 @@ func makeUserMessage(prompt string, refs, videos []string) orMessage {
 	return orMessage{Role: "user", Content: parts}
 }
 
-func GenerateContentByOpenaiProtocol(ctx context.Context, apiKey, baseURL, model, prompt string, refs, videos []string) (imageDataURLs []string, assistantText string, err error) {
+func GenerateContentByOpenaiProtocol(ctx context.Context, apiKey, baseURL, model, prompt string, refs, videos []string) (*entity.GenerateContentResponse, error) {
 	if strings.TrimSpace(apiKey) == "" {
-		return nil, "", errors.New("api key missing")
+		return nil, errors.New("api key missing")
 	}
 
 	trimmedPrompt := strings.TrimSpace(prompt)
@@ -152,7 +153,7 @@ func GenerateContentByOpenaiProtocol(ctx context.Context, apiKey, baseURL, model
 	// SSE 不要超短超时
 	resp, err := httpCli.Do(req)
 	if err != nil {
-		return nil, "", err
+		return nil, err
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != 200 {
@@ -164,7 +165,7 @@ func GenerateContentByOpenaiProtocol(ctx context.Context, apiKey, baseURL, model
 			"status":  resp.StatusCode,
 			"body":    buf.String(),
 		}).Error("openai generate content failed")
-		return nil, "", fmt.Errorf("openai http %d: %s", resp.StatusCode, buf.String())
+		return nil, fmt.Errorf("openai http %d: %s", resp.StatusCode, buf.String())
 	}
 	// 处理 SSE 流式响应
 	logrus.Info("openai stream response started")
@@ -172,6 +173,8 @@ func GenerateContentByOpenaiProtocol(ctx context.Context, apiKey, baseURL, model
 	sc := bufio.NewScanner(resp.Body)
 	sc.Buffer(make([]byte, 0, 64*1024), 10*1024*1024)
 
+	var imageDataURLs []string
+	var assistantText string
 	nativeFinishReasonText := ""
 	seenImages := make(map[string]struct{})
 	for sc.Scan() {
@@ -227,7 +230,9 @@ func GenerateContentByOpenaiProtocol(ctx context.Context, apiKey, baseURL, model
 	}
 	logrus.Info("openai stream response ended")
 	if err := sc.Err(); err != nil {
-		return nil, strings.TrimSpace(assistantText), err
+		return &entity.GenerateContentResponse{
+			TextContent: strings.TrimSpace(assistantText),
+		}, err
 	}
 
 	assistantText = strings.TrimSpace(assistantText)
@@ -237,12 +242,17 @@ func GenerateContentByOpenaiProtocol(ctx context.Context, apiKey, baseURL, model
 				"native_finish_reason": strings.TrimSpace(nativeFinishReasonText),
 				"text_length":          len(assistantText),
 			}).Warn("openai stream returned text only without images")
-			return nil, assistantText, nil
+			return &entity.GenerateContentResponse{
+				TextContent: assistantText,
+			}, nil
 		}
 		if len(nativeFinishReasonText) > 0 {
-			return nil, assistantText, errors.New(nativeFinishReasonText)
+			return nil, errors.New(nativeFinishReasonText)
 		}
-		return nil, assistantText, errors.New("no image or text in streamed response")
+		return nil, errors.New("no image or text in streamed response")
 	}
-	return imageDataURLs, assistantText, nil
+	return &entity.GenerateContentResponse{
+		ImageAssets: imageDataURLs,
+		TextContent: assistantText,
+	}, nil
 }

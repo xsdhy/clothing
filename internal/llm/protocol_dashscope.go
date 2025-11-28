@@ -147,14 +147,14 @@ func (o dashscopeVideoOutput) collectAssets() []string {
 	return out
 }
 
-func GenerateImageByDashscopeProtocol(ctx context.Context, apiKey, endpoint string, model entity.DbModel, prompt, size string, duration int, base64Images, videos []string) (assets []string, assistantText string, err error) {
+func GenerateImageByDashscopeProtocol(ctx context.Context, apiKey, endpoint string, model entity.DbModel, prompt, size string, duration int, base64Images, videos []string) (*entity.GenerateContentResponse, error) {
 	if strings.TrimSpace(apiKey) == "" {
-		return nil, "", errors.New("api key missing")
+		return nil, errors.New("api key missing")
 	}
 
 	trimmedPrompt := strings.TrimSpace(prompt)
 	if trimmedPrompt == "" {
-		return nil, "", errors.New("prompt is empty")
+		return nil, errors.New("prompt is empty")
 	}
 
 	targetEndpoint := strings.TrimSpace(endpoint)
@@ -233,25 +233,25 @@ func GenerateImageByDashscopeProtocol(ctx context.Context, apiKey, endpoint stri
 
 	payload, err := json.Marshal(reqBody)
 	if err != nil {
-		return nil, "", fmt.Errorf("dashscope marshal request: %w", err)
+		return nil, fmt.Errorf("dashscope marshal request: %w", err)
 	}
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, targetEndpoint, bytes.NewReader(payload))
 	if err != nil {
-		return nil, "", fmt.Errorf("dashscope create request: %w", err)
+		return nil, fmt.Errorf("dashscope create request: %w", err)
 	}
 	req.Header.Set("Authorization", "Bearer "+apiKey)
 	req.Header.Set("Content-Type", "application/json")
 
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
-		return nil, "", fmt.Errorf("dashscope request: %w", err)
+		return nil, fmt.Errorf("dashscope request: %w", err)
 	}
 	defer resp.Body.Close()
 
 	buf := new(bytes.Buffer)
 	if _, err := buf.ReadFrom(resp.Body); err != nil {
-		return nil, "", fmt.Errorf("dashscope read response: %w", err)
+		return nil, fmt.Errorf("dashscope read response: %w", err)
 	}
 
 	if resp.StatusCode != http.StatusOK {
@@ -259,26 +259,30 @@ func GenerateImageByDashscopeProtocol(ctx context.Context, apiKey, endpoint stri
 			"status": resp.StatusCode,
 			"body":   buf.String(),
 		}).Error("dashscope generate content http error")
-		return nil, "", fmt.Errorf("dashscope http %d: %s", resp.StatusCode, buf.String())
+		return nil, fmt.Errorf("dashscope http %d: %s", resp.StatusCode, buf.String())
 	}
 
 	var result dashscopeResponse
 	if err := json.Unmarshal(buf.Bytes(), &result); err != nil {
-		return nil, "", fmt.Errorf("dashscope unmarshal response: %w", err)
+		return nil, fmt.Errorf("dashscope unmarshal response: %w", err)
 	}
+
+	requestID := result.RequestID
 
 	if result.Code != "" && strings.ToLower(result.Code) != "success" {
 		msg := result.Message
 		if msg == "" {
 			msg = "dashscope error"
 		}
-		return nil, "", fmt.Errorf("dashscope api error: %s", msg)
+		return &entity.GenerateContentResponse{RequestID: requestID}, fmt.Errorf("dashscope api error: %s", msg)
 	}
 
 	if len(result.Output.Choices) == 0 {
-		return nil, "", errors.New("dashscope no choices in response")
+		return &entity.GenerateContentResponse{RequestID: requestID}, errors.New("dashscope no choices in response")
 	}
 	seen := make(map[string]struct{})
+	var assets []string
+	var assistantText string
 
 	for _, choice := range result.Output.Choices {
 		for _, content := range choice.Message.Content {
@@ -310,16 +314,23 @@ func GenerateImageByDashscopeProtocol(ctx context.Context, apiKey, endpoint stri
 	}
 
 	if len(assets) == 0 {
-		return nil, assistantText, errors.New("dashscope no asset found in response")
+		return &entity.GenerateContentResponse{
+			TextContent: assistantText,
+			RequestID:   requestID,
+		}, errors.New("dashscope no asset found in response")
 	}
 
-	return assets, assistantText, nil
+	return &entity.GenerateContentResponse{
+		ImageAssets: assets,
+		TextContent: assistantText,
+		RequestID:   requestID,
+	}, nil
 }
 
-func GenerateDashscopeVideo(ctx context.Context, apiKey, endpoint string, model entity.DbModel, prompt, size string, duration int, images []string) (assets []string, assistantText string, err error) {
+func GenerateDashscopeVideo(ctx context.Context, apiKey, endpoint string, model entity.DbModel, prompt, size string, duration int, images []string) (*entity.GenerateContentResponse, error) {
 	cfg := videoConfigFromModel(model)
 	if len(images) == 0 {
-		return nil, "", errors.New("dashscope video model requires at least one reference image")
+		return nil, errors.New("dashscope video model requires at least one reference image")
 	}
 
 	modelLower := strings.ToLower(model.ModelID)
@@ -338,7 +349,7 @@ func GenerateDashscopeVideo(ctx context.Context, apiKey, endpoint string, model 
 
 	firstFrame, err := inlineDashscopeImage(ctx, images[0])
 	if err != nil || firstFrame == "" {
-		return nil, "", fmt.Errorf("prepare first frame: %w", err)
+		return nil, fmt.Errorf("prepare first frame: %w", err)
 	}
 
 	var lastFrame string
@@ -346,7 +357,7 @@ func GenerateDashscopeVideo(ctx context.Context, apiKey, endpoint string, model 
 		last := images[len(images)-1]
 		lastFrame, err = inlineDashscopeImage(ctx, last)
 		if err != nil || lastFrame == "" {
-			return nil, "", fmt.Errorf("prepare last frame: %w", err)
+			return nil, fmt.Errorf("prepare last frame: %w", err)
 		}
 	}
 
@@ -375,12 +386,12 @@ func GenerateDashscopeVideo(ctx context.Context, apiKey, endpoint string, model 
 
 	payload, err := json.Marshal(reqBody)
 	if err != nil {
-		return nil, "", fmt.Errorf("dashscope marshal video request: %w", err)
+		return nil, fmt.Errorf("dashscope marshal video request: %w", err)
 	}
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, target, bytes.NewReader(payload))
 	if err != nil {
-		return nil, "", fmt.Errorf("dashscope create video request: %w", err)
+		return nil, fmt.Errorf("dashscope create video request: %w", err)
 	}
 	req.Header.Set("Authorization", "Bearer "+apiKey)
 	req.Header.Set("Content-Type", "application/json")
@@ -388,13 +399,13 @@ func GenerateDashscopeVideo(ctx context.Context, apiKey, endpoint string, model 
 
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
-		return nil, "", fmt.Errorf("dashscope video request: %w", err)
+		return nil, fmt.Errorf("dashscope video request: %w", err)
 	}
 	defer resp.Body.Close()
 
 	buf := new(bytes.Buffer)
 	if _, err := buf.ReadFrom(resp.Body); err != nil {
-		return nil, "", fmt.Errorf("dashscope read video response: %w", err)
+		return nil, fmt.Errorf("dashscope read video response: %w", err)
 	}
 
 	if resp.StatusCode != http.StatusOK {
@@ -402,29 +413,44 @@ func GenerateDashscopeVideo(ctx context.Context, apiKey, endpoint string, model 
 			"status": resp.StatusCode,
 			"body":   buf.String(),
 		}).Error("dashscope generate video http error")
-		return nil, "", fmt.Errorf("dashscope http %d: %s", resp.StatusCode, buf.String())
+		return nil, fmt.Errorf("dashscope http %d: %s", resp.StatusCode, buf.String())
 	}
 
 	var result dashscopeVideoResponse
 	if err := json.Unmarshal(buf.Bytes(), &result); err != nil {
-		return nil, "", fmt.Errorf("dashscope unmarshal video response: %w", err)
+		return nil, fmt.Errorf("dashscope unmarshal video response: %w", err)
 	}
+
+	requestID := result.RequestID
 
 	if result.Code != "" && strings.ToLower(result.Code) != "success" {
 		msg := strings.TrimSpace(result.Message)
 		if msg == "" {
 			msg = "dashscope video error"
 		}
-		return nil, "", fmt.Errorf("dashscope api error: %s", msg)
+		return &entity.GenerateContentResponse{RequestID: requestID}, fmt.Errorf("dashscope api error: %s", msg)
 	}
 
 	output := result.Output
+	externalTaskCode := output.TaskID
+
+	var assets []string
+	var assistantText string
+
 	if status := strings.ToUpper(strings.TrimSpace(output.TaskStatus)); status != "" && status != "SUCCEEDED" {
 		assets, err = waitForDashscopeVideo(ctx, apiKey, output.TaskID)
 		if err != nil {
-			return nil, "", fmt.Errorf("dashscope video task status %s: %w", status, err)
+			return &entity.GenerateContentResponse{
+				ExternalTaskCode: externalTaskCode,
+				RequestID:        requestID,
+			}, fmt.Errorf("dashscope video task status %s: %w", status, err)
 		}
-		return assets, assistantText, nil
+		return &entity.GenerateContentResponse{
+			ImageAssets:      assets,
+			TextContent:      assistantText,
+			ExternalTaskCode: externalTaskCode,
+			RequestID:        requestID,
+		}, nil
 	}
 
 	assets = output.collectAssets()
@@ -432,14 +458,30 @@ func GenerateDashscopeVideo(ctx context.Context, apiKey, endpoint string, model 
 		if strings.TrimSpace(output.TaskID) != "" {
 			assets, err = waitForDashscopeVideo(ctx, apiKey, output.TaskID)
 			if err != nil {
-				return nil, "", err
+				return &entity.GenerateContentResponse{
+					ExternalTaskCode: externalTaskCode,
+					RequestID:        requestID,
+				}, err
 			}
-			return assets, assistantText, nil
+			return &entity.GenerateContentResponse{
+				ImageAssets:      assets,
+				TextContent:      assistantText,
+				ExternalTaskCode: externalTaskCode,
+				RequestID:        requestID,
+			}, nil
 		}
-		return nil, "", errors.New("dashscope video response missing video url")
+		return &entity.GenerateContentResponse{
+			ExternalTaskCode: externalTaskCode,
+			RequestID:        requestID,
+		}, errors.New("dashscope video response missing video url")
 	}
 
-	return assets, assistantText, nil
+	return &entity.GenerateContentResponse{
+		ImageAssets:      assets,
+		TextContent:      assistantText,
+		ExternalTaskCode: externalTaskCode,
+		RequestID:        requestID,
+	}, nil
 }
 
 func resolveDashscopeVideoEndpoint(endpoint string, useKeyframe bool) string {
@@ -524,6 +566,13 @@ func fetchDashscopeTask(ctx context.Context, apiKey, taskID string) ([]string, s
 	if err := json.Unmarshal(buf.Bytes(), &result); err != nil {
 		return nil, "", fmt.Errorf("dashscope unmarshal task response: %w", err)
 	}
+	logrus.WithFields(logrus.Fields{
+		"task_id":   taskID,
+		"requestId": result.RequestID,
+		"status":    result.Output.TaskStatus,
+		"message":   result.Output.Message, //这里面有错误原因
+		"results":   result.Output.Results,
+	}).Info("dashscope video task completed")
 
 	output := result.Output
 	assets := output.collectAssets()

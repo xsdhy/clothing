@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"strings"
 
+	"clothing/internal/entity"
 	"clothing/internal/utils"
 
 	"github.com/sirupsen/logrus"
@@ -66,15 +67,15 @@ type (
 // payloads (candidates/parts with inlineData). More verbose logs are emitted to
 // help diagnose integration issues, as Gemini responses can be picky about the
 // shape of image payloads.
-func GenerateContentByGeminiProtocol(ctx context.Context, apiKey, endpoint, model, prompt string, refs []string) (imageDataURLs []string, assistantText string, err error) {
+func GenerateContentByGeminiProtocol(ctx context.Context, apiKey, endpoint, model, prompt string, refs []string) (*entity.GenerateContentResponse, error) {
 	if strings.TrimSpace(apiKey) == "" {
-		return nil, "", errors.New("api key missing")
+		return nil, errors.New("api key missing")
 	}
 	if strings.TrimSpace(model) == "" {
-		return nil, "", errors.New("model is required")
+		return nil, errors.New("model is required")
 	}
 	if strings.TrimSpace(prompt) == "" {
-		return nil, "", errors.New("prompt is empty")
+		return nil, errors.New("prompt is empty")
 	}
 
 	logrus.WithFields(logrus.Fields{
@@ -87,7 +88,7 @@ func GenerateContentByGeminiProtocol(ctx context.Context, apiKey, endpoint, mode
 
 	parts, errs := buildGeminiParts(ctx, prompt, refs)
 	if len(parts) == 0 {
-		return nil, "", errors.New("no valid prompt or image parts for gemini request")
+		return nil, errors.New("no valid prompt or image parts for gemini request")
 	}
 	if len(errs) > 0 {
 		logrus.WithFields(logrus.Fields{
@@ -107,14 +108,14 @@ func GenerateContentByGeminiProtocol(ctx context.Context, apiKey, endpoint, mode
 
 	bodyBytes, err := json.Marshal(reqBody)
 	if err != nil {
-		return nil, "", fmt.Errorf("gemini marshal request: %w", err)
+		return nil, fmt.Errorf("gemini marshal request: %w", err)
 	}
 
 	targetURL := resolveGeminiEndpoint(endpoint, model)
 	logrus.WithField("target_url", truncateForLog(targetURL, 200)).Info("gemini resolved endpoint")
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, targetURL, bytes.NewReader(bodyBytes))
 	if err != nil {
-		return nil, "", fmt.Errorf("gemini create request: %w", err)
+		return nil, fmt.Errorf("gemini create request: %w", err)
 	}
 	// Prefer header to avoid logging API key inside URLs; most gateways accept this.
 	req.Header.Set("x-goog-api-key", apiKey)
@@ -124,7 +125,7 @@ func GenerateContentByGeminiProtocol(ctx context.Context, apiKey, endpoint, mode
 	httpCli := &http.Client{Timeout: 0} // disable client-level timeout for long-running streams
 	resp, err := httpCli.Do(req)
 	if err != nil {
-		return nil, "", fmt.Errorf("gemini send request: %w", err)
+		return nil, fmt.Errorf("gemini send request: %w", err)
 	}
 	defer resp.Body.Close()
 
@@ -135,7 +136,7 @@ func GenerateContentByGeminiProtocol(ctx context.Context, apiKey, endpoint, mode
 			"status": resp.StatusCode,
 			"body":   buf.String(),
 		}).Error("gemini generate images http error")
-		return nil, "", fmt.Errorf("gemini http %d: %s", resp.StatusCode, buf.String())
+		return nil, fmt.Errorf("gemini http %d: %s", resp.StatusCode, buf.String())
 	}
 
 	// Stream parsing: Gemini with ?alt=sse emits `data: { ... }` lines similar to OpenAI.
@@ -144,6 +145,8 @@ func GenerateContentByGeminiProtocol(ctx context.Context, apiKey, endpoint, mode
 	scanner := bufio.NewScanner(resp.Body)
 	scanner.Buffer(make([]byte, 0, 64*1024), 10*1024*1024)
 
+	var imageDataURLs []string
+	var assistantText string
 	seenImages := make(map[string]struct{})
 	for scanner.Scan() {
 		line := strings.TrimSpace(scanner.Text())
@@ -222,16 +225,21 @@ func GenerateContentByGeminiProtocol(ctx context.Context, apiKey, endpoint, mode
 	logrus.Info("gemini stream response ended")
 
 	if err := scanner.Err(); err != nil {
-		return nil, assistantText, fmt.Errorf("gemini stream read error: %w", err)
+		return nil, fmt.Errorf("gemini stream read error: %w", err)
 	}
 	if len(imageDataURLs) == 0 {
 		if strings.TrimSpace(assistantText) == "" {
-			return nil, "", errors.New("gemini response did not include image data")
+			return nil, errors.New("gemini response did not include image data")
 		}
-		return nil, assistantText, errors.New("gemini response did not include image data")
+		return &entity.GenerateContentResponse{
+			TextContent: strings.TrimSpace(assistantText),
+		}, errors.New("gemini response did not include image data")
 	}
 
-	return imageDataURLs, strings.TrimSpace(assistantText), nil
+	return &entity.GenerateContentResponse{
+		ImageAssets: imageDataURLs,
+		TextContent: strings.TrimSpace(assistantText),
+	}, nil
 }
 
 // buildGeminiParts converts prompt and optional reference images into the Gemini

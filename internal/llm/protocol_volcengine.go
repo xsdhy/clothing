@@ -1,6 +1,7 @@
 package llm
 
 import (
+	"clothing/internal/entity"
 	"context"
 	"errors"
 	"fmt"
@@ -15,7 +16,7 @@ import (
 
 //文档:https://www.volcengine.com/docs/82379/1824121
 
-func GenerateContentByVolcengineProtocol(ctx context.Context, apiKey, model, prompt, size string, base64Images []string) (imageDataURLs []string, assistantText string, err error) {
+func GenerateContentByVolcengineProtocol(ctx context.Context, apiKey, model, prompt, size string, base64Images []string) (*entity.GenerateContentResponse, error) {
 	client := arkruntime.NewClientWithApiKey(apiKey)
 
 	var sequentialImageGeneration volcModel.SequentialImageGeneration = "auto" // allow multi-image sequences when supported
@@ -39,9 +40,13 @@ func GenerateContentByVolcengineProtocol(ctx context.Context, apiKey, model, pro
 	stream, err := client.GenerateImagesStreaming(ctx, generateReq)
 	if err != nil {
 		fmt.Printf("call GenerateImagesStreaming error: %v", err)
-		return
+		return nil, err
 	}
 	defer stream.Close()
+
+	var imageDataURLs []string
+	var assistantText string
+
 	for {
 		recv, err := stream.Recv()
 		if err == io.EOF {
@@ -80,7 +85,12 @@ func GenerateContentByVolcengineProtocol(ctx context.Context, apiKey, model, pro
 		}
 	}
 	if len(imageDataURLs) == 0 {
-		return nil, assistantText, errors.New(assistantText)
+		return &entity.GenerateContentResponse{
+			TextContent: assistantText,
+		}, errors.New(assistantText)
 	}
-	return imageDataURLs, assistantText, nil
+	return &entity.GenerateContentResponse{
+		ImageAssets: imageDataURLs,
+		TextContent: assistantText,
+	}, nil
 }

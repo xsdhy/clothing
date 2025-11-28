@@ -258,7 +258,26 @@ func (h *HTTPHandler) handleAsyncGeneration(record entity.DbUsageRecord, request
 		}
 	}
 
-	outputs, text, err := service.GenerateContent(genCtx, request, dbModel)
+	resp, err := service.GenerateContent(genCtx, request, dbModel)
+
+	var externalTaskCode, requestID string
+	var outputs []string
+	var text string
+
+	if resp != nil {
+		externalTaskCode = resp.ExternalTaskCode
+		requestID = resp.RequestID
+		outputs = resp.ImageAssets
+		text = resp.TextContent
+	}
+
+	if externalTaskCode != "" {
+		updates["external_task_code"] = externalTaskCode
+	}
+	if requestID != "" {
+		updates["request_id"] = requestID
+	}
+
 	if err != nil {
 		logrus.WithError(err).WithFields(logrus.Fields{
 			"record_id": record.ID,

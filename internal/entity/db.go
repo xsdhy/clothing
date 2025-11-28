@@ -177,6 +177,9 @@ type DbUsageRecord struct {
 	OutputText   string `gorm:"column:output_text;type:text" json:"output_text"`
 	ErrorMessage string `gorm:"column:error_message;type:text" json:"error_message"`
 
+	ExternalTaskCode string `gorm:"column:external_task_code;type:varchar(255)" json:"external_task_code"` //外部（第三方）任务code，或者任务ID
+	RequestID        string `gorm:"column:request_id;type:varchar(255)" json:"request_id"`                 //请求ID
+
 	Tags []DbTag `gorm:"many2many:usage_record_tags;foreignKey:ID;joinForeignKey:UsageRecordID;references:ID;joinReferences:TagID" json:"tags"`
 }
 

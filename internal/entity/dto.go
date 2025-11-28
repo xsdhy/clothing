@@ -24,8 +24,10 @@ type GenerateContentRequest struct {
 }
 
 type GenerateContentResponse struct {
-	Outputs []string `json:"outputs,omitempty"`
-	Text    string   `json:"text,omitempty"`
+	ImageAssets      []string `json:"image_assets,omitempty"`
+	TextContent      string   `json:"text_content,omitempty"`
+	ExternalTaskCode string   `json:"external_task_code,omitempty"`
+	RequestID        string   `json:"request_id,omitempty"`
 }
 
 // 模态枚举（可扩展到音频/视频）

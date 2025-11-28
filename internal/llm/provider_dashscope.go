@@ -5,8 +5,6 @@ import (
 	"context"
 	"errors"
 	"strings"
-
-	"github.com/sirupsen/logrus"
 )
 
 type Dashscope struct {
@@ -40,20 +38,11 @@ func NewDashscope(provider *entity.DbProvider) (*Dashscope, error) {
 	}, nil
 }
 
-func (d *Dashscope) GenerateContent(ctx context.Context, request entity.GenerateContentRequest, dbModel entity.DbModel) ([]string, string, error) {
-	logrus.WithFields(logrus.Fields{
-		"prompt_preview":      request.Prompt,
-		"reference_image_cnt": len(request.Inputs.Images),
-		"reference_video_cnt": len(request.Inputs.Videos),
-		"size":                strings.TrimSpace(request.Options.Size),
-		"duration":            request.Options.Duration,
-	}).Info("llm_generate_content_start")
-
+func (p *Dashscope) GenerateContent(ctx context.Context, request entity.GenerateContentRequest, dbModel entity.DbModel) (*entity.GenerateContentResponse, error) {
 	if dbModel.IsVideoModel() {
-		return GenerateDashscopeVideo(ctx, d.apiKey, d.endpoint, dbModel, request.Prompt, request.Options.Size, request.Options.Duration, request.Inputs.Images)
+		return GenerateDashscopeVideo(ctx, p.apiKey, p.endpoint, dbModel, request.Prompt, request.Options.Size, request.Options.Duration, request.Inputs.Images)
 	}
-
-	return GenerateImageByDashscopeProtocol(ctx, d.apiKey, d.endpoint, dbModel, request.Prompt, request.Options.Size, request.Options.Duration, request.Inputs.Images, request.Inputs.Videos)
+	return GenerateImageByDashscopeProtocol(ctx, p.apiKey, p.endpoint, dbModel, request.Prompt, request.Options.Size, request.Options.Duration, request.Inputs.Images, request.Inputs.Videos)
 }
 
 func normalizeModelID(id string) string {

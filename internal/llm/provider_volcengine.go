@@ -39,20 +39,13 @@ func NewVolcengine(provider *entity.DbProvider) (*Volcengine, error) {
 	}, nil
 }
 
-func (v *Volcengine) GenerateContent(ctx context.Context, request entity.GenerateContentRequest, dbModel entity.DbModel) ([]string, string, error) {
-	logrus.WithFields(logrus.Fields{
-		"prompt_preview":      request.Prompt,
-		"reference_image_cnt": len(request.Inputs.Images),
-		"size":                strings.TrimSpace(request.Options.Size),
-	}).Info("llm_generate_content_start")
-
-	requestedSize := strings.TrimSpace(request.Options.Size)
-
+func (p *Volcengine) GenerateContent(ctx context.Context, request entity.GenerateContentRequest, dbModel entity.DbModel) (*entity.GenerateContentResponse, error) {
+	requestedSize := request.Options.Size
 	if requestedSize != "" {
 		if len(dbModel.SupportedSizes) == 0 {
 			err := fmt.Errorf("volcengine model %q does not allow custom size", request.ModelID)
 			logrus.WithError(err).Warn("llm_generate_content_invalid_size")
-			return nil, "", err
+			return nil, err
 		}
 		valid := false
 		for _, allowed := range dbModel.SupportedSizes {
@@ -64,9 +57,9 @@ func (v *Volcengine) GenerateContent(ctx context.Context, request entity.Generat
 		if !valid {
 			err := fmt.Errorf("volcengine model %q does not support size %q", request.ModelID, request.Options.Size)
 			logrus.WithError(err).Warn("llm_generate_content_invalid_size")
-			return nil, "", err
+			return nil, err
 		}
 	}
 
-	return GenerateContentByVolcengineProtocol(ctx, v.apiKey, request.ModelID, request.Prompt, requestedSize, request.Inputs.Images)
+	return GenerateContentByVolcengineProtocol(ctx, p.apiKey, dbModel.ModelID, request.Prompt, requestedSize, request.Inputs.Images)
 }
