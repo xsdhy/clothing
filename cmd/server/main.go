@@ -132,6 +132,11 @@ func main() {
 		c.Data(http.StatusOK, "text/html; charset=utf-8", []byte(indexHTML))
 	})
 
+	// 对于所有非API路由，返回index.html以支持前端路由
+	r.NoRoute(func(c *gin.Context) {
+		c.Data(http.StatusOK, "text/html; charset=utf-8", []byte(indexHTML))
+	})
+
 	serverHost := fmt.Sprintf("0.0.0.0:%s", cfg.HTTPPort)
 	logger.WithField("host", serverHost).Info("服务器启动")
 	// 创建HTTP服务器

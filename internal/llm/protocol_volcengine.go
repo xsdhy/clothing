@@ -2,11 +2,14 @@ package llm
 
 import (
 	"clothing/internal/entity"
+	"clothing/internal/utils"
 	"context"
 	"errors"
 	"fmt"
 	"io"
+	"net/http"
 	"strings"
+	"time"
 
 	"github.com/sirupsen/logrus"
 	"github.com/volcengine/volcengine-go-sdk/service/arkruntime"
@@ -93,4 +96,273 @@ func GenerateContentByVolcengineProtocol(ctx context.Context, apiKey, model, pro
 		ImageAssets: imageDataURLs,
 		TextContent: assistantText,
 	}, nil
+}
+
+func GenerateVolcengineVideo(ctx context.Context, apiKey string, model entity.DbModel, prompt, size string, duration int, images []string) (*entity.GenerateContentResponse, error) {
+	if strings.TrimSpace(apiKey) == "" {
+		return nil, errors.New("api key missing")
+	}
+
+	client := arkruntime.NewClientWithApiKey(apiKey)
+	trimmedPrompt := buildVolcengineVideoPrompt(prompt, size, duration)
+
+	contentItems := make([]*volcModel.CreateContentGenerationContentItem, 0, len(images)+1)
+	if strings.TrimSpace(trimmedPrompt) != "" {
+		contentItems = append(contentItems, &volcModel.CreateContentGenerationContentItem{
+			Type: volcModel.ContentGenerationContentItemTypeText,
+			Text: volcengine.String(trimmedPrompt),
+		})
+	}
+
+	imageItems, err := buildVolcengineVideoImages(ctx, model.ModelID, images)
+	if err != nil {
+		return nil, err
+	}
+	contentItems = append(contentItems, imageItems...)
+
+	if len(contentItems) == 0 {
+		return nil, errors.New("volcengine video content is empty")
+	}
+
+	logrus.WithFields(logrus.Fields{
+		"model":         model.ModelID,
+		"prompt_length": len(trimmedPrompt),
+		"image_count":   len(images),
+	}).Info("volcengine_generate_video_start")
+
+	req := volcModel.CreateContentGenerationTaskRequest{
+		Model:   model.ModelID,
+		Content: contentItems,
+	}
+
+	createResp, err := client.CreateContentGenerationTask(ctx, req)
+	if err != nil {
+		return nil, fmt.Errorf("volcengine create video task: %w", err)
+	}
+
+	taskID := strings.TrimSpace(createResp.ID)
+	requestID := extractVolcengineRequestID(createResp.Header())
+	if taskID == "" {
+		return &entity.GenerateContentResponse{RequestID: requestID}, errors.New("volcengine video task id is empty")
+	}
+
+	assets, revisedPrompt, err := waitForVolcengineVideo(ctx, client, taskID)
+	if err != nil {
+		return &entity.GenerateContentResponse{
+			TextContent:      revisedPrompt,
+			ExternalTaskCode: taskID,
+			RequestID:        requestID,
+		}, err
+	}
+	if len(assets) == 0 {
+		return &entity.GenerateContentResponse{
+			TextContent:      revisedPrompt,
+			ExternalTaskCode: taskID,
+			RequestID:        requestID,
+		}, errors.New("volcengine video response missing video url")
+	}
+
+	return &entity.GenerateContentResponse{
+		ImageAssets:      assets,
+		TextContent:      revisedPrompt,
+		ExternalTaskCode: taskID,
+		RequestID:        requestID,
+	}, nil
+}
+
+func buildVolcengineVideoImages(ctx context.Context, modelID string, images []string) ([]*volcModel.CreateContentGenerationContentItem, error) {
+	trimmed := make([]string, 0, len(images))
+	for _, img := range images {
+		img = strings.TrimSpace(img)
+		if img == "" {
+			continue
+		}
+		trimmed = append(trimmed, img)
+	}
+	if len(trimmed) == 0 {
+		return nil, nil
+	}
+
+	modelLower := strings.ToLower(modelID)
+	useReference := len(trimmed) > 2 && strings.Contains(modelLower, "lite") && strings.Contains(modelLower, "i2v")
+
+	if useReference {
+		maxRefs := 4
+		if len(trimmed) > maxRefs {
+			logrus.WithFields(logrus.Fields{
+				"model":       modelID,
+				"image_count": len(trimmed),
+				"max_refs":    maxRefs,
+			}).Info("volcengine reference images trimmed")
+		}
+
+		items := make([]*volcModel.CreateContentGenerationContentItem, 0, maxRefs)
+		for idx, img := range trimmed {
+			if idx >= maxRefs {
+				break
+			}
+			url, err := inlineVolcengineImage(ctx, img)
+			if err != nil {
+				return nil, fmt.Errorf("prepare reference image: %w", err)
+			}
+			items = append(items, &volcModel.CreateContentGenerationContentItem{
+				Type: volcModel.ContentGenerationContentItemTypeImage,
+				ImageURL: &volcModel.ImageURL{
+					URL: url,
+				},
+				Role: volcengine.String("reference_image"),
+			})
+		}
+		return items, nil
+	}
+
+	if len(trimmed) >= 2 {
+		if len(trimmed) > 2 {
+			logrus.WithFields(logrus.Fields{
+				"model":       modelID,
+				"image_count": len(trimmed),
+			}).Info("volcengine using first and last frame")
+		}
+
+		firstURL, err := inlineVolcengineImage(ctx, trimmed[0])
+		if err != nil {
+			return nil, fmt.Errorf("prepare first frame: %w", err)
+		}
+		lastURL, err := inlineVolcengineImage(ctx, trimmed[len(trimmed)-1])
+		if err != nil {
+			return nil, fmt.Errorf("prepare last frame: %w", err)
+		}
+
+		return []*volcModel.CreateContentGenerationContentItem{
+			{
+				Type: volcModel.ContentGenerationContentItemTypeImage,
+				ImageURL: &volcModel.ImageURL{
+					URL: firstURL,
+				},
+				Role: volcengine.String("first_frame"),
+			},
+			{
+				Type: volcModel.ContentGenerationContentItemTypeImage,
+				ImageURL: &volcModel.ImageURL{
+					URL: lastURL,
+				},
+				Role: volcengine.String("last_frame"),
+			},
+		}, nil
+	}
+
+	soloURL, err := inlineVolcengineImage(ctx, trimmed[0])
+	if err != nil {
+		return nil, fmt.Errorf("prepare first frame: %w", err)
+	}
+
+	return []*volcModel.CreateContentGenerationContentItem{
+		{
+			Type: volcModel.ContentGenerationContentItemTypeImage,
+			ImageURL: &volcModel.ImageURL{
+				URL: soloURL,
+			},
+			Role: volcengine.String("first_frame"),
+		},
+	}, nil
+}
+
+func buildVolcengineVideoPrompt(prompt, size string, duration int) string {
+	trimmed := strings.TrimSpace(prompt)
+	if trimmed == "" {
+		return trimmed
+	}
+
+	promptLower := strings.ToLower(trimmed)
+	if sizeValue := strings.TrimSpace(size); sizeValue != "" && !strings.Contains(promptLower, "--rs") {
+		trimmed += fmt.Sprintf(" --rs %s", strings.ToLower(sizeValue))
+	}
+	if duration > 0 && !strings.Contains(promptLower, "--dur") {
+		trimmed += fmt.Sprintf(" --dur %d", duration)
+	}
+	return trimmed
+}
+
+func inlineVolcengineImage(ctx context.Context, payload string) (string, error) {
+	trimmed := strings.TrimSpace(payload)
+	if trimmed == "" {
+		return "", errors.New("empty image payload")
+	}
+	if strings.HasPrefix(trimmed, "http://") || strings.HasPrefix(trimmed, "https://") {
+		b64, mimeType, err := downloadImageAsBase64(ctx, trimmed)
+		if err != nil {
+			return "", err
+		}
+		return fmt.Sprintf("data:%s;base64,%s", fallbackMime(mimeType), b64), nil
+	}
+	return utils.EnsureDataURL(trimmed), nil
+}
+
+func waitForVolcengineVideo(ctx context.Context, client *arkruntime.Client, taskID string) ([]string, string, error) {
+	if strings.TrimSpace(taskID) == "" {
+		return nil, "", errors.New("volcengine missing task id for video")
+	}
+
+	pollInterval := 5 * time.Second
+
+	for {
+		if ctx.Err() != nil {
+			return nil, "", ctx.Err()
+		}
+
+		resp, err := client.GetContentGenerationTask(ctx, volcModel.GetContentGenerationTaskRequest{ID: taskID})
+		if err != nil {
+			return nil, "", fmt.Errorf("volcengine get video task: %w", err)
+		}
+
+		status := strings.ToLower(strings.TrimSpace(resp.Status))
+		revisedPrompt := ""
+		if resp.RevisedPrompt != nil {
+			revisedPrompt = strings.TrimSpace(*resp.RevisedPrompt)
+		}
+
+		if status == strings.ToLower(volcModel.StatusSucceeded) {
+			return collectVolcengineVideoAssets(resp.Content), revisedPrompt, nil
+		}
+
+		if resp.Error != nil && resp.Error.Message != "" {
+			return nil, revisedPrompt, fmt.Errorf("volcengine task error: %s", resp.Error.Message)
+		}
+
+		if status == strings.ToLower(volcModel.StatusFailed) ||
+			status == strings.ToLower(volcModel.StatusCancelled) ||
+			status == "expired" {
+			return nil, revisedPrompt, fmt.Errorf("volcengine task %s", status)
+		}
+
+		logrus.WithFields(logrus.Fields{
+			"task_id": taskID,
+			"status":  status,
+		}).Info("volcengine video task still running")
+
+		select {
+		case <-ctx.Done():
+			return nil, revisedPrompt, ctx.Err()
+		case <-time.After(pollInterval):
+		}
+	}
+}
+
+func collectVolcengineVideoAssets(content volcModel.Content) []string {
+	assets := make([]string, 0, 2)
+	if url := strings.TrimSpace(content.VideoURL); url != "" {
+		assets = append(assets, url)
+	}
+	if url := strings.TrimSpace(content.LastFrameURL); url != "" {
+		assets = append(assets, url)
+	}
+	return assets
+}
+
+func extractVolcengineRequestID(header http.Header) string {
+	reqID := strings.TrimSpace(header.Get("X-Request-Id"))
+	if reqID != "" {
+		return reqID
+	}
+	return strings.TrimSpace(header.Get(volcModel.ClientRequestHeader))
 }

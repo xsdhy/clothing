@@ -61,5 +61,9 @@ func (p *Volcengine) GenerateContent(ctx context.Context, request entity.Generat
 		}
 	}
 
+	if dbModel.IsVideoModel() {
+		return GenerateVolcengineVideo(ctx, p.apiKey, dbModel, request.Prompt, request.Options.Size, request.Options.Duration, request.Inputs.Images)
+	}
+
 	return GenerateContentByVolcengineProtocol(ctx, p.apiKey, dbModel.ModelID, request.Prompt, requestedSize, request.Inputs.Images)
 }
