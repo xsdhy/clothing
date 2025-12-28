@@ -324,22 +324,22 @@ const UserManagementPage: React.FC = () => {
   }
 
   return (
-    <Box sx={{ display: "flex", flexDirection: "column", gap: 4 }}>
+    <Box sx={{ display: "flex", flexDirection: "column", gap: 3 }}>
       <Box>
-        <Typography variant="h4" sx={{ fontWeight: 700, mb: 1 }}>
+        <Typography variant="h5" sx={{ fontWeight: 700, mb: 0.5 }}>
           用户管理
         </Typography>
-        <Typography variant="body1" color="text.secondary">
+        <Typography variant="body2" color="text.secondary">
           超级管理员可创建、停用或删除用户，管理员可管理普通用户账号。
         </Typography>
       </Box>
-      <Paper sx={{ p: 4 }}>
+      <Paper sx={{ p: 3 }}>
         <Stack
           direction={{ xs: "column", sm: "row" }}
           spacing={2}
           justifyContent="space-between"
           alignItems={{ xs: "stretch", sm: "center" }}
-          sx={{ mb: 3 }}
+          sx={{ mb: 2 }}
         >
           <Box>
             <Typography variant="h6" sx={{ fontWeight: 600 }}>
@@ -378,7 +378,7 @@ const UserManagementPage: React.FC = () => {
             <CircularProgress />
           </Box>
         ) : (
-          <Table>
+          <Table size="small">
             <TableHead>
               <TableRow>
                 <TableCell>邮箱</TableCell>

@@ -433,13 +433,13 @@ const ImageGenerator: React.FC<ImageGeneratorProps> = ({
     <Paper
       elevation={0}
       sx={{
-        p: { xs: 2, sm: 3 },
-        borderRadius: { xs: 2, sm: 3 },
+        p: { xs: 2, sm: 2.5 },
+        borderRadius: { xs: 2, sm: 2 },
         border: "1px solid",
         borderColor: "divider",
         boxShadow: {
-          xs: "0 12px 24px rgba(15,23,42,0.04)",
-          sm: "0 18px 32px rgba(15,23,42,0.06)",
+          xs: "0 1px 3px rgba(15,23,42,0.04)",
+          sm: "0 4px 6px -1px rgba(15,23,42,0.06)",
         },
         bgcolor: "background.paper",
       }}
@@ -449,16 +449,16 @@ const ImageGenerator: React.FC<ImageGeneratorProps> = ({
           display: "flex",
           alignItems: "center",
           justifyContent: "space-between",
-          mb: { xs: 2, sm: 3 },
+          mb: { xs: 2, sm: 2 },
         }}
       >
         <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
-          <AutoAwesome color="primary" />
-          <Typography variant="h6" component="h2" sx={{ fontWeight: 600 }}>
+          <AutoAwesome color="primary" fontSize="small" />
+          <Typography variant="h6" component="h2" sx={{ fontWeight: 600, fontSize: "1.1rem" }}>
             AI 图片生成器
           </Typography>
         </Box>
-        {providersLoading && <CircularProgress size={20} />}
+        {providersLoading && <CircularProgress size={18} />}
       </Box>
 
       <Box
@@ -468,9 +468,9 @@ const ImageGenerator: React.FC<ImageGeneratorProps> = ({
             xs: "1fr",
             md: "minmax(112px, 168px) minmax(0,1fr)",
           },
-          gap: { xs: 2, md: 3 },
+          gap: { xs: 2, md: 2.5 },
           alignItems: "stretch",
-          mb: { xs: 2, sm: 3 },
+          mb: { xs: 2, sm: 2 },
         }}
       >
         <ImageUpload
@@ -485,26 +485,27 @@ const ImageGenerator: React.FC<ImageGeneratorProps> = ({
             flex: 1,
             display: "flex",
             flexDirection: "column",
-            gap: { xs: 1.5, sm: 2 },
+            gap: { xs: 1.5, sm: 1.5 },
           }}
         >
           <TextField
             fullWidth
             multiline
-            minRows={4}
-            maxRows={12}
+            minRows={3}
+            maxRows={10}
             label="创意描述"
             placeholder="详细描述你想要的图片..."
             value={prompt}
             onChange={(e) => onPromptChange(e.target.value)}
             disabled={isGenerating}
+            size="small"
             InputProps={{
               sx: {
                 alignItems: "flex-start",
                 px: { xs: 1.25, sm: 1.5 },
                 py: { xs: 1, sm: 1.25 },
                 "& .MuiInputBase-inputMultiline": {
-                  fontSize: { xs: "0.9rem", sm: "0.95rem" },
+                  fontSize: { xs: "0.875rem", sm: "0.9rem" },
                   lineHeight: 1.5,
                 },
               },
@@ -528,10 +529,10 @@ const ImageGenerator: React.FC<ImageGeneratorProps> = ({
             sx={{
               display: "grid",
               gridTemplateColumns: {
-                xs: "repeat(auto-fit, minmax(140px, 1fr))",
-                sm: "repeat(auto-fit, minmax(180px, 1fr))",
+                xs: "repeat(auto-fit, minmax(130px, 1fr))",
+                sm: "repeat(auto-fit, minmax(160px, 1fr))",
               },
-              gap: { xs: 1.5, sm: 1.5 },
+              gap: { xs: 1, sm: 1.5 },
             }}
           >
             <FormControl fullWidth size="small">
@@ -713,7 +714,7 @@ const ImageGenerator: React.FC<ImageGeneratorProps> = ({
           justifyContent: { xs: "stretch", sm: "flex-end" },
           alignItems: { xs: "stretch", sm: "center" },
           gap: 1,
-          mb: { xs: 2, sm: 3 },
+          mb: { xs: 2, sm: 2 },
         }}
       >
         <Button
@@ -729,15 +730,15 @@ const ImageGenerator: React.FC<ImageGeneratorProps> = ({
           }
           startIcon={
             isGenerating ? (
-              <CircularProgress size={18} color="inherit" />
+              <CircularProgress size={16} color="inherit" />
             ) : (
-              <Send />
+              <Send fontSize="small" />
             )
           }
           sx={{
             width: { xs: "100%", sm: "auto" },
-            minWidth: { sm: 200 },
-            py: 1.4,
+            minWidth: { sm: 160 },
+            py: 1,
             fontWeight: 600,
             borderRadius: 999,
             background: "linear-gradient(45deg, #FF6B6B 30%, #4ECDC4 90%)",
@@ -753,9 +754,9 @@ const ImageGenerator: React.FC<ImageGeneratorProps> = ({
       {lastGeneratedImages.length > 0 && (
         <Card
           sx={{
-            mb: { xs: 2, sm: 3 },
-            borderRadius: { xs: 2, sm: 3 },
-            boxShadow: "0 10px 28px rgba(15,23,42,0.08)",
+            mb: { xs: 2, sm: 2 },
+            borderRadius: { xs: 2, sm: 2 },
+            boxShadow: "0 4px 12px rgba(15,23,42,0.08)",
           }}
         >
           <Box

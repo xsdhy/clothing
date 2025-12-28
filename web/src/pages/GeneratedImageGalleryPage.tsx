@@ -196,7 +196,7 @@ const GeneratedImageGalleryPage: React.FC = () => {
           setInitialLoading(false);
         }
       }
-  }, [tagFilter]);
+    }, [tagFilter]);
 
   useEffect(() => {
     void loadRecords(1, false);
@@ -420,11 +420,11 @@ const GeneratedImageGalleryPage: React.FC = () => {
   const preparingImageIndex = preparingMatch ? preparingOutputAsInput?.index : undefined;
 
   return (
-    <Box sx={{ py: 6 }}>
+    <Box sx={{ py: 3 }}>
       <Container maxWidth="xl">
-        <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2} alignItems={{ xs: 'flex-start', sm: 'center' }} justifyContent="space-between" sx={{ mb: 4 }}>
+        <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2} alignItems={{ xs: 'flex-start', sm: 'center' }} justifyContent="space-between" sx={{ mb: 2.5 }}>
           <Box>
-            <Typography variant="h4" gutterBottom>
+            <Typography variant="h5" gutterBottom sx={{ mb: 0.5, fontWeight: 700 }}>
               生成媒体库
             </Typography>
             <Typography variant="body2" color="text.secondary">
@@ -502,9 +502,9 @@ const GeneratedImageGalleryPage: React.FC = () => {
                 xs: 'repeat(1, minmax(0, 1fr))',
                 sm: 'repeat(2, minmax(0, 1fr))',
                 md: 'repeat(3, minmax(0, 1fr))',
-                lg: 'repeat(4, minmax(0, 1fr))',
+                lg: 'repeat(5, minmax(0, 1fr))',
               },
-              gap: 2,
+              gap: 1.5,
               alignItems: 'start',
             }}
           >

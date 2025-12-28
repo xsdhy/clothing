@@ -22,7 +22,7 @@ const LoginPage: React.FC = () => {
   const location = useLocation();
   const { login, ensureStatus } = useAuth();
 
-  const [email, setEmail] = useState("");
+  const [email, setEmail] = useState("tc@xsdhy.com");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);

@@ -480,17 +480,17 @@ const GenerationHistoryPage: React.FC = () => {
     : undefined;
 
   return (
-    <Box sx={{ py: 6 }}>
+    <Box sx={{ py: 3 }}>
       <Container maxWidth="lg">
         <Stack
           direction={{ xs: "column", sm: "row" }}
           alignItems={{ xs: "flex-start", sm: "center" }}
           justifyContent="space-between"
           spacing={2}
-          sx={{ mb: 4 }}
+          sx={{ mb: 2.5 }}
         >
           <Box>
-            <Typography variant="h4" gutterBottom>
+            <Typography variant="h5" gutterBottom sx={{ mb: 0.5, fontWeight: 700 }}>
               生成记录
             </Typography>
             <Typography variant="body2" color="text.secondary">
@@ -658,7 +658,7 @@ const GenerationHistoryPage: React.FC = () => {
           </Box>
         )}
 
-        <Stack spacing={3} sx={{ opacity: loading ? 0.7 : 1 }}>
+        <Stack spacing={2} sx={{ opacity: loading ? 0.7 : 1 }}>
           {records.map((record) => {
             const hasError = Boolean(record.error_message);
             const canEditRecordTags =
@@ -695,7 +695,7 @@ const GenerationHistoryPage: React.FC = () => {
                   overflow: "hidden",
                 }}
               >
-                <CardContent sx={{ p: { xs: 2, md: 3 } }}>
+                <CardContent sx={{ p: 2, "&:last-child": { pb: 2 } }}>
                   <Stack
                     direction={{ xs: "column", md: "row" }}
                     spacing={2}
@@ -704,10 +704,10 @@ const GenerationHistoryPage: React.FC = () => {
                     <Box
                       sx={{
                         display: "grid",
-                        gridTemplateColumns: "repeat(auto-fill, minmax(140px, 1fr))",
-                        gap: 1.5,
-                        flex: { md: "0 0 420px" },
-                        maxWidth: { md: 520 },
+                        gridTemplateColumns: "repeat(auto-fill, minmax(120px, 1fr))",
+                        gap: 1,
+                        flex: { md: "0 0 380px" },
+                        maxWidth: { md: 480 },
                       }}
                     >
                       {imageList.length === 0 && (

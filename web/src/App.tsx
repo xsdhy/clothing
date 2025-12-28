@@ -102,18 +102,18 @@ const theme = createTheme({
     MuiPaper: {
       styleOverrides: {
         root: {
-          borderRadius: 12,
-          boxShadow: "0 12px 40px rgba(99, 102, 241, 0.08)",
+          borderRadius: 8,
+          boxShadow: "0 4px 20px rgba(99, 102, 241, 0.05)",
         },
       },
     },
     MuiButton: {
       styleOverrides: {
         root: {
-          borderRadius: 10,
+          borderRadius: 8,
           textTransform: "none",
-          fontSize: "0.95rem",
-          padding: "10px 18px",
+          fontSize: "0.9rem",
+          padding: "6px 16px",
         },
       },
     },
@@ -121,6 +121,14 @@ const theme = createTheme({
       styleOverrides: {
         root: {
           fontWeight: 600,
+          fontSize: "0.8125rem",
+        },
+      },
+    },
+    MuiTableCell: {
+      styleOverrides: {
+        root: {
+          padding: "12px 16px",
         },
       },
     },
@@ -246,7 +254,7 @@ const AppLayout: React.FC = () => {
         display: "flex",
         flexDirection: "column",
         background:
-          "linear-gradient(180deg, rgba(248,249,250,1) 0%, rgba(248,249,250,0.92) 60%, rgba(255,255,255,1) 100%)",
+          "linear-gradient(180deg, rgba(248,249,250,1) 0%, rgba(248,249,250,0.92) 80%, rgba(255,255,255,1) 100%)",
       }}
     >
       <AppBar position="sticky" color="transparent">
@@ -254,7 +262,7 @@ const AppLayout: React.FC = () => {
           <Toolbar
             disableGutters
             sx={{
-              minHeight: 72,
+              minHeight: 64,
               display: "flex",
               justifyContent: "space-between",
               gap: 2,
@@ -263,8 +271,8 @@ const AppLayout: React.FC = () => {
             <Box sx={{ display: "flex", alignItems: "center", gap: 1.5 }}>
               <Box
                 sx={{
-                  width: 36,
-                  height: 36,
+                  width: 32,
+                  height: 32,
                   borderRadius: "50%",
                   background:
                     "linear-gradient(135deg, rgba(99,102,241,1) 0%, rgba(129,140,248,1) 100%)",
@@ -272,21 +280,18 @@ const AppLayout: React.FC = () => {
                   alignItems: "center",
                   justifyContent: "center",
                   color: "#FFFFFF",
-                  boxShadow: "0 10px 25px rgba(99,102,241,0.35)",
+                  boxShadow: "0 8px 20px rgba(99,102,241,0.25)",
                 }}
               >
-                <AutoAwesomeIcon sx={{ fontSize: 22 }} />
+                <AutoAwesomeIcon sx={{ fontSize: 18 }} />
               </Box>
               <Box>
                 <Typography
-                  variant="h6"
+                  variant="subtitle1"
                   component="div"
-                  sx={{ fontWeight: 700 }}
+                  sx={{ fontWeight: 700, lineHeight: 1.2 }}
                 >
                   AI 图片工作台
-                </Typography>
-                <Typography variant="body2" color="text.secondary">
-                  用创意点亮你的灵感瞬间
                 </Typography>
               </Box>
             </Box>
@@ -295,7 +300,7 @@ const AppLayout: React.FC = () => {
               <Box
                 sx={{
                   display: { xs: "none", md: "flex" },
-                  gap: 1,
+                  gap: 0.5,
                   alignItems: "center",
                 }}
               >
@@ -307,14 +312,13 @@ const AppLayout: React.FC = () => {
                       component={NavLink}
                       to={item.path}
                       disableRipple
+                      size="small"
                       sx={{
                         color: active ? "primary.main" : "text.secondary",
                         backgroundColor: active
                           ? "rgba(99,102,241,0.08)"
                           : "transparent",
-                        boxShadow: active
-                          ? "0 8px 20px rgba(99,102,241,0.15)"
-                          : "none",
+                        boxShadow: "none",
                         fontWeight: 600,
                         "&:hover": {
                           color: "primary.main",
@@ -332,25 +336,23 @@ const AppLayout: React.FC = () => {
                 component={NavLink}
                 to="/settings"
                 disableRipple
+                size="small"
                 sx={{
                   display: { xs: "none", md: "inline-flex" },
                   color: isRouteActive("/settings")
                     ? "primary.main"
                     : "text.secondary",
                   backgroundColor: isRouteActive("/settings")
-                    ? "rgba(99,102,241,0.16)"
-                    : "rgba(99,102,241,0.08)",
-                  boxShadow: isRouteActive("/settings")
-                    ? "0 12px 26px rgba(99,102,241,0.22)"
-                    : "0 10px 24px rgba(99,102,241,0.18)",
+                    ? "rgba(99,102,241,0.12)"
+                    : "transparent",
                   "&:hover": {
                     color: "primary.main",
-                    backgroundColor: "rgba(99,102,241,0.16)",
+                    backgroundColor: "rgba(99,102,241,0.12)",
                   },
                 }}
                 aria-label="高级设置"
               >
-                <SettingsRoundedIcon />
+                <SettingsRoundedIcon fontSize="small" />
               </IconButton>
 
               <Box
@@ -358,34 +360,34 @@ const AppLayout: React.FC = () => {
                   display: { xs: "none", md: "flex" },
                   alignItems: "center",
                   gap: 1,
-                  px: 1.5,
-                  py: 0.75,
-                  borderRadius: 3,
-                  backgroundColor: "rgba(99,102,241,0.08)",
-                  boxShadow: "0 10px 24px rgba(99,102,241,0.18)",
+                  px: 1,
+                  py: 0.5,
+                  borderRadius: 2,
+                  backgroundColor: "rgba(99,102,241,0.06)",
                 }}
               >
-                <Avatar sx={{ width: 36, height: 36, bgcolor: "primary.main" }}>
+                <Avatar sx={{ width: 28, height: 28, bgcolor: "primary.main", fontSize: "0.8rem" }}>
                   {displayName?.charAt(0)?.toUpperCase() ?? "?"}
                 </Avatar>
                 <Box sx={{ display: "flex", flexDirection: "column" }}>
-                  <Typography variant="body2" sx={{ fontWeight: 600 }}>
+                  <Typography variant="caption" sx={{ fontWeight: 600 }}>
                     {displayName}
                   </Typography>
-                  <Button
-                    size="small"
-                    variant="text"
-                    sx={{
-                      minWidth: 0,
-                      alignSelf: "flex-start",
-                      px: 0,
-                      color: "primary.main",
-                    }}
-                    onClick={logout}
-                  >
-                    退出登录
-                  </Button>
                 </Box>
+                <Button
+                  size="small"
+                  variant="text"
+                  sx={{
+                    minWidth: 0,
+                    p: 0,
+                    ml: 0.5,
+                    color: "text.secondary",
+                    fontSize: "0.75rem"
+                  }}
+                  onClick={logout}
+                >
+                  退出
+                </Button>
               </Box>
 
               <IconButton
@@ -393,12 +395,6 @@ const AppLayout: React.FC = () => {
                 sx={{
                   display: { xs: "inline-flex", md: "none" },
                   color: "text.secondary",
-                  backgroundColor: "rgba(99,102,241,0.08)",
-                  boxShadow: "0 10px 24px rgba(99,102,241,0.18)",
-                  "&:hover": {
-                    color: "primary.main",
-                    backgroundColor: "rgba(99,102,241,0.16)",
-                  },
                 }}
                 aria-label="打开导航菜单"
               >
@@ -415,14 +411,10 @@ const AppLayout: React.FC = () => {
         onClose={handleCloseMobileMenu}
         PaperProps={{
           sx: {
-            width: "80vw",
-            maxWidth: 320,
-            background:
-              "linear-gradient(180deg, rgba(255,255,255,1) 0%, rgba(244,246,255,0.95) 100%)",
-            borderLeft: "1px solid",
-            borderColor: "divider",
-            boxShadow: "0 20px 60px rgba(15,23,42,0.18)",
-            p: 3,
+            width: "75vw",
+            maxWidth: 280,
+            background: "#FFFFFF",
+            p: 2,
             display: "flex",
             flexDirection: "column",
             gap: 2,
@@ -436,31 +428,19 @@ const AppLayout: React.FC = () => {
             justifyContent: "space-between",
           }}
         >
-          <Box>
-            <Typography variant="subtitle2" color="text.secondary">
-              导航
-            </Typography>
-            <Typography variant="h6" sx={{ fontWeight: 700 }}>
-              AI 图片工作台
-            </Typography>
-          </Box>
+          <Typography variant="subtitle1" sx={{ fontWeight: 700 }}>
+            AI 图片工作台
+          </Typography>
           <IconButton
             onClick={handleCloseMobileMenu}
-            sx={{
-              color: "text.secondary",
-              backgroundColor: "rgba(99,102,241,0.08)",
-              "&:hover": {
-                color: "primary.main",
-                backgroundColor: "rgba(99,102,241,0.16)",
-              },
-            }}
+            size="small"
             aria-label="关闭导航菜单"
           >
             <CloseRoundedIcon />
           </IconButton>
         </Box>
 
-        <List sx={{ display: "flex", flexDirection: "column", gap: 1 }}>
+        <List sx={{ display: "flex", flexDirection: "column", gap: 0.5 }}>
           {navItems.map((item) => {
             const active = isRouteActive(item.path);
             return (
@@ -470,27 +450,24 @@ const AppLayout: React.FC = () => {
                 to={item.path}
                 onClick={handleCloseMobileMenu}
                 disableRipple
+                selected={active}
                 sx={{
                   borderRadius: 2,
-                  px: 2,
-                  py: 1.5,
-                  backgroundColor: active
-                    ? "rgba(99,102,241,0.12)"
-                    : "transparent",
-                  boxShadow: active
-                    ? "0 16px 32px rgba(99,102,241,0.18)"
-                    : "none",
-                  color: active ? "primary.main" : "text.primary",
-                  "&:hover": {
+                  py: 1,
+                  "&.Mui-selected": {
                     backgroundColor: "rgba(99,102,241,0.12)",
                     color: "primary.main",
+                    "&:hover": {
+                      backgroundColor: "rgba(99,102,241,0.16)",
+                    }
                   },
                 }}
               >
                 <ListItemText
                   primary={item.label}
                   primaryTypographyProps={{
-                    fontWeight: 600,
+                    fontWeight: active ? 600 : 400,
+                    fontSize: "0.9rem",
                   }}
                 />
               </ListItemButton>
@@ -503,27 +480,21 @@ const AppLayout: React.FC = () => {
           to="/settings"
           onClick={handleCloseMobileMenu}
           disableRipple
+          selected={isRouteActive("/settings")}
           sx={{
             borderRadius: 2,
-            px: 2,
-            py: 1.5,
-            backgroundColor: isRouteActive("/settings")
-              ? "rgba(99,102,241,0.12)"
-              : "transparent",
-            boxShadow: isRouteActive("/settings")
-              ? "0 16px 32px rgba(99,102,241,0.18)"
-              : "none",
-            color: isRouteActive("/settings") ? "primary.main" : "text.primary",
-            "&:hover": {
+            py: 1,
+            "&.Mui-selected": {
               backgroundColor: "rgba(99,102,241,0.12)",
               color: "primary.main",
-            },
+            }
           }}
         >
           <ListItemText
             primary="高级设置"
             primaryTypographyProps={{
               fontWeight: 600,
+              fontSize: "0.9rem",
             }}
           />
         </ListItemButton>
@@ -535,23 +506,23 @@ const AppLayout: React.FC = () => {
             display: "flex",
             alignItems: "center",
             gap: 1.5,
-            backgroundColor: "rgba(99,102,241,0.08)",
-            borderRadius: 3,
+            backgroundColor: "rgba(99,102,241,0.06)",
+            borderRadius: 2,
             px: 2,
             py: 1.5,
           }}
         >
-          <Avatar sx={{ bgcolor: "primary.main" }}>
+          <Avatar sx={{ width: 32, height: 32, bgcolor: "primary.main", fontSize: "0.9rem" }}>
             {displayName?.charAt(0)?.toUpperCase() ?? "?"}
           </Avatar>
           <Box sx={{ display: "flex", flexDirection: "column", flex: 1 }}>
-            <Typography variant="subtitle2" sx={{ fontWeight: 600 }}>
+            <Typography variant="body2" sx={{ fontWeight: 600 }}>
               {displayName}
             </Typography>
             <Button
               size="small"
               variant="text"
-              sx={{ alignSelf: "flex-start", px: 0, color: "primary.main" }}
+              sx={{ alignSelf: "flex-start", p: 0, minWidth: 0, color: "error.main", fontSize: "0.75rem" }}
               onClick={handleLogout}
             >
               退出登录
@@ -560,7 +531,7 @@ const AppLayout: React.FC = () => {
         </Box>
       </Drawer>
 
-      <Box component="main" sx={{ flex: 1, py: { xs: 4, md: 6 } }}>
+      <Box component="main" sx={{ flex: 1, py: { xs: 2.5, md: 3.5 } }}>
         <Container maxWidth="lg">
           <Outlet />
         </Container>
