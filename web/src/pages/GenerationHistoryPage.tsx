@@ -25,9 +25,8 @@ import type { SelectChangeEvent } from "@mui/material/Select";
 import ReplayIcon from "@mui/icons-material/Replay";
 import AddPhotoAlternateIcon from "@mui/icons-material/AddPhotoAlternate";
 import DeleteOutlineIcon from "@mui/icons-material/DeleteOutline";
-import OpenInFullIcon from "@mui/icons-material/OpenInFull";
 import { useNavigate } from "react-router-dom";
-import ReactPlayer from "react-player";
+import VideoPlayer from "../components/VideoPlayer";
 
 import {
   fetchUsageRecords,
@@ -741,35 +740,13 @@ const GenerationHistoryPage: React.FC = () => {
                             }}
                           >
                             {isVideo ? (
-                              <>
-                                <ReactPlayer
-                                  src={image.url}
-                                  controls
-                                  width="100%"
-                                  height="100%"
-                                  className="react-player"
-                                  style={{ position: "absolute", inset: 0 }}
-                                  playsInline
-                                  config={{ html: { controlsList: "nodownload" } }}
-                                />
-                                <IconButton
-                                  size="small"
-                                  onClick={() => handleImageClick(image.url, image.alt)}
-                                  sx={{
-                                    position: "absolute",
-                                    bottom: 6,
-                                    right: 6,
-                                    bgcolor: "rgba(0,0,0,0.6)",
-                                    color: "common.white",
-                                    "&:hover": {
-                                      bgcolor: "rgba(0,0,0,0.8)",
-                                    },
-                                  }}
-                                  aria-label={`预览 ${image.alt} 视频`}
-                                >
-                                  <OpenInFullIcon fontSize="small" />
-                                </IconButton>
-                              </>
+                              <VideoPlayer
+                                src={image.url}
+                                compact
+                                onOpen={() => handleImageClick(image.url, image.alt)}
+                                openLabel={`预览 ${image.alt} 视频`}
+                                sx={{ width: "100%", height: "100%", borderRadius: 0 }}
+                              />
                             ) : (
                               <Box
                                 component="img"

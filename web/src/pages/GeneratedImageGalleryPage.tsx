@@ -1,14 +1,13 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Alert, Autocomplete, Box, Button, Card, CardActions, Chip, CircularProgress, Container, IconButton, Stack, TextField, Typography } from '@mui/material';
+import { Alert, Autocomplete, Box, Button, Card, CardActions, Chip, CircularProgress, Container, Stack, TextField, Typography } from '@mui/material';
 import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
 import RefreshIcon from '@mui/icons-material/Refresh';
-import OpenInFullIcon from '@mui/icons-material/OpenInFull';
 import { useNavigate } from 'react-router-dom';
-import ReactPlayer from 'react-player';
 
 import { deleteUsageRecord, fetchUsageRecords, fetchTags } from '../ai';
 import type { Tag, UsageRecord } from '../types';
 import ImageViewer, { type ImageViewerItem } from '../components/ImageViewer';
+import VideoPlayer from '../components/VideoPlayer';
 import UsageRecordDetailDialog from '../components/UsageRecordDetailDialog';
 import { buildDownloadName, isVideoUrl } from '../utils/media';
 
@@ -522,44 +521,22 @@ const GeneratedImageGalleryPage: React.FC = () => {
                         maxHeight: 560,
                         aspectRatio: { xs: '1 / 1', sm: '4 / 5' },
                         overflow: 'hidden',
-                        '& img, & .react-player': {
+                        '& img, & .video-player-media': {
                           transition: 'transform 0.3s ease',
                         },
-                        '&:hover img, &:hover .react-player': {
+                        '&:hover img, &:hover .video-player-media': {
                           transform: 'scale(1.02)',
                         },
                       }}
                     >
                       {item.isVideo ? (
-                        <>
-                          <ReactPlayer
-                            src={item.url}
-                            controls
-                            width="100%"
-                            height="100%"
-                            className="react-player"
-                            style={{ position: 'absolute', inset: 0 }}
-                            playsInline
-                            config={{ html: { controlsList: 'nodownload' } }}
-                          />
-                          <IconButton
-                            size="small"
-                            onClick={() => handleOpenViewer(index)}
-                            sx={{
-                              position: 'absolute',
-                              top: 8,
-                              right: 8,
-                              bgcolor: 'rgba(0,0,0,0.6)',
-                              color: 'common.white',
-                              '&:hover': {
-                                bgcolor: 'rgba(0,0,0,0.8)',
-                              },
-                            }}
-                            aria-label={`预览记录 ${item.recordId} 的视频`}
-                          >
-                            <OpenInFullIcon fontSize="small" />
-                          </IconButton>
-                        </>
+                        <VideoPlayer
+                          src={item.url}
+                          compact
+                          onOpen={() => handleOpenViewer(index)}
+                          openLabel={`预览记录 ${item.recordId} 的视频`}
+                          sx={{ width: '100%', height: '100%', borderRadius: 0 }}
+                        />
                       ) : (
                         <Box
                           component="img"

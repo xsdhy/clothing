@@ -4,9 +4,9 @@ import { Close, Download, ZoomIn, ZoomOut, ZoomOutMap } from '@mui/icons-materia
 import { PhotoSlider } from 'react-photo-view';
 import type { DataType, OverlayRenderProps } from 'react-photo-view/dist/types';
 import 'react-photo-view/dist/react-photo-view.css';
-import ReactPlayer from 'react-player';
 
 import { isVideoUrl } from '../utils/media';
+import VideoPlayer from './VideoPlayer';
 
 export interface ImageViewerProps {
   open: boolean;
@@ -160,16 +160,14 @@ const ImageViewer: React.FC<ImageViewerProps> = ({
               pointerEvents: 'auto',
             }}
           >
-            <ReactPlayer
-              src={currentItem?.src}
-              playing
+            <VideoPlayer
+              src={currentItem?.src ?? ''}
+              autoPlay
               loop
-              controls
-              width="100%"
-              height="100%"
-              style={{ position: 'absolute', inset: 0 }}
-              playsInline
-              config={{ html: { controlsList: 'nodownload' } }}
+              muted
+              showControls
+              fit="contain"
+              sx={{ position: 'absolute', inset: 0, width: '100%', height: '100%', borderRadius: 0 }}
             />
           </Box>
         </Box>

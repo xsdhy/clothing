@@ -14,17 +14,15 @@ import {
   InputLabel,
   Select,
   MenuItem,
-  IconButton,
 } from "@mui/material";
 import {
   Send,
   Download,
   AutoAwesome,
   Image as ImageIcon,
-  OpenInFull,
 } from "@mui/icons-material";
 import { useLocation } from "react-router-dom";
-import ReactPlayer from "react-player";
+import VideoPlayer from "../components/VideoPlayer";
 
 import type {
   GenerationRequest,
@@ -840,10 +838,10 @@ const ImageGenerator: React.FC<ImageGeneratorProps> = ({
                       overflow: "hidden",
                       cursor: isVideo ? "default" : "pointer",
                       transition: "all 0.2s",
-                      "& img, & .react-player": {
+                      "& img, & .video-player-media": {
                         transition: "transform 0.2s ease",
                       },
-                      "&:hover img, &:hover .react-player": {
+                      "&:hover img, &:hover .video-player-media": {
                         transform: "scale(1.01)",
                       },
                     }}
@@ -852,39 +850,13 @@ const ImageGenerator: React.FC<ImageGeneratorProps> = ({
                     }
                   >
                     {isVideo ? (
-                      <>
-                        <ReactPlayer
-                          src={image}
-                          controls
-                          width="100%"
-                          height="100%"
-                          className="react-player"
-                          style={{
-                            position: "absolute",
-                            inset: 0,
-                          }}
-                          playsInline
-                          config={{ html: { controlsList: "nodownload" } }}
-                        />
-                        <IconButton
-                          size="small"
-                          color="inherit"
-                          onClick={() => handleOpenResultViewer(index)}
-                          sx={{
-                            position: "absolute",
-                            top: 8,
-                            right: 8,
-                            bgcolor: "rgba(0,0,0,0.55)",
-                            color: "common.white",
-                            "&:hover": {
-                              bgcolor: "rgba(0,0,0,0.7)",
-                            },
-                          }}
-                          aria-label={`放大预览第 ${index + 1} 个视频`}
-                        >
-                          <OpenInFull fontSize="small" />
-                        </IconButton>
-                      </>
+                      <VideoPlayer
+                        src={image}
+                        compact
+                        onOpen={() => handleOpenResultViewer(index)}
+                        openLabel={`放大预览第 ${index + 1} 个视频`}
+                        sx={{ width: "100%", height: "100%", borderRadius: 0 }}
+                      />
                     ) : (
                       <Box
                         component="img"
