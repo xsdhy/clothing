@@ -145,10 +145,3 @@ func (f *ProviderFactory) ListDrivers() []string {
 	}
 	return drivers
 }
-
-// NewService creates an AIService for a provider.
-// This is the legacy function, kept for backward compatibility.
-// Prefer using GetFactory().Get() for new code.
-func NewService(provider *entity.DbProvider) (AIService, error) {
-	return GetFactory().Get(provider)
-}

@@ -109,7 +109,7 @@ func (h *HTTPHandler) GenerateContent(c *gin.Context) {
 		return
 	}
 
-	request.Options.Size = strings.TrimSpace(request.Options.Size)
+	request.Output.Size = strings.TrimSpace(request.Output.Size)
 	request.ClientID = strings.TrimSpace(request.ClientID)
 
 	if h.repo == nil {
@@ -161,7 +161,7 @@ func (h *HTTPHandler) GenerateContent(c *gin.Context) {
 	}
 
 	// 初始化 LLM 服务
-	llmService, err := llm.NewService(dbProvider)
+	llmService, err := llm.GetFactory().Get(dbProvider)
 	if err != nil {
 		logrus.WithError(err).WithFields(logrus.Fields{
 			"provider": providerID,
@@ -198,7 +198,7 @@ func (h *HTTPHandler) GenerateContent(c *gin.Context) {
 		ProviderID: providerID,
 		ModelID:    request.ModelID,
 		Prompt:     request.Prompt,
-		Size:       request.Options.Size,
+		Size:       request.Output.Size,
 	}
 
 	if err := h.repo.CreateUsageRecord(createCtx, &record); err != nil {

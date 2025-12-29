@@ -61,13 +61,7 @@ func (p *AiHubMix) GenerateContent(ctx context.Context, request entity.GenerateC
 		return nil, errors.New("aihubmix video not supported yet")
 	}
 
-	// AiHubMix uses Gemini-compatible protocol for image generation (as per current implementation assumption)
-	// or OpenAI compatible?
-	// Looking at previous implementation:
-	// return GenerateContentByGeminiProtocol(ctx, p.apiKey, p.endpoint, dbModel.ModelID, request.Prompt, request.Inputs.Images)
-	// Yes, it uses Gemini protocol.
-
-	// The GenerateContentByGeminiProtocol function returns (*entity.GenerateContentResponse, error).
+	// AiHubMix uses Gemini-compatible protocol for image generation.
 	return GenerateContentByGeminiProtocol(ctx, p.apiKey, p.endpoint, dbModel.ModelID, request.Prompt, request.GetImages())
 }
 

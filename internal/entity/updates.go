@@ -156,12 +156,12 @@ func (u ModelUpdates) IsEmpty() bool {
 
 // UsageRecordUpdates 使用记录更新字段
 type UsageRecordUpdates struct {
-	InputImages      *StringArray
-	OutputImages     *StringArray
-	TextContent      *string
-	ErrorMessage     *string
-	ExternalTaskCode *string
-	RequestID        *string
+	InputImages  *StringArray
+	OutputImages *StringArray
+	OutputText   *string
+	ErrorMessage *string
+	TaskID       *string
+	RequestID    *string
 }
 
 // ToMap 转换为 GORM 更新 map（内部使用）
@@ -173,14 +173,14 @@ func (u UsageRecordUpdates) ToMap() map[string]interface{} {
 	if u.OutputImages != nil {
 		updates["output_images"] = *u.OutputImages
 	}
-	if u.TextContent != nil {
-		updates["text_content"] = *u.TextContent
+	if u.OutputText != nil {
+		updates["output_text"] = *u.OutputText
 	}
 	if u.ErrorMessage != nil {
 		updates["error_message"] = *u.ErrorMessage
 	}
-	if u.ExternalTaskCode != nil {
-		updates["external_task_code"] = *u.ExternalTaskCode
+	if u.TaskID != nil {
+		updates["external_task_code"] = *u.TaskID
 	}
 	if u.RequestID != nil {
 		updates["request_id"] = *u.RequestID

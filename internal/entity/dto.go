@@ -28,8 +28,6 @@ type ProviderAdminView = dto.ProviderAdminView
 type ProviderModelSummary = dto.ProviderModelSummary
 
 // 内容生成相关 DTO
-type ContentInputs = dto.ContentInputs
-type ContentOptions = dto.ContentOptions
 type MediaInput = dto.MediaInput
 type OutputConfig = dto.OutputConfig
 type MediaOutput = dto.MediaOutput

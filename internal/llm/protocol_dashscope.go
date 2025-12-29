@@ -315,15 +315,15 @@ func GenerateImageByDashscopeProtocol(ctx context.Context, apiKey, endpoint stri
 
 	if len(assets) == 0 {
 		return &entity.GenerateContentResponse{
-			TextContent: assistantText,
-			RequestID:   requestID,
+			Text:      assistantText,
+			RequestID: requestID,
 		}, errors.New("dashscope no asset found in response")
 	}
 
 	return &entity.GenerateContentResponse{
-		ImageAssets: assets,
-		TextContent: assistantText,
-		RequestID:   requestID,
+		Outputs:   buildMediaOutputs(assets, "image"),
+		Text:      assistantText,
+		RequestID: requestID,
 	}, nil
 }
 
@@ -441,15 +441,15 @@ func GenerateDashscopeVideo(ctx context.Context, apiKey, endpoint string, model 
 		assets, err = waitForDashscopeVideo(ctx, apiKey, output.TaskID)
 		if err != nil {
 			return &entity.GenerateContentResponse{
-				ExternalTaskCode: externalTaskCode,
-				RequestID:        requestID,
+				TaskID:    externalTaskCode,
+				RequestID: requestID,
 			}, fmt.Errorf("dashscope video task status %s: %w", status, err)
 		}
 		return &entity.GenerateContentResponse{
-			ImageAssets:      assets,
-			TextContent:      assistantText,
-			ExternalTaskCode: externalTaskCode,
-			RequestID:        requestID,
+			Outputs:   buildMediaOutputs(assets, "video"),
+			Text:      assistantText,
+			TaskID:    externalTaskCode,
+			RequestID: requestID,
 		}, nil
 	}
 
@@ -459,28 +459,28 @@ func GenerateDashscopeVideo(ctx context.Context, apiKey, endpoint string, model 
 			assets, err = waitForDashscopeVideo(ctx, apiKey, output.TaskID)
 			if err != nil {
 				return &entity.GenerateContentResponse{
-					ExternalTaskCode: externalTaskCode,
-					RequestID:        requestID,
+					TaskID:    externalTaskCode,
+					RequestID: requestID,
 				}, err
 			}
 			return &entity.GenerateContentResponse{
-				ImageAssets:      assets,
-				TextContent:      assistantText,
-				ExternalTaskCode: externalTaskCode,
-				RequestID:        requestID,
+				Outputs:   buildMediaOutputs(assets, "video"),
+				Text:      assistantText,
+				TaskID:    externalTaskCode,
+				RequestID: requestID,
 			}, nil
 		}
 		return &entity.GenerateContentResponse{
-			ExternalTaskCode: externalTaskCode,
-			RequestID:        requestID,
+			TaskID:    externalTaskCode,
+			RequestID: requestID,
 		}, errors.New("dashscope video response missing video url")
 	}
 
 	return &entity.GenerateContentResponse{
-		ImageAssets:      assets,
-		TextContent:      assistantText,
-		ExternalTaskCode: externalTaskCode,
-		RequestID:        requestID,
+		Outputs:   buildMediaOutputs(assets, "video"),
+		Text:      assistantText,
+		TaskID:    externalTaskCode,
+		RequestID: requestID,
 	}, nil
 }
 

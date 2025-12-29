@@ -12,7 +12,6 @@ import type {
   TagListResponse,
   TagDetailResponse,
 } from "./types";
-import { sanitizeImages } from "./utils/images";
 import { requestWithTimeout } from "./utils/http";
 import { emitUnauthorized, getStoredToken } from "./utils/authStorage";
 import { parseSSEEvent } from "./utils/sse";
@@ -59,29 +58,43 @@ export const generateContent = async (
     throw new Error("请选择服务商");
   }
 
-  const images = sanitizeImages(request.inputs?.images ?? []);
-  const videos = sanitizeImages(request.inputs?.videos ?? []);
+  const inputMedia = (request.input_media ?? [])
+    .map((item) => ({
+      type: item.type,
+      content: typeof item.content === "string" ? item.content.trim() : "",
+      role: item.role,
+    }))
+    .filter(
+      (item) =>
+        item.content.length > 0 &&
+        (item.type === "image" || item.type === "video"),
+    );
 
   const payload: Record<string, unknown> = {
     prompt,
     provider_id: request.provider.id,
     model_id: request.model,
-    inputs: {
-      images,
-      ...(videos.length > 0 ? { videos } : {}),
-    },
   };
 
-  const size = request.options?.size?.trim();
+  if (inputMedia.length > 0) {
+    payload.input_media = inputMedia;
+  }
+
+  const size = request.output?.size?.trim();
   const duration =
-    typeof request.options?.duration === "number"
-      ? request.options.duration
+    typeof request.output?.duration === "number"
+      ? request.output.duration
+      : undefined;
+  const numOutputs =
+    typeof request.output?.num_outputs === "number"
+      ? request.output.num_outputs
       : undefined;
 
-  if (size || duration) {
-    payload.options = {
+  if (size || duration || numOutputs) {
+    payload.output = {
       ...(size ? { size } : {}),
       ...(duration && duration > 0 ? { duration } : {}),
+      ...(numOutputs && numOutputs > 0 ? { num_outputs: numOutputs } : {}),
     };
   }
 

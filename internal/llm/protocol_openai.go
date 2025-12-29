@@ -231,7 +231,7 @@ func GenerateContentByOpenaiProtocol(ctx context.Context, apiKey, baseURL, model
 	logrus.Info("openai stream response ended")
 	if err := sc.Err(); err != nil {
 		return &entity.GenerateContentResponse{
-			TextContent: strings.TrimSpace(assistantText),
+			Text: strings.TrimSpace(assistantText),
 		}, err
 	}
 
@@ -243,7 +243,7 @@ func GenerateContentByOpenaiProtocol(ctx context.Context, apiKey, baseURL, model
 				"text_length":          len(assistantText),
 			}).Warn("openai stream returned text only without images")
 			return &entity.GenerateContentResponse{
-				TextContent: assistantText,
+				Text: assistantText,
 			}, nil
 		}
 		if len(nativeFinishReasonText) > 0 {
@@ -252,7 +252,7 @@ func GenerateContentByOpenaiProtocol(ctx context.Context, apiKey, baseURL, model
 		return nil, errors.New("no image or text in streamed response")
 	}
 	return &entity.GenerateContentResponse{
-		ImageAssets: imageDataURLs,
-		TextContent: assistantText,
+		Outputs: buildMediaOutputs(imageDataURLs, "image"),
+		Text:    assistantText,
 	}, nil
 }

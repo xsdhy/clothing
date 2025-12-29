@@ -232,13 +232,13 @@ func GenerateContentByGeminiProtocol(ctx context.Context, apiKey, endpoint, mode
 			return nil, errors.New("gemini response did not include image data")
 		}
 		return &entity.GenerateContentResponse{
-			TextContent: strings.TrimSpace(assistantText),
+			Text: strings.TrimSpace(assistantText),
 		}, errors.New("gemini response did not include image data")
 	}
 
 	return &entity.GenerateContentResponse{
-		ImageAssets: imageDataURLs,
-		TextContent: strings.TrimSpace(assistantText),
+		Outputs: buildMediaOutputs(imageDataURLs, "image"),
+		Text:    strings.TrimSpace(assistantText),
 	}, nil
 }
 

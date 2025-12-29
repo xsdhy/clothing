@@ -8,9 +8,13 @@ import {
   DialogActions,
   DialogContent,
   DialogTitle,
+  FormControl,
   FormControlLabel,
   Grid,
+  InputLabel,
+  MenuItem,
   Paper,
+  Select,
   Stack,
   Switch,
   TextField,
@@ -54,8 +58,8 @@ interface ModelDialogForm {
   description: string;
   price: string;
   max_images: string;
-  input_modalities: string;
-  output_modalities: string;
+  input_modalities: string[];
+  output_modalities: string[];
   supported_sizes: string;
   supported_durations: string;
   default_size: string;
@@ -127,8 +131,8 @@ const defaultModelForm = (): ModelDialogForm => ({
   description: "",
   price: "",
   max_images: "",
-  input_modalities: "",
-  output_modalities: "",
+  input_modalities: [],
+  output_modalities: [],
   supported_sizes: "",
   supported_durations: "",
   default_size: "",
@@ -150,8 +154,8 @@ const toModelDialogForm = (model: ProviderModelAdmin): ModelDialogForm => ({
     typeof model.max_images === "number" && Number.isFinite(model.max_images)
       ? String(model.max_images)
       : "",
-  input_modalities: model.input_modalities?.join(", ") ?? "",
-  output_modalities: model.output_modalities?.join(", ") ?? "",
+  input_modalities: model.input_modalities ?? [],
+  output_modalities: model.output_modalities ?? [],
   supported_sizes: model.supported_sizes?.join(", ") ?? "",
   supported_durations:
     model.supported_durations && model.supported_durations.length
@@ -169,6 +173,22 @@ const toModelDialogForm = (model: ProviderModelAdmin): ModelDialogForm => ({
   supports_cancel: model.supports_cancel ?? false,
   is_active: model.is_active,
 });
+
+const modalityOptions = ["text", "image", "video"];
+const generationModeOptions = [
+  "text_to_image",
+  "image_to_image",
+  "text_to_video",
+  "image_to_video",
+];
+
+const normalizeMultiSelect = (value: string | string[]): string[] =>
+  Array.isArray(value)
+    ? value
+    : value
+        .split(",")
+        .map((item) => item.trim())
+        .filter((item) => item.length > 0);
 
 const ProviderManagementPage: React.FC = () => {
   const { isAdmin } = useAuth();
@@ -562,8 +582,8 @@ const ProviderManagementPage: React.FC = () => {
         parsedMaxImages = parsed;
       }
 
-      const inputModalities = parseCommaSeparated(modelForm.input_modalities);
-      const outputModalities = parseCommaSeparated(modelForm.output_modalities);
+      const inputModalities = modelForm.input_modalities;
+      const outputModalities = modelForm.output_modalities;
       const sizes = parseCommaSeparated(modelForm.supported_sizes);
       const durations = parseNumberList(modelForm.supported_durations);
       const parsedDefaultDuration = parsePositiveInt(modelForm.default_duration);
@@ -1141,32 +1161,66 @@ const ProviderManagementPage: React.FC = () => {
                 {/* Right Column: Configuration */}
                 <Grid size={{ xs: 12, md: 6 }}>
                   <Stack spacing={2}>
-                    <TextField
-                      label="输入模态 (逗号分隔)"
-                      value={modelForm.input_modalities}
-                      onChange={(event) =>
-                        setModelForm((prev) => ({
-                          ...prev,
-                          input_modalities: event.target.value,
-                        }))
-                      }
-                      placeholder="text, image"
-                      fullWidth
-                      size="small"
-                    />
-                    <TextField
-                      label="输出模态 (逗号分隔)"
-                      value={modelForm.output_modalities}
-                      onChange={(event) =>
-                        setModelForm((prev) => ({
-                          ...prev,
-                          output_modalities: event.target.value,
-                        }))
-                      }
-                      placeholder="image, video"
-                      fullWidth
-                      size="small"
-                    />
+                    <FormControl fullWidth size="small">
+                      <InputLabel id="input-modalities-label">
+                        输入模态
+                      </InputLabel>
+                      <Select
+                        labelId="input-modalities-label"
+                        label="输入模态"
+                        multiple
+                        value={modelForm.input_modalities}
+                        onChange={(event) =>
+                          setModelForm((prev) => ({
+                            ...prev,
+                            input_modalities: normalizeMultiSelect(
+                              event.target.value as string | string[]
+                            ),
+                          }))
+                        }
+                        renderValue={(selected) =>
+                          Array.isArray(selected) && selected.length > 0
+                            ? selected.join(", ")
+                            : "未选择"
+                        }
+                      >
+                        {modalityOptions.map((option) => (
+                          <MenuItem key={option} value={option}>
+                            {option}
+                          </MenuItem>
+                        ))}
+                      </Select>
+                    </FormControl>
+                    <FormControl fullWidth size="small">
+                      <InputLabel id="output-modalities-label">
+                        输出模态
+                      </InputLabel>
+                      <Select
+                        labelId="output-modalities-label"
+                        label="输出模态"
+                        multiple
+                        value={modelForm.output_modalities}
+                        onChange={(event) =>
+                          setModelForm((prev) => ({
+                            ...prev,
+                            output_modalities: normalizeMultiSelect(
+                              event.target.value as string | string[]
+                            ),
+                          }))
+                        }
+                        renderValue={(selected) =>
+                          Array.isArray(selected) && selected.length > 0
+                            ? selected.join(", ")
+                            : "未选择"
+                        }
+                      >
+                        {modalityOptions.map((option) => (
+                          <MenuItem key={option} value={option}>
+                            {option}
+                          </MenuItem>
+                        ))}
+                      </Select>
+                    </FormControl>
                     <TextField
                       label="最大参考图数量"
                       value={modelForm.max_images}
@@ -1251,6 +1305,7 @@ const ProviderManagementPage: React.FC = () => {
                     />
                     <Stack direction="row" spacing={1}>
                       <TextField
+                        select
                         label="生成模式"
                         value={modelForm.generation_mode}
                         onChange={(event) =>
@@ -1259,11 +1314,16 @@ const ProviderManagementPage: React.FC = () => {
                             generation_mode: event.target.value,
                           }))
                         }
-                        placeholder="text_to_image"
-                        helperText="text_to_image, image_to_image, text_to_video, image_to_video"
                         fullWidth
                         size="small"
-                      />
+                      >
+                        <MenuItem value="">未选择</MenuItem>
+                        {generationModeOptions.map((option) => (
+                          <MenuItem key={option} value={option}>
+                            {option}
+                          </MenuItem>
+                        ))}
+                      </TextField>
                       <TextField
                         label="端点路径"
                         value={modelForm.endpoint_path}

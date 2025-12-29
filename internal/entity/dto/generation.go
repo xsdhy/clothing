@@ -1,18 +1,6 @@
 package dto
 
-// ContentInputs contains input media for generation requests.
-// Deprecated: Use InputMedia instead for new code.
-type ContentInputs struct {
-	Images []string `json:"images,omitempty"`
-	Videos []string `json:"videos,omitempty"`
-}
-
-// ContentOptions contains generation options.
-// Deprecated: Use OutputConfig instead for new code.
-type ContentOptions struct {
-	Size     string `json:"size,omitempty"`
-	Duration int    `json:"duration,omitempty"`
-}
+import "strings"
 
 // MediaInput represents a unified media input with type and role information.
 type MediaInput struct {
@@ -49,89 +37,47 @@ type GenerateContentRequest struct {
 	// New output configuration
 	Output OutputConfig `json:"output,omitempty"`
 
-	// Legacy fields for backward compatibility
-	Inputs  ContentInputs  `json:"inputs,omitempty"`
-	Options ContentOptions `json:"options,omitempty"`
-
 	TagIDs []uint `json:"tag_ids,omitempty"`
 }
 
-// NormalizeInputs converts legacy input formats to the new InputMedia format.
-// Call this before processing the request to ensure consistent handling.
-func (r *GenerateContentRequest) NormalizeInputs() {
-	// Convert legacy Inputs.Images to InputMedia
-	if len(r.InputMedia) == 0 && len(r.Inputs.Images) > 0 {
-		for _, img := range r.Inputs.Images {
-			r.InputMedia = append(r.InputMedia, MediaInput{
-				Type:    "image",
-				Content: img,
-			})
-		}
-	}
-
-	// Convert legacy Inputs.Videos to InputMedia
-	if len(r.Inputs.Videos) > 0 {
-		for _, vid := range r.Inputs.Videos {
-			r.InputMedia = append(r.InputMedia, MediaInput{
-				Type:    "video",
-				Content: vid,
-			})
-		}
-	}
-
-	// Merge legacy Options into Output
-	if r.Output.Size == "" && r.Options.Size != "" {
-		r.Output.Size = r.Options.Size
-	}
-	if r.Output.Duration == 0 && r.Options.Duration > 0 {
-		r.Output.Duration = r.Options.Duration
-	}
-}
-
-// GetImages returns all image inputs from InputMedia for compatibility.
+// GetImages returns all image inputs from InputMedia.
 func (r *GenerateContentRequest) GetImages() []string {
-	var images []string
+	images := make([]string, 0, len(r.InputMedia))
 	for _, m := range r.InputMedia {
-		if m.Type == "image" || m.Type == "" {
-			images = append(images, m.Content)
+		if !strings.EqualFold(strings.TrimSpace(m.Type), "image") {
+			continue
 		}
-	}
-	// Fallback to legacy format
-	if len(images) == 0 {
-		images = r.Inputs.Images
+		content := strings.TrimSpace(m.Content)
+		if content != "" {
+			images = append(images, content)
+		}
 	}
 	return images
 }
 
-// GetVideos returns all video inputs from InputMedia for compatibility.
+// GetVideos returns all video inputs from InputMedia.
 func (r *GenerateContentRequest) GetVideos() []string {
-	var videos []string
+	videos := make([]string, 0, len(r.InputMedia))
 	for _, m := range r.InputMedia {
-		if m.Type == "video" {
-			videos = append(videos, m.Content)
+		if !strings.EqualFold(strings.TrimSpace(m.Type), "video") {
+			continue
 		}
-	}
-	// Fallback to legacy format
-	if len(videos) == 0 {
-		videos = r.Inputs.Videos
+		content := strings.TrimSpace(m.Content)
+		if content != "" {
+			videos = append(videos, content)
+		}
 	}
 	return videos
 }
 
-// GetSize returns the output size from Output or Options.
+// GetSize returns the output size.
 func (r *GenerateContentRequest) GetSize() string {
-	if r.Output.Size != "" {
-		return r.Output.Size
-	}
-	return r.Options.Size
+	return r.Output.Size
 }
 
-// GetDuration returns the output duration from Output or Options.
+// GetDuration returns the output duration.
 func (r *GenerateContentRequest) GetDuration() int {
-	if r.Output.Duration > 0 {
-		return r.Output.Duration
-	}
-	return r.Options.Duration
+	return r.Output.Duration
 }
 
 // GenerateContentResponse is the response from content generation.
@@ -140,97 +86,7 @@ type GenerateContentResponse struct {
 	Outputs []MediaOutput `json:"outputs,omitempty"`
 	Text    string        `json:"text,omitempty"`
 
-	// Legacy fields for backward compatibility
-	ImageAssets []string `json:"image_assets,omitempty"`
-	TextContent string   `json:"text_content,omitempty"`
-
 	// Task identification
 	TaskID    string `json:"task_id,omitempty"`     // Unified task ID
 	RequestID string `json:"request_id,omitempty"`
-
-	// Deprecated: Use TaskID instead
-	ExternalTaskCode string `json:"external_task_code,omitempty"`
-}
-
-// ToLegacyFormat populates legacy fields from new format for backward compatibility.
-// Call this before returning the response to ensure old clients work correctly.
-func (r *GenerateContentResponse) ToLegacyFormat() {
-	// Copy Outputs to ImageAssets
-	if len(r.Outputs) > 0 && len(r.ImageAssets) == 0 {
-		for _, o := range r.Outputs {
-			r.ImageAssets = append(r.ImageAssets, o.URL)
-		}
-	}
-
-	// Copy Text to TextContent
-	if r.Text != "" && r.TextContent == "" {
-		r.TextContent = r.Text
-	}
-
-	// Copy TaskID to ExternalTaskCode
-	if r.TaskID != "" && r.ExternalTaskCode == "" {
-		r.ExternalTaskCode = r.TaskID
-	}
-}
-
-// NormalizeFromLegacy populates new format from legacy fields.
-func (r *GenerateContentResponse) NormalizeFromLegacy() {
-	// Copy ImageAssets to Outputs
-	if len(r.ImageAssets) > 0 && len(r.Outputs) == 0 {
-		for _, url := range r.ImageAssets {
-			mediaType := "image"
-			// Simple heuristic for video detection
-			if isVideoURL(url) {
-				mediaType = "video"
-			}
-			r.Outputs = append(r.Outputs, MediaOutput{
-				Type: mediaType,
-				URL:  url,
-			})
-		}
-	}
-
-	// Copy TextContent to Text
-	if r.TextContent != "" && r.Text == "" {
-		r.Text = r.TextContent
-	}
-
-	// Copy ExternalTaskCode to TaskID
-	if r.ExternalTaskCode != "" && r.TaskID == "" {
-		r.TaskID = r.ExternalTaskCode
-	}
-}
-
-// isVideoURL performs a simple check to detect video URLs.
-func isVideoURL(url string) bool {
-	lower := toLower(url)
-	return contains(lower, ".mp4") || contains(lower, ".mov") || contains(lower, ".webm") ||
-		contains(lower, ".avi") || contains(lower, "video")
-}
-
-// toLower is a simple lowercase helper.
-func toLower(s string) string {
-	result := make([]byte, len(s))
-	for i := 0; i < len(s); i++ {
-		c := s[i]
-		if c >= 'A' && c <= 'Z' {
-			c += 'a' - 'A'
-		}
-		result[i] = c
-	}
-	return string(result)
-}
-
-// contains checks if s contains substr.
-func contains(s, substr string) bool {
-	return len(s) >= len(substr) && (s == substr || len(s) > 0 && containsHelper(s, substr))
-}
-
-func containsHelper(s, substr string) bool {
-	for i := 0; i <= len(s)-len(substr); i++ {
-		if s[i:i+len(substr)] == substr {
-			return true
-		}
-	}
-	return false
 }

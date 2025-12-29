@@ -133,8 +133,8 @@ func (f *FalAI) GenerateContent(ctx context.Context, request entity.GenerateCont
 	}
 
 	return &entity.GenerateContentResponse{
-		ImageAssets: assets,
-		RequestID:   requestID,
+		Outputs:   buildMediaOutputs(assets, "image"),
+		RequestID: requestID,
 	}, nil
 }
 

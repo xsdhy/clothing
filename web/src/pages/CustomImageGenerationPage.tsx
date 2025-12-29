@@ -366,23 +366,27 @@ const ImageGenerator: React.FC<ImageGeneratorProps> = ({
     activeRecordIdRef.current = null;
 
     try {
-      const options: GenerationRequest["options"] = {};
+      const output: GenerationRequest["output"] = {};
       if (resolutionOptions.length > 0 && selectedSize) {
-        options.size = selectedSize;
+        output.size = selectedSize;
       }
       if (
         typeof selectedDuration === "number" &&
         selectedDuration > 0
       ) {
-        options.duration = selectedDuration;
+        output.duration = selectedDuration;
       }
 
+      const input_media =
+        images.length > 0
+          ? images.map((content) => ({ type: "image", content }))
+          : undefined;
       const request: GenerationRequest = {
         prompt: prompt.trim(),
-        inputs: { images },
         provider: selectedProvider,
         model: selectedModel.model_id,
-        options,
+        ...(input_media ? { input_media } : {}),
+        ...(Object.keys(output).length > 0 ? { output } : {}),
       };
 
       const job = await generateContent(request, ensureClientId());

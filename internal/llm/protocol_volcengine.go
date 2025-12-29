@@ -89,12 +89,12 @@ func GenerateContentByVolcengineProtocol(ctx context.Context, apiKey, model, pro
 	}
 	if len(imageDataURLs) == 0 {
 		return &entity.GenerateContentResponse{
-			TextContent: assistantText,
+			Text: assistantText,
 		}, errors.New(assistantText)
 	}
 	return &entity.GenerateContentResponse{
-		ImageAssets: imageDataURLs,
-		TextContent: assistantText,
+		Outputs: buildMediaOutputs(imageDataURLs, "image"),
+		Text:    assistantText,
 	}, nil
 }
 
@@ -149,24 +149,24 @@ func GenerateVolcengineVideo(ctx context.Context, apiKey string, model entity.Db
 	assets, revisedPrompt, err := waitForVolcengineVideo(ctx, client, taskID)
 	if err != nil {
 		return &entity.GenerateContentResponse{
-			TextContent:      revisedPrompt,
-			ExternalTaskCode: taskID,
-			RequestID:        requestID,
+			Text:      revisedPrompt,
+			TaskID:    taskID,
+			RequestID: requestID,
 		}, err
 	}
 	if len(assets) == 0 {
 		return &entity.GenerateContentResponse{
-			TextContent:      revisedPrompt,
-			ExternalTaskCode: taskID,
-			RequestID:        requestID,
+			Text:      revisedPrompt,
+			TaskID:    taskID,
+			RequestID: requestID,
 		}, errors.New("volcengine video response missing video url")
 	}
 
 	return &entity.GenerateContentResponse{
-		ImageAssets:      assets,
-		TextContent:      revisedPrompt,
-		ExternalTaskCode: taskID,
-		RequestID:        requestID,
+		Outputs:   buildMediaOutputs(assets, "video"),
+		Text:      revisedPrompt,
+		TaskID:    taskID,
+		RequestID: requestID,
 	}, nil
 }
 

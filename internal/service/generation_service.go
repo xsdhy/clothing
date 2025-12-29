@@ -74,8 +74,9 @@ func (s *GenerationService) handleGeneration(req GenerateContentRequest) {
 	var storageIssues []string
 
 	// 保存输入图片
-	if len(request.Inputs.Images) > 0 {
-		inputPaths, err := s.saveMediaToStorage(genCtx, "inputs", request.Inputs.Images, request.ModelID)
+	inputPayloads := collectInputPayloads(request.InputMedia)
+	if len(inputPayloads) > 0 {
+		inputPaths, err := s.saveMediaToStorage(genCtx, "inputs", inputPayloads, request.ModelID)
 		if len(inputPaths) > 0 {
 			inputImages := entity.StringArray(inputPaths)
 			updates.InputImages = &inputImages
@@ -93,19 +94,19 @@ func (s *GenerationService) handleGeneration(req GenerateContentRequest) {
 	// 调用 LLM 服务生成内容
 	resp, err := service.GenerateContent(genCtx, request, dbModel)
 
-	var externalTaskCode, requestID string
+	var taskID, requestID string
 	var outputs []string
 	var text string
 
 	if resp != nil {
-		externalTaskCode = resp.ExternalTaskCode
+		taskID = resp.TaskID
 		requestID = resp.RequestID
-		outputs = resp.ImageAssets
-		text = resp.TextContent
+		outputs = collectOutputURLs(resp.Outputs)
+		text = resp.Text
 	}
 
-	if externalTaskCode != "" {
-		updates.ExternalTaskCode = &externalTaskCode
+	if taskID != "" {
+		updates.TaskID = &taskID
 	}
 	if requestID != "" {
 		updates.RequestID = &requestID
@@ -138,7 +139,7 @@ func (s *GenerationService) handleGeneration(req GenerateContentRequest) {
 
 	// 保存文本内容
 	if text != "" {
-		updates.TextContent = &text
+		updates.OutputText = &text
 	}
 
 	// 保存输出媒体文件
@@ -337,4 +338,34 @@ func buildOutputBaseName(modelName string, idx int) string {
 	}
 	suffix := time.Now().UTC().UnixNano()
 	return fmt.Sprintf("%s_%d_%d", token, suffix, idx)
+}
+
+func collectInputPayloads(inputs []entity.MediaInput) []string {
+	if len(inputs) == 0 {
+		return nil
+	}
+	payloads := make([]string, 0, len(inputs))
+	for _, input := range inputs {
+		content := strings.TrimSpace(input.Content)
+		if content == "" {
+			continue
+		}
+		payloads = append(payloads, content)
+	}
+	return payloads
+}
+
+func collectOutputURLs(outputs []entity.MediaOutput) []string {
+	if len(outputs) == 0 {
+		return nil
+	}
+	urls := make([]string, 0, len(outputs))
+	for _, output := range outputs {
+		url := strings.TrimSpace(output.URL)
+		if url == "" {
+			continue
+		}
+		urls = append(urls, url)
+	}
+	return urls
 }

@@ -86,6 +86,7 @@ clothing/
 │   │   ├── provider_dashscope.go    # 阿里云 DashScope 适配器
 │   │   ├── provider_falai.go        # Fal.ai 适配器
 │   │   ├── provider_volcengine.go   # 火山引擎适配器
+│   │   ├── outputs.go          # MediaOutput 构造工具
 │   │   ├── protocol_openai.go       # OpenAI 协议实现
 │   │   ├── protocol_gemini.go       # Gemini 协议实现
 │   │   ├── protocol_dashscope.go    # DashScope 协议实现
@@ -246,6 +247,7 @@ clothing/
 - 支持视频生成（image-to-video、text-to-video）
 - 输入/输出模态分离配置
 - 异步生成 + SSE 实时状态推送
+- 生成请求统一使用 `input_media` + `output`，响应统一使用 `outputs`/`text`/`task_id`
 - 生成记录自动持久化
 - 统一的 MediaService 处理图片格式转换
 - TaskManager 统一管理异步任务轮询
@@ -344,7 +346,7 @@ clothing/
 ## 数据持久化与文件存储
 - 默认数据库为 SQLite（`datas/clothing.db`）；`DBType` 支持 `sqlite`、`mysql`、`postgres`
 - 数据表：`users`、`llm_providers`、`llm_models`、`usage_records`、`tags`、`usage_record_tags`
-- Usage Record 字段包含 Provider、模型、提示词、尺寸、输入/输出图片列表、返回文本与错误信息
+- Usage Record 字段包含 Provider、模型、提示词、尺寸、输入/输出图片列表、返回文本、任务ID 与错误信息
 - `STORAGE_TYPE` 默认 `local`，支持切换至 `s3`、`oss`、`cos`、`r2`
 - 图片写入遵循分类命名策略：输入图片按内容哈希去重，输出图片携带模型名、时间戳与索引
 

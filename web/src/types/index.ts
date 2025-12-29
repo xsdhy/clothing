@@ -1,13 +1,3 @@
-export interface GenerationInputs {
-  images: string[];
-  videos?: string[];
-}
-
-export interface GenerationOptions {
-  size?: string;
-  duration?: number;
-}
-
 // New unified media input type
 export interface MediaInput {
   type: "image" | "video";
@@ -31,12 +21,9 @@ export interface MediaOutput {
 
 export interface GenerationRequest {
   prompt: string;
-  inputs: GenerationInputs;
-  options?: GenerationOptions;
   provider: AIProvider;
   model: string;
   tag_ids?: number[];
-  // New fields
   input_media?: MediaInput[];
   output?: OutputConfig;
 }
