@@ -32,8 +32,8 @@ func (r *GormRepository) CreateProvider(ctx context.Context, provider *entity.Db
 	return r.db.WithContext(ctx).Create(provider).Error
 }
 
-// UpdateProvider updates provider fields using a map of updates.
-func (r *GormRepository) UpdateProvider(ctx context.Context, id string, updates map[string]interface{}) error {
+// UpdateProvider updates provider fields using typed updates.
+func (r *GormRepository) UpdateProvider(ctx context.Context, id string, updates entity.ProviderUpdates) error {
 	if r == nil || r.db == nil {
 		return fmt.Errorf("repository not initialised")
 	}
@@ -41,17 +41,15 @@ func (r *GormRepository) UpdateProvider(ctx context.Context, id string, updates 
 	if id == "" {
 		return fmt.Errorf("provider id is required")
 	}
-	if len(updates) == 0 {
+	m := updates.ToMap()
+	if len(m) == 0 {
 		return nil
 	}
-
-	delete(updates, "id")
-	delete(updates, "ID")
 
 	result := r.db.WithContext(ctx).
 		Model(&entity.DbProvider{}).
 		Where("id = ?", id).
-		Updates(updates)
+		Updates(m)
 	if result.Error != nil {
 		return result.Error
 	}
@@ -61,7 +59,7 @@ func (r *GormRepository) UpdateProvider(ctx context.Context, id string, updates 
 	return nil
 }
 
-// DeleteProvider deletes a provider by id.
+// DeleteProvider deletes a provider and its models atomically.
 func (r *GormRepository) DeleteProvider(ctx context.Context, id string) error {
 	if r == nil || r.db == nil {
 		return fmt.Errorf("repository not initialised")
@@ -70,18 +68,23 @@ func (r *GormRepository) DeleteProvider(ctx context.Context, id string) error {
 	if id == "" {
 		return fmt.Errorf("provider id is required")
 	}
-	result := r.db.WithContext(ctx).Delete(&entity.DbProvider{}, "id = ?", id)
-	if result.Error != nil {
-		return result.Error
-	}
-	if result.RowsAffected == 0 {
-		return gorm.ErrRecordNotFound
-	}
-	// Cascade delete models
-	if err := r.db.WithContext(ctx).Where("provider_id = ?", id).Delete(&entity.DbModel{}).Error; err != nil {
-		return err
-	}
-	return nil
+
+	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		// 先删除关联的模型
+		if err := tx.Where("provider_id = ?", id).Delete(&entity.DbModel{}).Error; err != nil {
+			return err
+		}
+
+		// 再删除服务商
+		result := tx.Delete(&entity.DbProvider{}, "id = ?", id)
+		if result.Error != nil {
+			return result.Error
+		}
+		if result.RowsAffected == 0 {
+			return gorm.ErrRecordNotFound
+		}
+		return nil
+	})
 }
 
 // ListProviders returns providers optionally filtering inactive ones.
@@ -209,8 +212,8 @@ func (r *GormRepository) CreateModel(ctx context.Context, model *entity.DbModel)
 	return r.db.WithContext(ctx).Create(model).Error
 }
 
-// UpdateModel updates model fields using a map.
-func (r *GormRepository) UpdateModel(ctx context.Context, providerID, modelID string, updates map[string]interface{}) error {
+// UpdateModel updates model fields using typed updates.
+func (r *GormRepository) UpdateModel(ctx context.Context, providerID, modelID string, updates entity.ModelUpdates) error {
 	if r == nil || r.db == nil {
 		return fmt.Errorf("repository not initialised")
 	}
@@ -219,20 +222,15 @@ func (r *GormRepository) UpdateModel(ctx context.Context, providerID, modelID st
 	if providerID == "" || modelID == "" {
 		return fmt.Errorf("provider and model id are required")
 	}
-	if len(updates) == 0 {
+	m := updates.ToMap()
+	if len(m) == 0 {
 		return nil
 	}
-	delete(updates, "provider_id")
-	delete(updates, "ProviderID")
-	delete(updates, "model_id")
-	delete(updates, "ModelID")
-	delete(updates, "id")
-	delete(updates, "ID")
 
 	result := r.db.WithContext(ctx).
 		Model(&entity.DbModel{}).
 		Where("provider_id = ? AND model_id = ?", providerID, modelID).
-		Updates(updates)
+		Updates(m)
 	if result.Error != nil {
 		return result.Error
 	}

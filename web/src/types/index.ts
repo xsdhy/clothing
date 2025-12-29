@@ -8,6 +8,27 @@ export interface GenerationOptions {
   duration?: number;
 }
 
+// New unified media input type
+export interface MediaInput {
+  type: "image" | "video";
+  content: string;
+  role?: "reference" | "first_frame" | "last_frame";
+}
+
+// New output configuration type
+export interface OutputConfig {
+  size?: string;
+  duration?: number;
+  num_outputs?: number;
+}
+
+// New unified media output type
+export interface MediaOutput {
+  type: "image" | "video";
+  url: string;
+  mime_type?: string;
+}
+
 export interface GenerationRequest {
   prompt: string;
   inputs: GenerationInputs;
@@ -15,6 +36,9 @@ export interface GenerationRequest {
   provider: AIProvider;
   model: string;
   tag_ids?: number[];
+  // New fields
+  input_media?: MediaInput[];
+  output?: OutputConfig;
 }
 
 export interface GenerationJob {
@@ -70,6 +94,12 @@ export interface AIModel {
   default_size?: string;
   default_duration?: number;
   settings?: Record<string, unknown>;
+
+  // New fields
+  generation_mode?: string;
+  endpoint_path?: string;
+  supports_streaming?: boolean;
+  supports_cancel?: boolean;
 
   is_active?: boolean;
   created_at?: string;
@@ -157,6 +187,11 @@ export interface ProviderModelAdmin {
   default_size?: string;
   default_duration?: number;
   settings?: Record<string, unknown>;
+  // New fields
+  generation_mode?: string;
+  endpoint_path?: string;
+  supports_streaming?: boolean;
+  supports_cancel?: boolean;
   is_active: boolean;
   created_at: string;
   updated_at: string;
@@ -210,6 +245,11 @@ export interface ProviderModelCreatePayload {
   default_size?: string;
   default_duration?: number;
   settings?: Record<string, unknown>;
+  // New fields
+  generation_mode?: string;
+  endpoint_path?: string;
+  supports_streaming?: boolean;
+  supports_cancel?: boolean;
   is_active?: boolean;
 }
 
@@ -225,6 +265,11 @@ export interface ProviderModelUpdatePayload {
   default_size?: string;
   default_duration?: number;
   settings?: Record<string, unknown>;
+  // New fields
+  generation_mode?: string;
+  endpoint_path?: string;
+  supports_streaming?: boolean;
+  supports_cancel?: boolean;
   is_active?: boolean;
 }
 

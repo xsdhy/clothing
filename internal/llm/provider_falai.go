@@ -78,8 +78,8 @@ func (f *FalAI) GenerateContent(ctx context.Context, request entity.GenerateCont
 		return nil, errors.New("fal.ai provider not initialised")
 	}
 
-	endpoint := ""
-	endpoint = strings.TrimSpace(endpoint)
+	// Use new EndpointPath field first, fallback to deriving from ModelID
+	endpoint := strings.TrimSpace(dbModel.EndpointPath)
 	if endpoint == "" {
 		endpoint = "/" + strings.TrimLeft(dbModel.ModelID, "/")
 	}
@@ -87,7 +87,8 @@ func (f *FalAI) GenerateContent(ctx context.Context, request entity.GenerateCont
 		endpoint = "/" + endpoint
 	}
 
-	mode := falMode(strings.TrimSpace(dbModel.ModelID))
+	// Use new GenerationMode field first, fallback to inferring from ModelID
+	mode := falMode(strings.TrimSpace(dbModel.GenerationMode))
 	if mode == "" {
 		if strings.Contains(strings.ToLower(dbModel.ModelID), "image-to-image") ||
 			strings.Contains(strings.ToLower(dbModel.ModelID), "edit") {
@@ -100,8 +101,8 @@ func (f *FalAI) GenerateContent(ctx context.Context, request entity.GenerateCont
 	logrus.WithFields(logrus.Fields{
 		"model":               request.ModelID,
 		"prompt_preview":      request.Prompt,
-		"reference_image_cnt": len(request.Inputs.Images),
-		"size":                strings.TrimSpace(request.Options.Size),
+		"reference_image_cnt": len(request.GetImages()),
+		"size":                strings.TrimSpace(request.GetSize()),
 	}).Info("falai_generate_content_start")
 
 	input, err := f.buildInputPayload(mode, request)
@@ -145,7 +146,7 @@ func (f *FalAI) buildInputPayload(mode falMode, request entity.GenerateContentRe
 
 	input := map[string]any{"prompt": prompt}
 
-	size := strings.TrimSpace(request.Options.Size)
+	size := strings.TrimSpace(request.GetSize())
 	if size == "" {
 		size = falDefaultImageSize
 	}
@@ -155,7 +156,7 @@ func (f *FalAI) buildInputPayload(mode falMode, request entity.GenerateContentRe
 		input["image_size"] = size
 		input["num_images"] = 1
 	case falModeImageToImage:
-		imageURL, base64Payload := f.pickReferenceImage(request.Inputs.Images)
+		imageURL, base64Payload := f.pickReferenceImage(request.GetImages())
 		if imageURL == "" && base64Payload == "" {
 			return nil, errors.New("image-to-image model requires at least one reference image")
 		}
@@ -583,4 +584,44 @@ func (s falSubmissionResponse) toEnvelope() *falGenerationEnvelope {
 type falAPIError struct {
 	Code    string `json:"code"`
 	Message string `json:"message"`
+}
+
+// Capabilities returns the capabilities of the model.
+func (f *FalAI) Capabilities(model entity.DbModel) *ModelCapabilities {
+	return &ModelCapabilities{
+		InputModalities:    model.InputModalities,
+		OutputModalities:   model.OutputModalities,
+		MaxImages:          model.MaxImages,
+		SupportedSizes:     model.SupportedSizes,
+		SupportedDurations: model.SupportedDurations,
+		SupportsStream:     model.SupportsStreaming,
+		SupportsCancel:     model.SupportsCancel,
+		SupportsAsync:      true, // FalAI always uses async polling
+	}
+}
+
+// Validate checks if the request is valid for the model.
+func (f *FalAI) Validate(request entity.GenerateContentRequest, model entity.DbModel) error {
+	if strings.TrimSpace(request.Prompt) == "" {
+		return errors.New("prompt is required")
+	}
+
+	// Check if image-to-image mode requires input images
+	mode := strings.TrimSpace(model.GenerationMode)
+	if mode == "" {
+		// Infer from ModelID
+		if strings.Contains(strings.ToLower(model.ModelID), "image-to-image") ||
+			strings.Contains(strings.ToLower(model.ModelID), "edit") {
+			mode = string(falModeImageToImage)
+		}
+	}
+
+	if mode == string(falModeImageToImage) {
+		images := request.GetImages()
+		if len(images) == 0 {
+			return errors.New("image-to-image model requires at least one reference image")
+		}
+	}
+
+	return nil
 }

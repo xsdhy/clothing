@@ -3,12 +3,8 @@ package api
 import (
 	"clothing/internal/entity"
 	"clothing/internal/llm"
-	"clothing/internal/storage"
-	"clothing/internal/utils"
+	"clothing/internal/service"
 	"context"
-	"crypto/md5"
-	"encoding/hex"
-	"fmt"
 	"io"
 	"net/http"
 	"strings"
@@ -18,6 +14,7 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
+// ListProviders 列出可用的服务商
 func (h *HTTPHandler) ListProviders(c *gin.Context) {
 	if h.repo == nil {
 		c.JSON(http.StatusOK, gin.H{"providers": []entity.DbProvider{}})
@@ -28,23 +25,24 @@ func (h *HTTPHandler) ListProviders(c *gin.Context) {
 	providers, err := h.repo.ListProviders(ctx, false)
 	if err != nil {
 		logrus.WithError(err).Error("failed to list providers from database")
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to load provider catalogue"})
+		InternalError(c, "加载服务商列表失败")
 		return
 	}
 
 	c.JSON(http.StatusOK, gin.H{"providers": providers})
 }
 
+// StreamGenerationEvents SSE 事件流
 func (h *HTTPHandler) StreamGenerationEvents(c *gin.Context) {
 	requestUser := CurrentUser(c)
 	if requestUser == nil {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "authentication required"})
+		Unauthorized(c, "需要登录")
 		return
 	}
 
 	clientID := strings.TrimSpace(c.Query("client_id"))
 	if clientID == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "client_id is required"})
+		MissingField(c, "client_id")
 		return
 	}
 
@@ -91,22 +89,23 @@ func (h *HTTPHandler) StreamGenerationEvents(c *gin.Context) {
 	})
 }
 
+// GenerateContent 提交内容生成请求
 func (h *HTTPHandler) GenerateContent(c *gin.Context) {
 	requestUser := CurrentUser(c)
 	if requestUser == nil {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "authentication required"})
+		Unauthorized(c, "需要登录")
 		return
 	}
 
 	var request entity.GenerateContentRequest
 	if err := c.ShouldBindJSON(&request); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request payload"})
+		InvalidPayload(c)
 		return
 	}
 
 	request.Prompt = strings.TrimSpace(request.Prompt)
 	if request.Prompt == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "prompt is required"})
+		MissingField(c, "prompt")
 		return
 	}
 
@@ -114,60 +113,64 @@ func (h *HTTPHandler) GenerateContent(c *gin.Context) {
 	request.ClientID = strings.TrimSpace(request.ClientID)
 
 	if h.repo == nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "provider repository not configured"})
+		InternalError(c, "服务商仓储未配置")
 		return
 	}
 
 	providerID := strings.TrimSpace(request.ProviderID)
 	if providerID == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "provider is required"})
+		MissingField(c, "provider")
 		return
 	}
 
 	request.ModelID = strings.TrimSpace(request.ModelID)
 	if request.ModelID == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "model is required"})
+		MissingField(c, "model")
 		return
 	}
 
 	ctx := c.Request.Context()
 
+	// 加载并验证服务商
 	dbProvider, err := h.repo.GetProvider(ctx, providerID)
 	if err != nil {
 		logrus.WithError(err).WithFields(logrus.Fields{
 			"provider": providerID,
 		}).Error("failed to load provider from database")
-		c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("unsupported provider: %s", request.ProviderID)})
+		NotFound(c, ErrCodeProviderNotFound, "服务商不存在: "+request.ProviderID)
 		return
 	}
 	if dbProvider == nil || !dbProvider.IsActive {
-		c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("provider %s is disabled", request.ProviderID)})
+		ErrorResponse(c, http.StatusBadRequest, ErrCodeProviderDisabled, "服务商已禁用: "+request.ProviderID)
 		return
 	}
 
+	// 加载并验证模型
 	dbModel, err := h.repo.GetModel(ctx, providerID, request.ModelID)
 	if err != nil {
 		logrus.WithError(err).WithFields(logrus.Fields{
 			"provider": providerID,
 			"model":    request.ModelID,
 		}).Error("failed to load model from database")
-		c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("unsupported model: %s", request.ModelID)})
+		NotFound(c, ErrCodeModelNotFound, "模型不存在: "+request.ModelID)
 		return
 	}
 	if dbModel == nil || !dbModel.IsActive {
-		c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("unsupported model: %s", request.ModelID)})
+		ErrorResponse(c, http.StatusBadRequest, ErrCodeModelDisabled, "模型已禁用: "+request.ModelID)
 		return
 	}
 
-	service, err := llm.NewService(dbProvider)
+	// 初始化 LLM 服务
+	llmService, err := llm.NewService(dbProvider)
 	if err != nil {
 		logrus.WithError(err).WithFields(logrus.Fields{
 			"provider": providerID,
 		}).Error("failed to initialise provider service")
-		c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("provider %s is temporarily unavailable", request.ProviderID)})
+		ErrorResponse(c, http.StatusBadRequest, ErrCodeProviderUnavailable, "服务商暂时不可用: "+request.ProviderID)
 		return
 	}
 
+	// 验证标签
 	tagIDs := deduplicatePositiveIDs(request.TagIDs)
 	if len(tagIDs) > 0 {
 		validateCtx, cancel := context.WithTimeout(ctx, 3*time.Second)
@@ -176,15 +179,16 @@ func (h *HTTPHandler) GenerateContent(c *gin.Context) {
 		tags, err := h.repo.FindTagsByIDs(validateCtx, tagIDs)
 		if err != nil {
 			logrus.WithError(err).Error("failed to validate tags")
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to validate tags"})
+			InternalError(c, "验证标签失败")
 			return
 		}
 		if len(tags) != len(tagIDs) {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "one or more tags do not exist"})
+			BadRequest(c, ErrCodeInvalidTag, "部分标签不存在")
 			return
 		}
 	}
 
+	// 创建使用记录
 	userID := requestUser.ID
 	createCtx, cancelCreate := context.WithTimeout(ctx, 5*time.Second)
 	defer cancelCreate()
@@ -203,10 +207,11 @@ func (h *HTTPHandler) GenerateContent(c *gin.Context) {
 			"model":    request.ModelID,
 			"user_id":  userID,
 		}).Error("failed to create usage record")
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to create usage record"})
+		InternalError(c, "创建使用记录失败")
 		return
 	}
 
+	// 关联标签
 	if len(tagIDs) > 0 {
 		if err := h.repo.SetUsageRecordTags(createCtx, record.ID, tagIDs); err != nil {
 			logrus.WithError(err).WithFields(logrus.Fields{
@@ -222,7 +227,14 @@ func (h *HTTPHandler) GenerateContent(c *gin.Context) {
 		"user_id":   userID,
 	}).Info("queued generation task")
 
-	go h.handleAsyncGeneration(record, request, *dbModel, service)
+	// 使用 Service 层异步处理生成任务
+	h.generationService.GenerateContentAsync(service.GenerateContentRequest{
+		Record:   record,
+		Request:  request,
+		Model:    *dbModel,
+		Service:  llmService,
+		ClientID: request.ClientID,
+	})
 
 	c.JSON(http.StatusAccepted, gin.H{
 		"record_id": record.ID,
@@ -230,279 +242,7 @@ func (h *HTTPHandler) GenerateContent(c *gin.Context) {
 	})
 }
 
-func (h *HTTPHandler) handleAsyncGeneration(record entity.DbUsageRecord, request entity.GenerateContentRequest, dbModel entity.DbModel, service llm.AIService) {
-	if h.repo == nil {
-		return
-	}
-
-	clientID := strings.TrimSpace(request.ClientID)
-	genCtx, cancelGen := context.WithTimeout(context.Background(), 10*time.Minute)
-	defer cancelGen()
-
-	updates := make(map[string]interface{})
-	completionError := ""
-	var storageIssues []string
-
-	if len(request.Inputs.Images) > 0 {
-		inputPaths, err := h.saveMediaToStorage(genCtx, "inputs", request.Inputs.Images, request.ModelID)
-		if len(inputPaths) > 0 {
-			updates["input_images"] = entity.StringArray(inputPaths)
-		}
-		if err != nil {
-			storageIssues = append(storageIssues, fmt.Sprintf("input images: %v", err))
-			logrus.WithError(err).WithFields(logrus.Fields{
-				"record_id": record.ID,
-				"provider":  record.ProviderID,
-				"model":     record.ModelID,
-			}).Warn("failed to persist input images")
-		}
-	}
-
-	resp, err := service.GenerateContent(genCtx, request, dbModel)
-
-	var externalTaskCode, requestID string
-	var outputs []string
-	var text string
-
-	if resp != nil {
-		externalTaskCode = resp.ExternalTaskCode
-		requestID = resp.RequestID
-		outputs = resp.ImageAssets
-		text = resp.TextContent
-	}
-
-	if externalTaskCode != "" {
-		updates["external_task_code"] = externalTaskCode
-	}
-	if requestID != "" {
-		updates["request_id"] = requestID
-	}
-
-	if err != nil {
-		logrus.WithError(err).WithFields(logrus.Fields{
-			"record_id": record.ID,
-			"provider":  record.ProviderID,
-			"model":     record.ModelID,
-		}).Error("failed to generate content")
-
-		errMsg := err.Error()
-		if len(storageIssues) > 0 {
-			errMsg = appendStorageNotes(errMsg, storageIssues)
-		}
-
-		updates["error_message"] = errMsg
-		h.updateUsageRecord(record.ID, updates)
-		h.notifyGenerationComplete(clientID, record.ID, "failure", errMsg)
-		return
-	}
-
-	logrus.WithFields(logrus.Fields{
-		"record_id": record.ID,
-		"provider":  record.ProviderID,
-		"model":     record.ModelID,
-	}).Info("generated content")
-
-	if text != "" {
-		updates["output_text"] = text
-	}
-
-	if len(outputs) > 0 {
-		outputPaths, err := h.saveMediaToStorage(genCtx, "outputs", outputs, request.ModelID)
-		if len(outputPaths) > 0 {
-			updates["output_images"] = entity.StringArray(outputPaths)
-		}
-		if err != nil {
-			storageIssues = append(storageIssues, fmt.Sprintf("output assets: %v", err))
-			logrus.WithError(err).WithFields(logrus.Fields{
-				"record_id": record.ID,
-				"provider":  record.ProviderID,
-				"model":     record.ModelID,
-			}).Warn("failed to persist output assets")
-		}
-	}
-
-	if len(storageIssues) > 0 {
-		existingError := ""
-		if msg, ok := updates["error_message"].(string); ok {
-			existingError = msg
-		}
-		combined := appendStorageNotes(existingError, storageIssues)
-		updates["error_message"] = combined
-		completionError = combined
-	}
-
-	h.updateUsageRecord(record.ID, updates)
-	h.notifyGenerationComplete(clientID, record.ID, "success", completionError)
-}
-
-func (h *HTTPHandler) saveMediaToStorage(parentCtx context.Context, category string, payloads []string, model string) ([]string, error) {
-	if h.storage == nil || len(payloads) == 0 {
-		return nil, nil
-	}
-
-	if parentCtx == nil {
-		parentCtx = context.Background()
-	}
-
-	ctx, cancel := context.WithTimeout(parentCtx, 5*time.Minute)
-	defer cancel()
-
-	var (
-		paths []string
-		errs  []string
-	)
-
-	for idx, payload := range payloads {
-		trimmed := strings.TrimSpace(payload)
-		if trimmed == "" {
-			continue
-		}
-
-		data, ext, err := h.resolveMediaPayload(ctx, trimmed)
-		if err != nil {
-			errs = append(errs, fmt.Sprintf("%d: %v", idx, err))
-			continue
-		}
-
-		saveOpts := storage.SaveOptions{Category: category, Extension: ext}
-		switch strings.ToLower(strings.TrimSpace(category)) {
-		case "inputs":
-			saveOpts.SkipIfExists = true
-			saveOpts.BaseName = computeInputBaseName(data)
-		case "outputs":
-			saveOpts.BaseName = buildOutputBaseName(model, idx)
-		default:
-			saveOpts.BaseName = ""
-		}
-
-		relPath, err := h.storage.Save(ctx, data, saveOpts)
-		if err != nil {
-			errs = append(errs, fmt.Sprintf("%d: %v", idx, err))
-			continue
-		}
-		paths = append(paths, relPath)
-	}
-
-	if len(errs) > 0 {
-		return paths, fmt.Errorf("%s", strings.Join(errs, "; "))
-	}
-
-	return paths, nil
-}
-
-func (h *HTTPHandler) resolveMediaPayload(ctx context.Context, payload string) ([]byte, string, error) {
-	trimmed := strings.TrimSpace(payload)
-	if trimmed == "" {
-		return nil, "", fmt.Errorf("empty payload")
-	}
-
-	if strings.HasPrefix(trimmed, "http://") || strings.HasPrefix(trimmed, "https://") {
-		reqCtx, cancel := context.WithTimeout(ctx, 60*time.Second)
-		defer cancel()
-
-		req, err := http.NewRequestWithContext(reqCtx, http.MethodGet, trimmed, nil)
-		if err != nil {
-			return nil, "", fmt.Errorf("create request: %w", err)
-		}
-
-		resp, err := http.DefaultClient.Do(req)
-		if err != nil {
-			return nil, "", fmt.Errorf("download image: %w", err)
-		}
-		defer resp.Body.Close()
-
-		if resp.StatusCode != http.StatusOK {
-			return nil, "", fmt.Errorf("download image http %d", resp.StatusCode)
-		}
-
-		data, err := io.ReadAll(resp.Body)
-		if err != nil {
-			return nil, "", fmt.Errorf("read image body: %w", err)
-		}
-
-		ext := utils.ExtensionFromMime(resp.Header.Get("Content-Type"))
-		if ext == "" {
-			ext = utils.ExtensionFromMime(http.DetectContentType(data))
-		}
-		if ext == "" {
-			ext = "bin"
-		}
-
-		return data, ext, nil
-	}
-
-	data, ext, err := utils.DecodeMediaPayload(trimmed)
-	if err == nil {
-		return data, ext, nil
-	}
-
-	data, ext, err = utils.DecodeMediaPayload(utils.EnsureDataURL(trimmed))
-	if err != nil {
-		return nil, "", err
-	}
-
-	return data, ext, nil
-}
-
-func (h *HTTPHandler) updateUsageRecord(recordID uint, updates map[string]interface{}) {
-	if h.repo == nil || recordID == 0 || len(updates) == 0 {
-		return
-	}
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-
-	if err := h.repo.UpdateUsageRecord(ctx, recordID, updates); err != nil {
-		logrus.WithError(err).WithFields(logrus.Fields{
-			"record_id": recordID,
-		}).Error("failed to update usage record")
-	}
-}
-
-func (h *HTTPHandler) notifyGenerationComplete(clientID string, recordID uint, status string, errMsg string) {
-	if strings.TrimSpace(clientID) == "" {
-		return
-	}
-	payload := gin.H{
-		"record_id": recordID,
-		"status":    status,
-	}
-	if trimmed := strings.TrimSpace(errMsg); trimmed != "" {
-		payload["error"] = trimmed
-	}
-	h.publishSSEMessage(clientID, sseMessage{
-		event: "generation_completed",
-		data:  payload,
-	})
-}
-
-func appendStorageNotes(existing string, notes []string) string {
-	if len(notes) == 0 {
-		return existing
-	}
-	combined := strings.Join(notes, "; ")
-	if strings.TrimSpace(existing) == "" {
-		return combined
-	}
-	return existing + "; " + combined
-}
-
-func computeInputBaseName(data []byte) string {
-	sum := md5.Sum(data)
-	return hex.EncodeToString(sum[:])
-}
-
-func buildOutputBaseName(model string, idx int) string {
-	token := storage.SanitizeToken(model)
-	if token == "" {
-		token = "model"
-	}
-	if len(token) > 32 {
-		token = token[:32]
-	}
-	suffix := time.Now().UTC().UnixNano()
-	return fmt.Sprintf("%s_%d_%d", token, suffix, idx)
-}
-
+// deduplicatePositiveIDs 去重正整数 ID 列表
 func deduplicatePositiveIDs(values []uint) []uint {
 	if len(values) == 0 {
 		return []uint{}

@@ -33,7 +33,7 @@ func (h *HTTPHandler) ListTags(c *gin.Context) {
 	tags, err := h.repo.ListTags(ctx)
 	if err != nil {
 		logrus.WithError(err).Error("failed to list tags")
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to load tags"})
+		InternalError(c, "加载标签列表失败")
 		return
 	}
 
@@ -42,19 +42,19 @@ func (h *HTTPHandler) ListTags(c *gin.Context) {
 
 func (h *HTTPHandler) CreateTag(c *gin.Context) {
 	if h.repo == nil {
-		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "tag repository not available"})
+		ServiceUnavailable(c, "标签服务不可用")
 		return
 	}
 
 	var req tagRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid tag payload"})
+		InvalidPayload(c)
 		return
 	}
 
 	name := strings.TrimSpace(req.Name)
 	if name == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "tag name is required"})
+		MissingField(c, "name")
 		return
 	}
 
@@ -65,7 +65,7 @@ func (h *HTTPHandler) CreateTag(c *gin.Context) {
 
 	if err := h.repo.CreateTag(ctx, tag); err != nil {
 		logrus.WithError(err).Error("failed to create tag")
-		c.JSON(http.StatusBadRequest, gin.H{"error": "failed to create tag"})
+		InternalError(c, "创建标签失败")
 		return
 	}
 
@@ -74,39 +74,39 @@ func (h *HTTPHandler) CreateTag(c *gin.Context) {
 
 func (h *HTTPHandler) UpdateTag(c *gin.Context) {
 	if h.repo == nil {
-		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "tag repository not available"})
+		ServiceUnavailable(c, "标签服务不可用")
 		return
 	}
 
 	rawID := strings.TrimSpace(c.Param("id"))
 	tagID, err := strconv.ParseUint(rawID, 10, 64)
 	if err != nil || tagID == 0 {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid tag id"})
+		BadRequest(c, ErrCodeInvalidRequest, "无效的标签 ID")
 		return
 	}
 
 	var req tagRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid tag payload"})
+		InvalidPayload(c)
 		return
 	}
 
 	name := strings.TrimSpace(req.Name)
 	if name == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "tag name is required"})
+		MissingField(c, "name")
 		return
 	}
 
 	ctx, cancel := context.WithTimeout(c.Request.Context(), 5*time.Second)
 	defer cancel()
 
-	if err := h.repo.UpdateTag(ctx, uint(tagID), map[string]interface{}{"name": name}); err != nil {
+	if err := h.repo.UpdateTag(ctx, uint(tagID), entity.TagUpdates{Name: &name}); err != nil {
 		if err == gorm.ErrRecordNotFound {
-			c.JSON(http.StatusNotFound, gin.H{"error": "tag not found"})
+			NotFound(c, ErrCodeTagNotFound, "标签不存在")
 			return
 		}
 		logrus.WithError(err).Error("failed to update tag")
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to update tag"})
+		InternalError(c, "更新标签失败")
 		return
 	}
 
@@ -124,14 +124,14 @@ func (h *HTTPHandler) UpdateTag(c *gin.Context) {
 
 func (h *HTTPHandler) DeleteTag(c *gin.Context) {
 	if h.repo == nil {
-		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "tag repository not available"})
+		ServiceUnavailable(c, "标签服务不可用")
 		return
 	}
 
 	rawID := strings.TrimSpace(c.Param("id"))
 	tagID, err := strconv.ParseUint(rawID, 10, 64)
 	if err != nil || tagID == 0 {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid tag id"})
+		BadRequest(c, ErrCodeInvalidRequest, "无效的标签 ID")
 		return
 	}
 
@@ -140,11 +140,11 @@ func (h *HTTPHandler) DeleteTag(c *gin.Context) {
 
 	if err := h.repo.DeleteTag(ctx, uint(tagID)); err != nil {
 		if err == gorm.ErrRecordNotFound {
-			c.JSON(http.StatusNotFound, gin.H{"error": "tag not found"})
+			NotFound(c, ErrCodeTagNotFound, "标签不存在")
 			return
 		}
 		logrus.WithError(err).Error("failed to delete tag")
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to delete tag"})
+		InternalError(c, "删除标签失败")
 		return
 	}
 
@@ -153,20 +153,20 @@ func (h *HTTPHandler) DeleteTag(c *gin.Context) {
 
 func (h *HTTPHandler) UpdateUsageRecordTags(c *gin.Context) {
 	if h.repo == nil {
-		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "tag repository not available"})
+		ServiceUnavailable(c, "标签服务不可用")
 		return
 	}
 
 	rawID := strings.TrimSpace(c.Param("id"))
 	recordID, err := strconv.ParseUint(rawID, 10, 64)
 	if err != nil || recordID == 0 {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid usage record id"})
+		BadRequest(c, ErrCodeInvalidRequest, "无效的使用记录 ID")
 		return
 	}
 
 	var req updateUsageRecordTagsRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid tag payload"})
+		InvalidPayload(c)
 		return
 	}
 
@@ -178,38 +178,38 @@ func (h *HTTPHandler) UpdateUsageRecordTags(c *gin.Context) {
 	record, err := h.repo.GetUsageRecord(ctx, uint(recordID))
 	if err != nil {
 		if err == gorm.ErrRecordNotFound {
-			c.JSON(http.StatusNotFound, gin.H{"error": "usage record not found"})
+			NotFound(c, ErrCodeRecordNotFound, "使用记录不存在")
 			return
 		}
 		logrus.WithError(err).WithField("id", recordID).Error("failed to load usage record")
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to load usage record"})
+		InternalError(c, "加载使用记录失败")
 		return
 	}
 
 	requestUser := CurrentUser(c)
 	if requestUser == nil {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "authentication required"})
+		Unauthorized(c, "需要登录")
 		return
 	}
 	if !requestUser.IsAdmin() && record.UserID != requestUser.ID {
-		c.JSON(http.StatusForbidden, gin.H{"error": "access denied"})
+		Forbidden(c, "无权访问此记录")
 		return
 	}
 
 	if err := h.repo.SetUsageRecordTags(ctx, uint(recordID), tagIDs); err != nil {
 		if err == gorm.ErrRecordNotFound {
-			c.JSON(http.StatusNotFound, gin.H{"error": "usage record not found"})
+			NotFound(c, ErrCodeRecordNotFound, "使用记录不存在")
 			return
 		}
 		logrus.WithError(err).WithField("id", recordID).Error("failed to update usage record tags")
-		c.JSON(http.StatusBadRequest, gin.H{"error": "failed to update tags for usage record"})
+		InternalError(c, "更新使用记录标签失败")
 		return
 	}
 
 	updatedRecord, err := h.repo.GetUsageRecord(ctx, uint(recordID))
 	if err != nil {
 		logrus.WithError(err).WithField("id", recordID).Error("failed to reload usage record after tag update")
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to load updated usage record"})
+		InternalError(c, "加载更新后的使用记录失败")
 		return
 	}
 

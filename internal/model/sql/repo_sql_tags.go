@@ -41,18 +41,19 @@ func (r *GormRepository) CreateTag(ctx context.Context, tag *entity.DbTag) error
 }
 
 // UpdateTag updates tag fields.
-func (r *GormRepository) UpdateTag(ctx context.Context, id uint, updates map[string]interface{}) error {
+func (r *GormRepository) UpdateTag(ctx context.Context, id uint, updates entity.TagUpdates) error {
 	if r == nil || r.db == nil {
 		return fmt.Errorf("repository not initialised")
 	}
 	if id == 0 {
 		return fmt.Errorf("invalid tag id")
 	}
-	if len(updates) == 0 {
+	m := updates.ToMap()
+	if len(m) == 0 {
 		return nil
 	}
 
-	result := r.db.WithContext(ctx).Model(&entity.DbTag{}).Where("id = ?", id).Updates(updates)
+	result := r.db.WithContext(ctx).Model(&entity.DbTag{}).Where("id = ?", id).Updates(m)
 	if result.Error != nil {
 		return result.Error
 	}

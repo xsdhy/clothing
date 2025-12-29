@@ -22,13 +22,13 @@ func (h *HTTPHandler) ListUsageRecords(c *gin.Context) {
 
 	requestUser := CurrentUser(c)
 	if requestUser == nil {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "authentication required"})
+		Unauthorized(c, "需要登录")
 		return
 	}
 
 	var params entity.UsageRecordQuery
 	if err := c.ShouldBindQuery(&params); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid query parameters"})
+		InvalidPayload(c)
 		return
 	}
 	params.TagIDs = parseUintListParam(
@@ -77,7 +77,7 @@ func (h *HTTPHandler) ListUsageRecords(c *gin.Context) {
 	records, meta, err := h.repo.ListUsageRecords(ctx, &params)
 	if err != nil {
 		logrus.WithError(err).Error("failed to list usage records")
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to load usage records"})
+		InternalError(c, "加载使用记录失败")
 		return
 	}
 
@@ -150,14 +150,14 @@ func (h *HTTPHandler) makeUsageRecordItem(record entity.DbUsageRecord) entity.Us
 
 func (h *HTTPHandler) GetUsageRecord(c *gin.Context) {
 	if h.repo == nil {
-		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "usage record repository not available"})
+		ServiceUnavailable(c, "使用记录服务不可用")
 		return
 	}
 
 	idValue := strings.TrimSpace(c.Param("id"))
 	id, err := strconv.ParseUint(idValue, 10, 64)
 	if err != nil || id == 0 {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid usage record id"})
+		BadRequest(c, ErrCodeInvalidRequest, "无效的使用记录 ID")
 		return
 	}
 
@@ -167,21 +167,21 @@ func (h *HTTPHandler) GetUsageRecord(c *gin.Context) {
 	record, err := h.repo.GetUsageRecord(ctx, uint(id))
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			c.JSON(http.StatusNotFound, gin.H{"error": "usage record not found"})
+			NotFound(c, ErrCodeRecordNotFound, "使用记录不存在")
 			return
 		}
 		logrus.WithError(err).WithField("id", id).Error("failed to load usage record")
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to load usage record"})
+		InternalError(c, "加载使用记录失败")
 		return
 	}
 
 	requestUser := CurrentUser(c)
 	if requestUser == nil {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "authentication required"})
+		Unauthorized(c, "需要登录")
 		return
 	}
 	if !requestUser.IsAdmin() && record.UserID != requestUser.ID {
-		c.JSON(http.StatusForbidden, gin.H{"error": "access denied"})
+		Forbidden(c, "无权访问此记录")
 		return
 	}
 
@@ -191,14 +191,14 @@ func (h *HTTPHandler) GetUsageRecord(c *gin.Context) {
 
 func (h *HTTPHandler) DeleteUsageRecord(c *gin.Context) {
 	if h.repo == nil {
-		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "usage record repository not available"})
+		ServiceUnavailable(c, "使用记录服务不可用")
 		return
 	}
 
 	idValue := strings.TrimSpace(c.Param("id"))
 	id, err := strconv.ParseUint(idValue, 10, 64)
 	if err != nil || id == 0 {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid usage record id"})
+		BadRequest(c, ErrCodeInvalidRequest, "无效的使用记录 ID")
 		return
 	}
 
@@ -207,33 +207,33 @@ func (h *HTTPHandler) DeleteUsageRecord(c *gin.Context) {
 
 	requestUser := CurrentUser(c)
 	if requestUser == nil {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "authentication required"})
+		Unauthorized(c, "需要登录")
 		return
 	}
 
 	record, err := h.repo.GetUsageRecord(ctx, uint(id))
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			c.JSON(http.StatusNotFound, gin.H{"error": "usage record not found"})
+			NotFound(c, ErrCodeRecordNotFound, "使用记录不存在")
 			return
 		}
 		logrus.WithError(err).WithField("id", id).Error("failed to load usage record for deletion")
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to delete usage record"})
+		InternalError(c, "删除使用记录失败")
 		return
 	}
 
 	if !requestUser.IsAdmin() && record.UserID != requestUser.ID {
-		c.JSON(http.StatusForbidden, gin.H{"error": "access denied"})
+		Forbidden(c, "无权访问此记录")
 		return
 	}
 
 	if err := h.repo.DeleteUsageRecord(ctx, uint(id)); err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			c.JSON(http.StatusNotFound, gin.H{"error": "usage record not found"})
+			NotFound(c, ErrCodeRecordNotFound, "使用记录不存在")
 			return
 		}
 		logrus.WithError(err).WithField("id", id).Error("failed to delete usage record")
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to delete usage record"})
+		InternalError(c, "删除使用记录失败")
 		return
 	}
 

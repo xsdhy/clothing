@@ -21,17 +21,18 @@ func (r *GormRepository) CreateUser(ctx context.Context, user *entity.DbUser) er
 }
 
 // UpdateUser updates an existing user entry.
-func (r *GormRepository) UpdateUser(ctx context.Context, id uint, updates map[string]interface{}) error {
+func (r *GormRepository) UpdateUser(ctx context.Context, id uint, updates entity.UserUpdates) error {
 	if r == nil || r.db == nil {
 		return fmt.Errorf("repository not initialised")
 	}
 	if id == 0 {
 		return fmt.Errorf("invalid user")
 	}
-	if len(updates) == 0 {
+	m := updates.ToMap()
+	if len(m) == 0 {
 		return nil
 	}
-	return r.db.WithContext(ctx).Model(&entity.DbUser{}).Where("id = ?", id).Updates(updates).Error
+	return r.db.WithContext(ctx).Model(&entity.DbUser{}).Where("id = ?", id).Updates(m).Error
 }
 
 // GetUserByEmail loads a user by email.

@@ -8,24 +8,22 @@ import (
 )
 
 const (
-	// TypeLocal represents storage backed by the local filesystem.
+	// TypeLocal 表示本地文件系统存储。
 	TypeLocal = "local"
-	// TypeS3 represents Amazon S3 or compatible storage backends.
+	// TypeS3 表示 Amazon S3 或兼容的存储后端。
 	TypeS3 = "s3"
-	// TypeOSS represents Alibaba Cloud OSS storage.
+	// TypeOSS 表示阿里云 OSS 存储。
 	TypeOSS = "oss"
-	// TypeCOS represents Tencent Cloud COS storage.
+	// TypeCOS 表示腾讯云 COS 存储。
 	TypeCOS = "cos"
-	// TypeR2 represents Cloudflare R2 storage.
+	// TypeR2 表示 Cloudflare R2 存储。
 	TypeR2 = "r2"
 )
 
-// SaveOptions controls how a file should be persisted by the storage backend.
+// SaveOptions 控制存储后端如何持久化文件。
 //
-// Category are used to organise files on disk, while Extension
-// hints the preferred file extension (without the leading dot).
-// When Extension is empty the storage implementation should attempt to guess a
-// suitable extension.
+// Category 用于在磁盘上组织文件，Extension 提示首选的文件扩展名（不含前导点）。
+// 当 Extension 为空时，存储实现应尝试猜测合适的扩展名。
 type SaveOptions struct {
 	Category     string
 	Extension    string
@@ -33,19 +31,17 @@ type SaveOptions struct {
 	SkipIfExists bool
 }
 
-// Storage is an abstraction that persists binary blobs and returns a storage
-// specific identifier (e.g. a relative path for local storage).
+// Storage 是持久化二进制数据并返回存储特定标识符的抽象（例如本地存储的相对路径）。
 type Storage interface {
 	Save(ctx context.Context, data []byte, opts SaveOptions) (string, error)
 }
 
-// LocalBaseDirProvider is implemented by storage drivers that expose a local
-// directory which can be served directly via HTTP.
+// LocalBaseDirProvider 由暴露可通过 HTTP 直接提供服务的本地目录的存储驱动实现。
 type LocalBaseDirProvider interface {
 	LocalBaseDir() string
 }
 
-// NewStorage instantiates a storage backend based on configuration.
+// NewStorage 根据配置实例化存储后端。
 func NewStorage(cfg config.Config) (Storage, error) {
 	typeName := strings.ToLower(strings.TrimSpace(cfg.StorageType))
 	switch typeName {

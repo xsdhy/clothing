@@ -12,7 +12,7 @@
 | 数据库 ORM | GORM (SQLite/MySQL/PostgreSQL) |
 | 认证 | JWT (golang-jwt/jwt/v5) |
 | 对象存储 | Local / S3 / OSS / COS / R2 |
-| LLM 协议 | OpenAI / Gemini / DashScope / Volcengine |
+| LLM 协议 | OpenAI / Gemini / DashScope / Volcengine / Fal.ai |
 | 前端框架 | React 18 + TypeScript |
 | 构建工具 | Vite |
 | UI 组件库 | MUI (Material-UI) |
@@ -26,40 +26,80 @@ clothing/
 │   ├── main.go                 # 应用入口：配置解析、DB/存储初始化、路由注册、go:embed
 │   ├── web/dist/               # 嵌入的前端静态资源
 │   └── datas/                  # 默认 SQLite 数据与图片目录
+├── migrations/
+│   └── 001_model_cleanup.sql   # 数据库迁移脚本
 ├── internal/
 │   ├── api/                    # HTTP 适配层
 │   │   ├── http_server.go      # HTTPHandler 结构与初始化
+│   │   ├── errors.go           # 统一错误处理（APIError、错误码、便捷函数）
+│   │   ├── errors_test.go      # 错误处理单元测试
 │   │   ├── http_auth.go        # 认证：注册/登录/状态查询
 │   │   ├── auth_middleware.go  # JWT 中间件与权限守卫
-│   │   ├── http_llm.go         # 图片/视频生成、SSE 推送、媒体持久化
-│   │   ├── http_usage_revords.go # 生成记录 CRUD
+│   │   ├── http_llm.go         # 图片/视频生成、SSE 推送
+│   │   ├── http_usage_records.go # 生成记录 CRUD
 │   │   ├── http_files.go       # 文件 URL 生成
 │   │   ├── http_users.go       # 用户管理（Admin）
 │   │   ├── http_tags.go        # 标签管理
 │   │   ├── http_provider_admin.go # Provider/Model 管理（Admin）
 │   │   └── sse.go              # SSE 客户端管理
+│   ├── service/                # 业务逻辑层（新增）
+│   │   ├── generation_service.go      # 内容生成服务（异步生成、存储、通知）
+│   │   └── generation_service_test.go # Service 层单元测试
 │   ├── auth/                   # 认证工具
 │   │   ├── jwt.go              # JWT 签发与验证
 │   │   └── password.go         # bcrypt 密码哈希
 │   ├── config/
 │   │   └── config.go           # 环境变量解析（HTTP、DB、存储、LLM 密钥、JWT）
-│   ├── entity/                 # 数据实体与 DTO
-│   │   ├── db.go               # DbUsageRecord、DbTag、JSON 类型
-│   │   ├── dto.go              # 请求/响应 DTO
-│   │   ├── dto_base.go         # 分页参数与元信息
-│   │   ├── provider.go         # DbProvider、DbModel
-│   │   ├── provider_dto.go     # Provider 管理 DTO
-│   │   └── user.go             # DbUser、认证 DTO
+│   ├── entity/                 # 数据实体与 DTO（分层架构）
+│   │   ├── common/             # 通用类型
+│   │   │   └── types.go        # StringArray, IntArray, JSONMap, Meta, Modality
+│   │   ├── db/                 # 数据库实体
+│   │   │   ├── user.go         # DbUser
+│   │   │   ├── provider.go     # DbProvider, DbModel（含 GenerationMode, EndpointPath, SupportsStreaming, SupportsCancel）
+│   │   │   ├── usage_record.go # DbUsageRecord
+│   │   │   └── tag.go          # DbTag, DbUsageRecordTag
+│   │   ├── dto/                # 传输对象
+│   │   │   ├── auth.go         # 认证请求/响应 DTO
+│   │   │   ├── user.go         # 用户管理 DTO
+│   │   │   ├── provider.go     # Provider 管理 DTO
+│   │   │   ├── generation.go   # 内容生成 DTO（MediaInput, MediaOutput, OutputConfig）
+│   │   │   ├── usage_record.go # 使用记录 DTO
+│   │   │   └── tag.go          # 标签 DTO
+│   │   ├── converter/          # 实体转换器
+│   │   │   ├── user.go         # DbUser <-> UserSummary
+│   │   │   ├── provider.go     # DbProvider <-> ProviderAdminView
+│   │   │   └── usage_record.go # DbUsageRecord <-> UsageRecordItem
+│   │   ├── updates.go          # 类型安全的更新结构体
+│   │   ├── db.go               # 兼容层：重导出 db/ 类型
+│   │   ├── dto.go              # 兼容层：重导出 dto/ 类型
+│   │   ├── user.go             # 兼容层：重导出用户相关类型
+│   │   ├── provider.go         # 兼容层：重导出 Provider 类型
+│   │   └── provider_dto.go     # Provider DTO 转换函数
 │   ├── llm/                    # LLM 服务层
-│   │   ├── llm.go              # AIService 接口
-│   │   ├── factory.go          # Provider 工厂
-│   │   ├── provider_*.go       # 各厂商适配器
-│   │   └── protocol_*.go       # 协议实现
+│   │   ├── llm.go              # AIService 接口（含 Capabilities, Validate 方法）、BaseProvider、ModelCapabilities
+│   │   ├── factory.go          # ProviderFactory（注册机制、实例缓存、MediaService）
+│   │   ├── media_service.go    # MediaService 统一媒体处理（PrepareImage, DownloadAsBase64）
+│   │   ├── task_manager.go     # TaskManager 异步任务管理（TaskStatus, PollConfig, WaitForTask）
+│   │   ├── provider_openrouter.go   # OpenRouter 适配器
+│   │   ├── provider_gemini.go       # Google Gemini 适配器
+│   │   ├── provider_aihubmix.go     # AiHubMix 适配器
+│   │   ├── provider_dashscope.go    # 阿里云 DashScope 适配器
+│   │   ├── provider_falai.go        # Fal.ai 适配器
+│   │   ├── provider_volcengine.go   # 火山引擎适配器
+│   │   ├── protocol_openai.go       # OpenAI 协议实现
+│   │   ├── protocol_gemini.go       # Gemini 协议实现
+│   │   ├── protocol_dashscope.go    # DashScope 协议实现
+│   │   └── protocol_volcengine.go   # Volcengine 协议实现
 │   ├── model/                  # 数据访问层
-│   │   ├── repo.go             # Repository 接口
+│   │   ├── repo.go             # Repository 接口（类型安全的 Update 方法）
 │   │   ├── factory.go          # DB 初始化与自动迁移
 │   │   ├── seed.go             # 默认 Provider 种子数据
 │   │   └── sql/                # GORM 实现
+│   │       ├── repo_sql.go     # GormRepository 基础结构
+│   │       ├── repo_sql_users.go
+│   │       ├── repo_sql_usage.go
+│   │       ├── repo_sql_tags.go
+│   │       └── repo_sql_providers.go
 │   ├── storage/                # 文件存储抽象
 │   │   ├── storage.go          # Storage 接口与工厂
 │   │   ├── local_storage.go    # 本地文件系统
@@ -71,7 +111,6 @@ clothing/
 │   └── utils/                  # 工具函数
 │       ├── image_payload.go    # Base64/URL 解析
 │       ├── image_saver.go      # MIME 推断
-│       ├── media.go            # 媒体处理
 │       └── tools.go            # 通用工具
 ├── web/                        # 前端源码
 │   ├── src/
@@ -97,10 +136,19 @@ clothing/
 │   │   ├── components/         # 可复用组件
 │   │   │   ├── ImageUpload.tsx
 │   │   │   ├── ImageViewer.tsx
-│   │   │   └── UsageRecordDetailDialog.tsx
+│   │   │   ├── UsageRecordDetailDialog.tsx
+│   │   │   └── provider/       # Provider 管理组件
+│   │   │       ├── ProviderSidebar.tsx
+│   │   │       └── ProviderDetailPanel.tsx
 │   │   ├── utils/              # 前端工具
+│   │   │   ├── authStorage.ts
+│   │   │   ├── http.ts
+│   │   │   ├── images.ts
+│   │   │   ├── json.ts
+│   │   │   ├── media.ts
+│   │   │   └── sse.ts
 │   │   └── types/
-│   │       └── index.ts        # TypeScript 类型定义
+│   │       └── index.ts        # TypeScript 类型定义（含 MediaInput, MediaOutput, OutputConfig）
 │   ├── index.html
 │   ├── package.json
 │   └── vite.config.ts
@@ -109,6 +157,81 @@ clothing/
 ├── go.mod / go.sum
 └── AGENTS.md                   # 本文件
 ```
+
+## 核心架构
+
+### 分层架构
+```
+┌─────────────────────────────────────────────────────────────┐
+│                        API Layer                             │
+│  ┌─────────────┐  ┌─────────────┐  ┌─────────────────────┐  │
+│  │ HTTPHandler │  │  Middleware │  │    errors.go        │  │
+│  │ (http_*.go) │  │  (JWT/RBAC) │  │  (统一错误处理)      │  │
+│  └─────────────┘  └─────────────┘  └─────────────────────┘  │
+└─────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+┌─────────────────────────────────────────────────────────────┐
+│                      Service Layer                           │
+│  ┌───────────────────────────────────────────────────────┐  │
+│  │              GenerationService                         │  │
+│  │  - GenerateContentAsync (异步生成)                     │  │
+│  │  - 存储处理、记录更新、通知回调                         │  │
+│  └───────────────────────────────────────────────────────┘  │
+└─────────────────────────────────────────────────────────────┘
+                              │
+              ┌───────────────┼───────────────┐
+              ▼               ▼               ▼
+┌─────────────────┐  ┌───────────────┐  ┌───────────────┐
+│   LLM Layer     │  │  Repository   │  │   Storage     │
+│  (AIService)    │  │   (GORM)      │  │  (S3/OSS/R2)  │
+└─────────────────┘  └───────────────┘  └───────────────┘
+```
+
+### LLM 服务层架构
+```
+┌─────────────────────────────────────────────────────────────┐
+│                      ProviderFactory                         │
+│  ┌─────────────┐  ┌─────────────┐  ┌─────────────────────┐  │
+│  │  Registry   │  │    Cache    │  │    MediaService     │  │
+│  │ (driver →   │  │ (provider   │  │ (PrepareImage,      │  │
+│  │ constructor)│  │  → service) │  │  DownloadAsBase64)  │  │
+│  └─────────────┘  └─────────────┘  └─────────────────────┘  │
+└─────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+┌─────────────────────────────────────────────────────────────┐
+│                       AIService 接口                         │
+│  - GenerateContent(ctx, request, model) → response          │
+│  - Capabilities(model) → ModelCapabilities                   │
+│  - Validate(request, model) → error                          │
+└─────────────────────────────────────────────────────────────┘
+                              │
+        ┌─────────────────────┼─────────────────────┐
+        ▼                     ▼                     ▼
+┌───────────────┐   ┌───────────────┐   ┌───────────────┐
+│  OpenRouter   │   │    Gemini     │   │    FalAI      │
+│  (OpenAI协议)  │   │  (Gemini协议) │   │  (自有协议)    │
+└───────────────┘   └───────────────┘   └───────────────┘
+        │                     │                     │
+        ▼                     ▼                     ▼
+┌───────────────┐   ┌───────────────┐   ┌───────────────┐
+│ protocol_     │   │ protocol_     │   │  (内置实现)    │
+│ openai.go     │   │ gemini.go     │   │               │
+└───────────────┘   └───────────────┘   └───────────────┘
+```
+
+### DbModel 能力字段
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `GenerationMode` | string | 生成模式：text_to_image, image_to_image, text_to_video, image_to_video |
+| `EndpointPath` | string | 端点路径模板（替代 Settings["endpoint"]） |
+| `SupportsStreaming` | bool | 是否支持流式输出 |
+| `SupportsCancel` | bool | 是否支持取消任务 |
+| `InputModalities` | []string | 输入模态：text, image, video |
+| `OutputModalities` | []string | 输出模态：text, image, video |
+| `SupportedSizes` | []string | 支持的输出尺寸 |
+| `SupportedDurations` | []int | 支持的视频时长（秒） |
 
 ## 功能清单
 
@@ -124,12 +247,15 @@ clothing/
 - 输入/输出模态分离配置
 - 异步生成 + SSE 实时状态推送
 - 生成记录自动持久化
+- 统一的 MediaService 处理图片格式转换
+- TaskManager 统一管理异步任务轮询
 
 ### Provider 管理
 - 数据库存储 Provider 配置与凭证
 - 支持 6 种驱动：OpenRouter、Gemini、AiHubMix、DashScope、Fal.ai、Volcengine
 - 管理界面可 CRUD Provider 及其下属 Model
-- Model 支持配置：输入/输出模态、尺寸、时长、价格等
+- Model 支持配置：输入/输出模态、尺寸、时长、价格、生成模式等
+- Factory 模式支持动态注册和实例缓存
 
 ### 标签系统
 - 管理员可创建/编辑/删除标签

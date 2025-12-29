@@ -21,7 +21,7 @@ type Config struct {
 	StorageLocalDir      string `env:"STORAGE_LOCAL_DIR" envDefault:"datas/images"`
 	StoragePublicBaseURL string `env:"STORAGE_PUBLIC_BASE_URL" envDefault:"/files"`
 
-	// S3-compatible storage configuration
+	// S3 兼容存储配置
 	StorageS3Region          string `env:"STORAGE_S3_REGION"`
 	StorageS3Bucket          string `env:"STORAGE_S3_BUCKET"`
 	StorageS3Prefix          string `env:"STORAGE_S3_PREFIX"`
@@ -31,20 +31,20 @@ type Config struct {
 	StorageS3SessionToken    string `env:"STORAGE_S3_SESSION_TOKEN"`
 	StorageS3ForcePathStyle  bool   `env:"STORAGE_S3_FORCE_PATH_STYLE" envDefault:"false"`
 
-	// Alibaba Cloud OSS configuration
+	// 阿里云 OSS 存储配置
 	StorageOSSEndpoint        string `env:"STORAGE_OSS_ENDPOINT"`
 	StorageOSSBucket          string `env:"STORAGE_OSS_BUCKET"`
 	StorageOSSPrefix          string `env:"STORAGE_OSS_PREFIX"`
 	StorageOSSAccessKeyID     string `env:"STORAGE_OSS_ACCESS_KEY_ID"`
 	StorageOSSAccessKeySecret string `env:"STORAGE_OSS_ACCESS_KEY_SECRET"`
 
-	// Tencent Cloud COS configuration
+	// 腾讯云 COS 存储配置
 	StorageCOSBucketURL string `env:"STORAGE_COS_BUCKET_URL"`
 	StorageCOSPrefix    string `env:"STORAGE_COS_PREFIX"`
 	StorageCOSSecretID  string `env:"STORAGE_COS_SECRET_ID"`
 	StorageCOSSecretKey string `env:"STORAGE_COS_SECRET_KEY"`
 
-	// Cloudflare R2 configuration
+	// Cloudflare R2 存储配置
 	StorageR2AccountID       string `env:"STORAGE_R2_ACCOUNT_ID"`
 	StorageR2Endpoint        string `env:"STORAGE_R2_ENDPOINT"`
 	StorageR2Region          string `env:"STORAGE_R2_REGION" envDefault:"auto"`

@@ -18,7 +18,7 @@ const (
 	currentUserContextKey = "current-user"
 )
 
-// RequestUser stores authenticated user details for request context.
+// RequestUser 存储请求上下文中的认证用户信息
 type RequestUser struct {
 	ID          uint
 	Email       string
@@ -26,7 +26,7 @@ type RequestUser struct {
 	Role        string
 }
 
-// IsAdmin returns true if the user has admin level privileges.
+// IsAdmin 判断用户是否具有管理员权限
 func (u *RequestUser) IsAdmin() bool {
 	if u == nil {
 		return false
@@ -39,7 +39,7 @@ func (u *RequestUser) IsAdmin() bool {
 	}
 }
 
-// IsSuperAdmin returns true if the user is a super admin.
+// IsSuperAdmin 判断用户是否为超级管理员
 func (u *RequestUser) IsSuperAdmin() bool {
 	if u == nil {
 		return false
@@ -47,31 +47,43 @@ func (u *RequestUser) IsSuperAdmin() bool {
 	return u.Role == entity.UserRoleSuperAdmin
 }
 
-// AuthMiddleware enforces JWT authentication.
+// AuthMiddleware JWT 认证中间件
 func (h *HTTPHandler) AuthMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		authHeader := strings.TrimSpace(c.GetHeader("Authorization"))
 		if authHeader == "" {
-			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "missing authorization header"})
+			c.AbortWithStatusJSON(http.StatusUnauthorized, APIError{
+				Code:    ErrCodeUnauthorized,
+				Message: "缺少授权头",
+			})
 			return
 		}
 
 		parts := strings.SplitN(authHeader, " ", 2)
 		if len(parts) != 2 || !strings.EqualFold(parts[0], "Bearer") {
-			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "invalid authorization header"})
+			c.AbortWithStatusJSON(http.StatusUnauthorized, APIError{
+				Code:    ErrCodeUnauthorized,
+				Message: "无效的授权头格式",
+			})
 			return
 		}
 
 		tokenString := strings.TrimSpace(parts[1])
 		if tokenString == "" {
-			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "missing bearer token"})
+			c.AbortWithStatusJSON(http.StatusUnauthorized, APIError{
+				Code:    ErrCodeUnauthorized,
+				Message: "缺少 Bearer Token",
+			})
 			return
 		}
 
 		claims, err := h.authManager.ParseToken(tokenString)
 		if err != nil {
 			logrus.WithError(err).Warn("failed to parse jwt token")
-			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "invalid or expired token"})
+			c.AbortWithStatusJSON(http.StatusUnauthorized, APIError{
+				Code:    ErrCodeSessionExpired,
+				Message: "Token 无效或已过期",
+			})
 			return
 		}
 
@@ -81,16 +93,25 @@ func (h *HTTPHandler) AuthMiddleware() gin.HandlerFunc {
 		user, err := h.repo.GetUserByID(ctx, claims.UserID)
 		if err != nil {
 			if errors.Is(err, gorm.ErrRecordNotFound) {
-				c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "user not found"})
+				c.AbortWithStatusJSON(http.StatusUnauthorized, APIError{
+					Code:    ErrCodeUserNotFound,
+					Message: "用户不存在",
+				})
 				return
 			}
 			logrus.WithError(err).WithField("user_id", claims.UserID).Error("failed to load user")
-			c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": "failed to verify user"})
+			c.AbortWithStatusJSON(http.StatusInternalServerError, APIError{
+				Code:    ErrCodeInternalError,
+				Message: "验证用户失败",
+			})
 			return
 		}
 
 		if !user.IsActive {
-			c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": "user is disabled"})
+			c.AbortWithStatusJSON(http.StatusForbidden, APIError{
+				Code:    ErrCodeUserDisabled,
+				Message: "账户已被禁用",
+			})
 			return
 		}
 
@@ -106,19 +127,22 @@ func (h *HTTPHandler) AuthMiddleware() gin.HandlerFunc {
 	}
 }
 
-// RequireAdmin ensures the current user has admin privileges.
+// RequireAdmin 管理员权限守卫中间件
 func (h *HTTPHandler) RequireAdmin() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		user := CurrentUser(c)
 		if user == nil || !user.IsAdmin() {
-			c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": "admin privileges required"})
+			c.AbortWithStatusJSON(http.StatusForbidden, APIError{
+				Code:    ErrCodeForbidden,
+				Message: "需要管理员权限",
+			})
 			return
 		}
 		c.Next()
 	}
 }
 
-// CurrentUser fetches the authenticated user from context.
+// CurrentUser 从上下文获取当前认证用户
 func CurrentUser(c *gin.Context) *RequestUser {
 	value, exists := c.Get(currentUserContextKey)
 	if !exists {

@@ -17,13 +17,13 @@ import (
 
 func (h *HTTPHandler) ListUsers(c *gin.Context) {
 	if h.repo == nil {
-		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "user repository not available"})
+		ServiceUnavailable(c, "用户服务不可用")
 		return
 	}
 
 	var query entity.UserQuery
 	if err := c.ShouldBindQuery(&query); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid query parameters"})
+		InvalidPayload(c)
 		return
 	}
 	if query.Page <= 0 {
@@ -42,7 +42,7 @@ func (h *HTTPHandler) ListUsers(c *gin.Context) {
 	users, meta, err := h.repo.ListUsers(ctx, &query)
 	if err != nil {
 		logrus.WithError(err).Error("failed to list users")
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to load users"})
+		InternalError(c, "加载用户列表失败")
 		return
 	}
 
@@ -60,46 +60,46 @@ func (h *HTTPHandler) ListUsers(c *gin.Context) {
 func (h *HTTPHandler) CreateUser(c *gin.Context) {
 	requestUser := CurrentUser(c)
 	if requestUser == nil || !requestUser.IsAdmin() {
-		c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": "admin privileges required"})
+		Forbidden(c, "需要管理员权限")
 		return
 	}
 
 	var req entity.UserCreateRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid user payload"})
+		InvalidPayload(c)
 		return
 	}
 
 	email := strings.ToLower(strings.TrimSpace(req.Email))
 	if email == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "email is required"})
+		MissingField(c, "email")
 		return
 	}
 
 	role := sanitizeRole(req.Role)
 	if role == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid role"})
+		BadRequest(c, ErrCodeInvalidRequest, "无效的角色")
 		return
 	}
 	if role == entity.UserRoleSuperAdmin {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "cannot create super admin"})
+		BadRequest(c, ErrCodeInvalidRequest, "无法创建超级管理员")
 		return
 	}
 	if role == entity.UserRoleAdmin && !requestUser.IsSuperAdmin() {
-		c.JSON(http.StatusForbidden, gin.H{"error": "only super admin can create admin users"})
+		Forbidden(c, "只有超级管理员才能创建管理员用户")
 		return
 	}
 
 	password := strings.TrimSpace(req.Password)
 	if password == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "password is required"})
+		MissingField(c, "password")
 		return
 	}
 
 	hash, err := auth.HashPassword(password)
 	if err != nil {
 		logrus.WithError(err).Error("failed to hash password for new user")
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to create user"})
+		InternalError(c, "创建用户失败")
 		return
 	}
 
@@ -121,11 +121,11 @@ func (h *HTTPHandler) CreateUser(c *gin.Context) {
 
 	if err := h.repo.CreateUser(ctx, user); err != nil {
 		if errors.Is(err, gorm.ErrDuplicatedKey) {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "email already registered"})
+			BadRequest(c, ErrCodeEmailExists, "邮箱已被注册")
 			return
 		}
 		logrus.WithError(err).Error("failed to create user")
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to create user"})
+		InternalError(c, "创建用户失败")
 		return
 	}
 
@@ -135,20 +135,20 @@ func (h *HTTPHandler) CreateUser(c *gin.Context) {
 func (h *HTTPHandler) UpdateUser(c *gin.Context) {
 	requestUser := CurrentUser(c)
 	if requestUser == nil || !requestUser.IsAdmin() {
-		c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": "admin privileges required"})
+		Forbidden(c, "需要管理员权限")
 		return
 	}
 
 	idValue := strings.TrimSpace(c.Param("id"))
 	id, err := strconv.ParseUint(idValue, 10, 64)
 	if err != nil || id == 0 {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid user id"})
+		BadRequest(c, ErrCodeInvalidRequest, "无效的用户 ID")
 		return
 	}
 
 	var req entity.UserUpdateRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid user payload"})
+		InvalidPayload(c)
 		return
 	}
 
@@ -158,81 +158,82 @@ func (h *HTTPHandler) UpdateUser(c *gin.Context) {
 	dbUser, err := h.repo.GetUserByID(ctx, uint(id))
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			c.JSON(http.StatusNotFound, gin.H{"error": "user not found"})
+			NotFound(c, ErrCodeUserNotFound, "用户不存在")
 			return
 		}
 		logrus.WithError(err).Error("failed to load user for update")
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to update user"})
+		InternalError(c, "更新用户失败")
 		return
 	}
 
 	if dbUser.Role == entity.UserRoleSuperAdmin && requestUser.ID != dbUser.ID {
-		c.JSON(http.StatusForbidden, gin.H{"error": "super admin cannot be modified"})
+		Forbidden(c, "超级管理员不可被修改")
 		return
 	}
 
-	updates := make(map[string]interface{})
+	var updates entity.UserUpdates
 
 	if req.DisplayName != nil {
-		updates["display_name"] = strings.TrimSpace(*req.DisplayName)
+		displayName := strings.TrimSpace(*req.DisplayName)
+		updates.DisplayName = &displayName
 	}
 
 	if req.Password != nil {
 		password := strings.TrimSpace(*req.Password)
 		if password == "" {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "password must not be empty"})
+			BadRequest(c, ErrCodeMissingField, "密码不能为空")
 			return
 		}
 		hash, err := auth.HashPassword(password)
 		if err != nil {
 			logrus.WithError(err).Error("failed to hash password for update")
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to update user"})
+			InternalError(c, "更新用户失败")
 			return
 		}
-		updates["password_hash"] = hash
+		updates.PasswordHash = &hash
 	}
 
 	if req.Role != nil {
 		if !requestUser.IsSuperAdmin() {
-			c.JSON(http.StatusForbidden, gin.H{"error": "only super admin can change roles"})
+			Forbidden(c, "只有超级管理员才能修改角色")
 			return
 		}
 		targetRole := sanitizeRole(*req.Role)
 		if targetRole == "" || targetRole == entity.UserRoleSuperAdmin {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid role"})
+			BadRequest(c, ErrCodeInvalidRequest, "无效的角色")
 			return
 		}
-		updates["role"] = targetRole
+		updates.Role = &targetRole
 	}
 
 	if req.IsActive != nil {
 		if dbUser.Role == entity.UserRoleSuperAdmin {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "super admin must remain active"})
+			BadRequest(c, ErrCodeInvalidRequest, "超级管理员必须保持激活状态")
 			return
 		}
 		if dbUser.Role == entity.UserRoleAdmin && !requestUser.IsSuperAdmin() {
-			c.JSON(http.StatusForbidden, gin.H{"error": "only super admin can change admin status"})
+			Forbidden(c, "只有超级管理员才能修改管理员状态")
 			return
 		}
-		updates["is_active"] = *req.IsActive
+		updates.IsActive = req.IsActive
 	}
 
-	if len(updates) == 0 {
+	if updates.IsEmpty() {
 		c.JSON(http.StatusOK, makeUserSummary(dbUser))
 		return
 	}
 
 	if err := h.repo.UpdateUser(ctx, dbUser.ID, updates); err != nil {
 		logrus.WithError(err).Error("failed to update user")
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to update user"})
+		InternalError(c, "更新用户失败")
 		return
 	}
 
-	// Refresh
+	// 刷新用户信息
 	updated, err := h.repo.GetUserByID(ctx, dbUser.ID)
 	if err != nil {
 		logrus.WithError(err).Error("failed to reload user after update")
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to load updated user"})
+		InternalError(c, "加载更新后的用户失败")
 		return
 	}
 
@@ -242,19 +243,19 @@ func (h *HTTPHandler) UpdateUser(c *gin.Context) {
 func (h *HTTPHandler) DeleteUser(c *gin.Context) {
 	requestUser := CurrentUser(c)
 	if requestUser == nil || !requestUser.IsAdmin() {
-		c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": "admin privileges required"})
+		Forbidden(c, "需要管理员权限")
 		return
 	}
 
 	idValue := strings.TrimSpace(c.Param("id"))
 	id, err := strconv.ParseUint(idValue, 10, 64)
 	if err != nil || id == 0 {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid user id"})
+		BadRequest(c, ErrCodeInvalidRequest, "无效的用户 ID")
 		return
 	}
 
 	if requestUser.ID == uint(id) {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "cannot delete current user"})
+		BadRequest(c, ErrCodeCannotDeleteSelf, "不能删除当前登录用户")
 		return
 	}
 
@@ -264,31 +265,31 @@ func (h *HTTPHandler) DeleteUser(c *gin.Context) {
 	dbUser, err := h.repo.GetUserByID(ctx, uint(id))
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			c.JSON(http.StatusNotFound, gin.H{"error": "user not found"})
+			NotFound(c, ErrCodeUserNotFound, "用户不存在")
 			return
 		}
 		logrus.WithError(err).Error("failed to load user for deletion")
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to delete user"})
+		InternalError(c, "删除用户失败")
 		return
 	}
 
 	if dbUser.Role == entity.UserRoleSuperAdmin {
-		c.JSON(http.StatusForbidden, gin.H{"error": "super admin cannot be deleted"})
+		Forbidden(c, "超级管理员不可被删除")
 		return
 	}
 
 	if dbUser.Role == entity.UserRoleAdmin && !requestUser.IsSuperAdmin() {
-		c.JSON(http.StatusForbidden, gin.H{"error": "only super admin can delete admin user"})
+		Forbidden(c, "只有超级管理员才能删除管理员用户")
 		return
 	}
 
 	if err := h.repo.DeleteUser(ctx, uint(id)); err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			c.JSON(http.StatusNotFound, gin.H{"error": "user not found"})
+			NotFound(c, ErrCodeUserNotFound, "用户不存在")
 			return
 		}
 		logrus.WithError(err).Error("failed to delete user")
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to delete user"})
+		InternalError(c, "删除用户失败")
 		return
 	}
 

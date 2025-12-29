@@ -63,15 +63,16 @@ func syncExistingProvider(ctx context.Context, repo Repository, existing *entity
 		return nil
 	}
 
-	updates := make(map[string]interface{})
+	var updates entity.ProviderUpdates
 	envAPIKey := strings.TrimSpace(seed.Provider.APIKey)
 	if envAPIKey != "" && strings.TrimSpace(existing.APIKey) == "" {
-		updates["api_key"] = envAPIKey
+		updates.APIKey = &envAPIKey
 		if !existing.IsActive {
-			updates["is_active"] = true
+			isActive := true
+			updates.IsActive = &isActive
 		}
 	}
-	if len(updates) > 0 {
+	if !updates.IsEmpty() {
 		if err := repo.UpdateProvider(ctx, existing.ID, updates); err != nil {
 			return err
 		}
@@ -216,10 +217,8 @@ func buildDefaultProviderSeeds(cfg config.Config) []providerSeed {
 					IsActive:         true,
 					InputModalities:  entity.StringArray{"text"},
 					OutputModalities: entity.StringArray{"image"},
-					Settings: entity.JSONMap{
-						"endpoint": "/fal-ai/hunyuan-image/v3/text-to-image",
-						"mode":     "text_to_image",
-					},
+					GenerationMode:   "text_to_image",
+					EndpointPath:     "/fal-ai/hunyuan-image/v3/text-to-image",
 				},
 				{
 					ModelID:          "fal-ai/qwen-image-edit/image-to-image",
@@ -228,10 +227,8 @@ func buildDefaultProviderSeeds(cfg config.Config) []providerSeed {
 					IsActive:         true,
 					InputModalities:  entity.StringArray{"text", "image"},
 					OutputModalities: entity.StringArray{"image"},
-					Settings: entity.JSONMap{
-						"endpoint": "/fal-ai/qwen-image-edit/image-to-image",
-						"mode":     "image_to_image",
-					},
+					GenerationMode:   "image_to_image",
+					EndpointPath:     "/fal-ai/qwen-image-edit/image-to-image",
 				},
 			},
 		},

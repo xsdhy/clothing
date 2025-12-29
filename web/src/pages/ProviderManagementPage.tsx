@@ -61,6 +61,11 @@ interface ModelDialogForm {
   default_size: string;
   default_duration: string;
   settings: string;
+  // New fields for model capabilities
+  generation_mode: string;
+  endpoint_path: string;
+  supports_streaming: boolean;
+  supports_cancel: boolean;
   is_active: boolean;
 }
 
@@ -129,6 +134,10 @@ const defaultModelForm = (): ModelDialogForm => ({
   default_size: "",
   default_duration: "",
   settings: "",
+  generation_mode: "",
+  endpoint_path: "",
+  supports_streaming: false,
+  supports_cancel: false,
   is_active: true,
 });
 
@@ -154,6 +163,10 @@ const toModelDialogForm = (model: ProviderModelAdmin): ModelDialogForm => ({
       ? String(model.default_duration)
       : "",
   settings: jsonStringify(model.settings as Record<string, unknown>),
+  generation_mode: model.generation_mode ?? "",
+  endpoint_path: model.endpoint_path ?? "",
+  supports_streaming: model.supports_streaming ?? false,
+  supports_cancel: model.supports_cancel ?? false,
   is_active: model.is_active,
 });
 
@@ -594,6 +607,10 @@ const ProviderManagementPage: React.FC = () => {
             default_size: trimmedDefaultSize || undefined,
             default_duration: parsedDefaultDuration,
             settings: settingsObject,
+            generation_mode: modelForm.generation_mode.trim() || undefined,
+            endpoint_path: modelForm.endpoint_path.trim() || undefined,
+            supports_streaming: modelForm.supports_streaming,
+            supports_cancel: modelForm.supports_cancel,
             is_active: modelForm.is_active,
           });
           setMessage("模型已创建");
@@ -688,6 +705,21 @@ const ProviderManagementPage: React.FC = () => {
         Object.keys(existingModel.settings).length > 0
       ) {
         payload.settings = {};
+      }
+      // New fields comparison
+      const trimmedGenerationMode = modelForm.generation_mode.trim();
+      if (trimmedGenerationMode !== (existingModel.generation_mode ?? "")) {
+        payload.generation_mode = trimmedGenerationMode;
+      }
+      const trimmedEndpointPath = modelForm.endpoint_path.trim();
+      if (trimmedEndpointPath !== (existingModel.endpoint_path ?? "")) {
+        payload.endpoint_path = trimmedEndpointPath;
+      }
+      if (modelForm.supports_streaming !== (existingModel.supports_streaming ?? false)) {
+        payload.supports_streaming = modelForm.supports_streaming;
+      }
+      if (modelForm.supports_cancel !== (existingModel.supports_cancel ?? false)) {
+        payload.supports_cancel = modelForm.supports_cancel;
       }
       if (modelForm.is_active !== existingModel.is_active) {
         payload.is_active = modelForm.is_active;
@@ -1217,6 +1249,67 @@ const ProviderManagementPage: React.FC = () => {
                       fullWidth
                       size="small"
                     />
+                    <Stack direction="row" spacing={1}>
+                      <TextField
+                        label="生成模式"
+                        value={modelForm.generation_mode}
+                        onChange={(event) =>
+                          setModelForm((prev) => ({
+                            ...prev,
+                            generation_mode: event.target.value,
+                          }))
+                        }
+                        placeholder="text_to_image"
+                        helperText="text_to_image, image_to_image, text_to_video, image_to_video"
+                        fullWidth
+                        size="small"
+                      />
+                      <TextField
+                        label="端点路径"
+                        value={modelForm.endpoint_path}
+                        onChange={(event) =>
+                          setModelForm((prev) => ({
+                            ...prev,
+                            endpoint_path: event.target.value,
+                          }))
+                        }
+                        placeholder="/v1/images/generations"
+                        fullWidth
+                        size="small"
+                      />
+                    </Stack>
+                    <Stack direction="row" spacing={2}>
+                      <FormControlLabel
+                        control={
+                          <Switch
+                            checked={modelForm.supports_streaming}
+                            onChange={(event) =>
+                              setModelForm((prev) => ({
+                                ...prev,
+                                supports_streaming: event.target.checked,
+                              }))
+                            }
+                            size="small"
+                          />
+                        }
+                        label="支持流式输出"
+                      />
+                      <FormControlLabel
+                        control={
+                          <Switch
+                            checked={modelForm.supports_cancel}
+                            onChange={(event) =>
+                              setModelForm((prev) => ({
+                                ...prev,
+                                supports_cancel: event.target.checked,
+                              }))
+                            }
+                            size="small"
+                          />
+                        }
+                        label="支持取消任务"
+                      />
+                    </Stack>
                   </Stack>
                 </Grid>
               </Grid>

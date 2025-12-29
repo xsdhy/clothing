@@ -21,17 +21,18 @@ func (r *GormRepository) CreateUsageRecord(ctx context.Context, record *entity.D
 }
 
 // UpdateUsageRecord updates a usage record with the provided fields.
-func (r *GormRepository) UpdateUsageRecord(ctx context.Context, id uint, updates map[string]interface{}) error {
+func (r *GormRepository) UpdateUsageRecord(ctx context.Context, id uint, updates entity.UsageRecordUpdates) error {
 	if r == nil || r.db == nil {
 		return fmt.Errorf("repository not initialised")
 	}
 	if id == 0 {
 		return fmt.Errorf("invalid usage record id")
 	}
-	if len(updates) == 0 {
-		return fmt.Errorf("no updates provided")
+	m := updates.ToMap()
+	if len(m) == 0 {
+		return nil
 	}
-	return r.db.WithContext(ctx).Model(&entity.DbUsageRecord{}).Where("id = ?", id).Updates(updates).Error
+	return r.db.WithContext(ctx).Model(&entity.DbUsageRecord{}).Where("id = ?", id).Updates(m).Error
 }
 
 // ListUsageRecords retrieves paginated usage records.

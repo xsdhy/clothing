@@ -10,7 +10,7 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 )
 
-// Claims represents JWT claims for authenticated requests.
+// Claims JWT 令牌中的声明信息
 type Claims struct {
 	UserID uint   `json:"uid"`
 	Email  string `json:"email"`
@@ -18,14 +18,14 @@ type Claims struct {
 	jwt.RegisteredClaims
 }
 
-// Manager encapsulates JWT generation and validation.
+// Manager JWT 管理器，封装 JWT 的生成和验证逻辑
 type Manager struct {
 	secret []byte
 	issuer string
 	expiry time.Duration
 }
 
-// NewManager creates a new JWT manager.
+// NewManager 创建新的 JWT 管理器实例
 func NewManager(secret, issuer string, expiry time.Duration) (*Manager, error) {
 	trimmed := strings.TrimSpace(secret)
 	if trimmed == "" {
@@ -44,7 +44,7 @@ func NewManager(secret, issuer string, expiry time.Duration) (*Manager, error) {
 	}, nil
 }
 
-// GenerateToken issues a signed JWT for the provided user.
+// GenerateToken 为指定用户生成签名的 JWT 令牌
 func (m *Manager) GenerateToken(user *entity.DbUser) (string, time.Time, error) {
 	if m == nil {
 		return "", time.Time{}, errors.New("jwt manager is nil")
@@ -76,7 +76,7 @@ func (m *Manager) GenerateToken(user *entity.DbUser) (string, time.Time, error) 
 	return signed, expiry, nil
 }
 
-// ParseToken validates the token and returns claims.
+// ParseToken 验证 JWT 令牌并返回声明信息
 func (m *Manager) ParseToken(tokenString string) (*Claims, error) {
 	if m == nil {
 		return nil, errors.New("jwt manager is nil")

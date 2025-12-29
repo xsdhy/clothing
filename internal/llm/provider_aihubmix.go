@@ -68,5 +68,30 @@ func (p *AiHubMix) GenerateContent(ctx context.Context, request entity.GenerateC
 	// Yes, it uses Gemini protocol.
 
 	// The GenerateContentByGeminiProtocol function returns (*entity.GenerateContentResponse, error).
-	return GenerateContentByGeminiProtocol(ctx, p.apiKey, p.endpoint, dbModel.ModelID, request.Prompt, request.Inputs.Images)
+	return GenerateContentByGeminiProtocol(ctx, p.apiKey, p.endpoint, dbModel.ModelID, request.Prompt, request.GetImages())
+}
+
+// Capabilities returns the capabilities of the model.
+func (p *AiHubMix) Capabilities(model entity.DbModel) *ModelCapabilities {
+	return &ModelCapabilities{
+		InputModalities:    model.InputModalities,
+		OutputModalities:   model.OutputModalities,
+		MaxImages:          model.MaxImages,
+		SupportedSizes:     model.SupportedSizes,
+		SupportedDurations: model.SupportedDurations,
+		SupportsStream:     model.SupportsStreaming,
+		SupportsCancel:     model.SupportsCancel,
+		SupportsAsync:      model.IsVideoModel(),
+	}
+}
+
+// Validate checks if the request is valid for the model.
+func (p *AiHubMix) Validate(request entity.GenerateContentRequest, model entity.DbModel) error {
+	if strings.TrimSpace(request.Prompt) == "" {
+		return errors.New("prompt is required")
+	}
+	if model.IsVideoModel() {
+		return errors.New("video generation not supported")
+	}
+	return nil
 }

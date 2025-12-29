@@ -17,10 +17,10 @@ var providerIDPattern = regexp.MustCompile(`^[a-z0-9][a-z0-9_-]*$`)
 func normaliseProviderID(raw string) (string, error) {
 	trimmed := strings.TrimSpace(strings.ToLower(raw))
 	if trimmed == "" {
-		return "", errors.New("provider id is required")
+		return "", errors.New("服务商 ID 不能为空")
 	}
 	if !providerIDPattern.MatchString(trimmed) {
-		return "", errors.New("provider id must contain only lowercase letters, numbers, hyphen, or underscore")
+		return "", errors.New("服务商 ID 只能包含小写字母、数字、连字符或下划线")
 	}
 	return trimmed, nil
 }
@@ -53,7 +53,7 @@ func normaliseIntSlice(values []int) []int {
 
 func (h *HTTPHandler) AdminListProviders(c *gin.Context) {
 	if h.repo == nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "provider repository not configured"})
+		InternalError(c, "服务商仓储未配置")
 		return
 	}
 
@@ -61,44 +61,44 @@ func (h *HTTPHandler) AdminListProviders(c *gin.Context) {
 	providers, err := h.repo.ListProviders(ctx, true)
 	if err != nil {
 		logrus.WithError(err).Error("failed to list providers")
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to list providers"})
+		InternalError(c, "加载服务商列表失败")
 		return
 	}
 
 	views := make([]entity.ProviderAdminView, 0, len(providers))
 	for _, provider := range providers {
-		views = append(views, provider.ToAdminView(true))
+		views = append(views, entity.ProviderToAdminView(provider, true))
 	}
 	c.JSON(http.StatusOK, gin.H{"providers": views})
 }
 
 func (h *HTTPHandler) CreateProvider(c *gin.Context) {
 	if h.repo == nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "provider repository not configured"})
+		InternalError(c, "服务商仓储未配置")
 		return
 	}
 
 	var payload entity.CreateProviderRequest
 	if err := c.ShouldBindJSON(&payload); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request payload"})
+		InvalidPayload(c)
 		return
 	}
 
 	id, err := normaliseProviderID(payload.ID)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		BadRequest(c, ErrCodeInvalidRequest, err.Error())
 		return
 	}
 
 	name := strings.TrimSpace(payload.Name)
 	if name == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "name is required"})
+		MissingField(c, "name")
 		return
 	}
 
 	driver := strings.TrimSpace(strings.ToLower(payload.Driver))
 	if driver == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "driver is required"})
+		MissingField(c, "driver")
 		return
 	}
 
@@ -123,22 +123,22 @@ func (h *HTTPHandler) CreateProvider(c *gin.Context) {
 	ctx := c.Request.Context()
 	if err := h.repo.CreateProvider(ctx, provider); err != nil {
 		logrus.WithError(err).WithField("provider_id", id).Error("failed to create provider")
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		InternalError(c, "创建服务商失败: "+err.Error())
 		return
 	}
 
-	c.JSON(http.StatusCreated, gin.H{"provider": provider.ToAdminView(false)})
+	c.JSON(http.StatusCreated, gin.H{"provider": entity.ProviderToAdminView(*provider, false)})
 }
 
 func (h *HTTPHandler) GetProviderDetail(c *gin.Context) {
 	if h.repo == nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "provider repository not configured"})
+		InternalError(c, "服务商仓储未配置")
 		return
 	}
 
 	id, err := normaliseProviderID(c.Param("id"))
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		BadRequest(c, ErrCodeInvalidRequest, err.Error())
 		return
 	}
 
@@ -146,111 +146,115 @@ func (h *HTTPHandler) GetProviderDetail(c *gin.Context) {
 	provider, err := h.repo.GetProvider(ctx, id)
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			c.JSON(http.StatusNotFound, gin.H{"error": "provider not found"})
+			NotFound(c, ErrCodeProviderNotFound, "服务商不存在")
 			return
 		}
 		logrus.WithError(err).WithField("provider_id", id).Error("failed to load provider")
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to load provider"})
+		InternalError(c, "加载服务商失败")
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"provider": provider.ToAdminView(true)})
+	c.JSON(http.StatusOK, gin.H{"provider": entity.ProviderToAdminView(*provider, true)})
 }
 
 func (h *HTTPHandler) UpdateProvider(c *gin.Context) {
 	if h.repo == nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "provider repository not configured"})
+		InternalError(c, "服务商仓储未配置")
 		return
 	}
 
 	id, err := normaliseProviderID(c.Param("id"))
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		BadRequest(c, ErrCodeInvalidRequest, err.Error())
 		return
 	}
 
 	var payload entity.UpdateProviderRequest
 	if err := c.ShouldBindJSON(&payload); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request payload"})
+		InvalidPayload(c)
 		return
 	}
 
-	updates := make(map[string]interface{})
+	var updates entity.ProviderUpdates
 
 	if payload.Name != nil {
 		trimmed := strings.TrimSpace(*payload.Name)
 		if trimmed == "" {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "name cannot be empty"})
+			BadRequest(c, ErrCodeMissingField, "名称不能为空")
 			return
 		}
-		updates["name"] = trimmed
+		updates.Name = &trimmed
 	}
 	if payload.Driver != nil {
 		driver := strings.TrimSpace(strings.ToLower(*payload.Driver))
 		if driver == "" {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "driver cannot be empty"})
+			BadRequest(c, ErrCodeMissingField, "驱动不能为空")
 			return
 		}
-		updates["driver"] = driver
+		updates.Driver = &driver
 	}
 	if payload.Description != nil {
-		updates["description"] = strings.TrimSpace(*payload.Description)
+		description := strings.TrimSpace(*payload.Description)
+		updates.Description = &description
 	}
 	if payload.APIKey != nil {
-		updates["api_key"] = strings.TrimSpace(*payload.APIKey)
+		apiKey := strings.TrimSpace(*payload.APIKey)
+		updates.APIKey = &apiKey
 	}
 	if payload.BaseURL != nil {
-		updates["base_url"] = strings.TrimSpace(*payload.BaseURL)
+		baseURL := strings.TrimSpace(*payload.BaseURL)
+		updates.BaseURL = &baseURL
 	}
 	if payload.Config != nil {
-		updates["config"] = entity.JSONMap(payload.Config)
+		config := entity.JSONMap(payload.Config)
+		updates.Config = &config
 	}
 	if payload.IsActive != nil {
-		updates["is_active"] = *payload.IsActive
+		updates.IsActive = payload.IsActive
 	}
 
-	if len(updates) == 0 {
-		c.JSON(http.StatusOK, gin.H{"message": "no changes supplied"})
+	if updates.IsEmpty() {
+		c.JSON(http.StatusOK, gin.H{"message": "无更新内容"})
 		return
 	}
 
 	ctx := c.Request.Context()
 	if err := h.repo.UpdateProvider(ctx, id, updates); err != nil {
 		logrus.WithError(err).WithField("provider_id", id).Error("failed to update provider")
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		InternalError(c, "更新服务商失败: "+err.Error())
 		return
 	}
 
 	provider, err := h.repo.GetProvider(ctx, id)
 	if err != nil {
 		logrus.WithError(err).WithField("provider_id", id).Error("failed to reload provider after update")
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to load provider"})
+		InternalError(c, "加载服务商失败")
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"provider": provider.ToAdminView(true)})
+	c.JSON(http.StatusOK, gin.H{"provider": entity.ProviderToAdminView(*provider, true)})
 }
 
 func (h *HTTPHandler) DeleteProvider(c *gin.Context) {
 	if h.repo == nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "provider repository not configured"})
+		InternalError(c, "服务商仓储未配置")
 		return
 	}
 
 	id, err := normaliseProviderID(c.Param("id"))
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		BadRequest(c, ErrCodeInvalidRequest, err.Error())
 		return
 	}
 
 	ctx := c.Request.Context()
 	if err := h.repo.DeleteProvider(ctx, id); err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			c.JSON(http.StatusNotFound, gin.H{"error": "provider not found"})
+			NotFound(c, ErrCodeProviderNotFound, "服务商不存在")
 			return
 		}
 		logrus.WithError(err).WithField("provider_id", id).Error("failed to delete provider")
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to delete provider"})
+		InternalError(c, "删除服务商失败")
 		return
 	}
 
@@ -259,13 +263,13 @@ func (h *HTTPHandler) DeleteProvider(c *gin.Context) {
 
 func (h *HTTPHandler) ListProviderModels(c *gin.Context) {
 	if h.repo == nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "provider repository not configured"})
+		InternalError(c, "服务商仓储未配置")
 		return
 	}
 
 	id, err := normaliseProviderID(c.Param("id"))
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		BadRequest(c, ErrCodeInvalidRequest, err.Error())
 		return
 	}
 
@@ -273,48 +277,48 @@ func (h *HTTPHandler) ListProviderModels(c *gin.Context) {
 	provider, err := h.repo.GetProvider(ctx, id)
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			c.JSON(http.StatusNotFound, gin.H{"error": "provider not found"})
+			NotFound(c, ErrCodeProviderNotFound, "服务商不存在")
 			return
 		}
 		logrus.WithError(err).WithField("provider_id", id).Error("failed to load provider for model listing")
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to list models"})
+		InternalError(c, "加载模型列表失败")
 		return
 	}
 
 	results := make([]entity.ProviderModelSummary, 0, len(provider.Models))
 	for _, model := range provider.Models {
-		results = append(results, model.ToAdminView())
+		results = append(results, entity.ModelToAdminView(model))
 	}
 	c.JSON(http.StatusOK, gin.H{"models": results})
 }
 
 func (h *HTTPHandler) CreateProviderModel(c *gin.Context) {
 	if h.repo == nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "provider repository not configured"})
+		InternalError(c, "服务商仓储未配置")
 		return
 	}
 
 	id, err := normaliseProviderID(c.Param("id"))
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		BadRequest(c, ErrCodeInvalidRequest, err.Error())
 		return
 	}
 
 	var payload entity.CreateModelRequest
 	if err := c.ShouldBindJSON(&payload); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request payload"})
+		InvalidPayload(c)
 		return
 	}
 
 	modelID := strings.TrimSpace(payload.ModelID)
 	if modelID == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "model_id is required"})
+		MissingField(c, "model_id")
 		return
 	}
 
 	name := strings.TrimSpace(payload.Name)
 	if name == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "name is required"})
+		MissingField(c, "name")
 		return
 	}
 
@@ -336,6 +340,10 @@ func (h *HTTPHandler) CreateProviderModel(c *gin.Context) {
 		SupportedDurations: entity.IntArray(normaliseIntSlice(payload.SupportedDurations)),
 		DefaultSize:        strings.TrimSpace(payload.DefaultSize),
 		DefaultDuration:    0,
+		GenerationMode:     strings.TrimSpace(payload.GenerationMode),
+		EndpointPath:       strings.TrimSpace(payload.EndpointPath),
+		SupportsStreaming:  false,
+		SupportsCancel:     false,
 		IsActive:           isActive,
 	}
 	if payload.MaxImages != nil {
@@ -347,15 +355,21 @@ func (h *HTTPHandler) CreateProviderModel(c *gin.Context) {
 	if payload.Settings != nil {
 		model.Settings = entity.JSONMap(payload.Settings)
 	}
+	if payload.SupportsStreaming != nil {
+		model.SupportsStreaming = *payload.SupportsStreaming
+	}
+	if payload.SupportsCancel != nil {
+		model.SupportsCancel = *payload.SupportsCancel
+	}
 
 	ctx := c.Request.Context()
 	if _, err := h.repo.GetProvider(ctx, id); err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			c.JSON(http.StatusNotFound, gin.H{"error": "provider not found"})
+			NotFound(c, ErrCodeProviderNotFound, "服务商不存在")
 			return
 		}
 		logrus.WithError(err).WithField("provider_id", id).Error("failed to load provider before creating model")
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to create model"})
+		InternalError(c, "创建模型失败")
 		return
 	}
 
@@ -364,146 +378,168 @@ func (h *HTTPHandler) CreateProviderModel(c *gin.Context) {
 			"provider_id": id,
 			"model_id":    modelID,
 		}).Error("failed to create provider model")
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		InternalError(c, "创建模型失败: "+err.Error())
 		return
 	}
 
-	c.JSON(http.StatusCreated, gin.H{"model": model.ToAdminView()})
+	c.JSON(http.StatusCreated, gin.H{"model": entity.ModelToAdminView(*model)})
 }
 
 func (h *HTTPHandler) UpdateProviderModel(c *gin.Context) {
 	if h.repo == nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "provider repository not configured"})
+		InternalError(c, "服务商仓储未配置")
 		return
 	}
 
 	id, err := normaliseProviderID(c.Param("id"))
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		BadRequest(c, ErrCodeInvalidRequest, err.Error())
 		return
 	}
 
 	modelID := strings.TrimSpace(c.Param("model_id"))
 	if modelID == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "model_id is required"})
+		MissingField(c, "model_id")
 		return
 	}
 
 	var payload entity.UpdateModelRequest
 	if err := c.ShouldBindJSON(&payload); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request payload"})
+		InvalidPayload(c)
 		return
 	}
 
-	updates := make(map[string]interface{})
+	var updates entity.ModelUpdates
 
 	if payload.Name != nil {
 		trimmed := strings.TrimSpace(*payload.Name)
 		if trimmed == "" {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "name cannot be empty"})
+			BadRequest(c, ErrCodeMissingField, "名称不能为空")
 			return
 		}
-		updates["name"] = trimmed
+		updates.Name = &trimmed
 	}
 	if payload.Description != nil {
-		updates["description"] = strings.TrimSpace(*payload.Description)
+		description := strings.TrimSpace(*payload.Description)
+		updates.Description = &description
 	}
 	if payload.Price != nil {
-		updates["price"] = strings.TrimSpace(*payload.Price)
+		price := strings.TrimSpace(*payload.Price)
+		updates.Price = &price
 	}
 	if payload.MaxImages != nil {
-		updates["max_images"] = *payload.MaxImages
+		updates.MaxImages = payload.MaxImages
 	}
 	if payload.InputModalities != nil {
-		updates["input_modalities"] = entity.StringArray(normaliseStringSlice(*payload.InputModalities))
+		inputModalities := entity.StringArray(normaliseStringSlice(*payload.InputModalities))
+		updates.InputModalities = &inputModalities
 	}
 	if payload.OutputModalities != nil {
-		updates["output_modalities"] = entity.StringArray(normaliseStringSlice(*payload.OutputModalities))
+		outputModalities := entity.StringArray(normaliseStringSlice(*payload.OutputModalities))
+		updates.OutputModalities = &outputModalities
 	}
 	if payload.SupportedSizes != nil {
-		updates["supported_sizes"] = entity.StringArray(normaliseStringSlice(*payload.SupportedSizes))
+		supportedSizes := entity.StringArray(normaliseStringSlice(*payload.SupportedSizes))
+		updates.SupportedSizes = &supportedSizes
 	}
 	if payload.SupportedDurations != nil {
-		updates["supported_durations"] = entity.IntArray(normaliseIntSlice(*payload.SupportedDurations))
+		supportedDurations := entity.IntArray(normaliseIntSlice(*payload.SupportedDurations))
+		updates.SupportedDurations = &supportedDurations
 	}
 	if payload.DefaultSize != nil {
-		updates["default_size"] = strings.TrimSpace(*payload.DefaultSize)
+		defaultSize := strings.TrimSpace(*payload.DefaultSize)
+		updates.DefaultSize = &defaultSize
 	}
 	if payload.DefaultDuration != nil {
-		updates["default_duration"] = *payload.DefaultDuration
+		updates.DefaultDuration = payload.DefaultDuration
 	}
 	if payload.Settings != nil {
-		updates["settings"] = entity.JSONMap(payload.Settings)
+		settings := entity.JSONMap(payload.Settings)
+		updates.Settings = &settings
+	}
+	if payload.GenerationMode != nil {
+		generationMode := strings.TrimSpace(*payload.GenerationMode)
+		updates.GenerationMode = &generationMode
+	}
+	if payload.EndpointPath != nil {
+		endpointPath := strings.TrimSpace(*payload.EndpointPath)
+		updates.EndpointPath = &endpointPath
+	}
+	if payload.SupportsStreaming != nil {
+		updates.SupportsStreaming = payload.SupportsStreaming
+	}
+	if payload.SupportsCancel != nil {
+		updates.SupportsCancel = payload.SupportsCancel
 	}
 	if payload.IsActive != nil {
-		updates["is_active"] = *payload.IsActive
+		updates.IsActive = payload.IsActive
 	}
 
-	if len(updates) == 0 {
-		c.JSON(http.StatusOK, gin.H{"message": "no changes supplied"})
+	if updates.IsEmpty() {
+		c.JSON(http.StatusOK, gin.H{"message": "无更新内容"})
 		return
 	}
 
 	ctx := c.Request.Context()
 	if err := h.repo.UpdateModel(ctx, id, modelID, updates); err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			c.JSON(http.StatusNotFound, gin.H{"error": "model not found"})
+			NotFound(c, ErrCodeModelNotFound, "模型不存在")
 			return
 		}
 		logrus.WithError(err).WithFields(logrus.Fields{
 			"provider_id": id,
 			"model_id":    modelID,
 		}).Error("failed to update provider model")
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		InternalError(c, "更新模型失败: "+err.Error())
 		return
 	}
 
 	_, model, err := h.repo.GetProviderWithModel(ctx, id, modelID, true)
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			c.JSON(http.StatusNotFound, gin.H{"error": "model not found"})
+			NotFound(c, ErrCodeModelNotFound, "模型不存在")
 			return
 		}
 		logrus.WithError(err).WithFields(logrus.Fields{
 			"provider_id": id,
 			"model_id":    modelID,
 		}).Error("failed to reload model after update")
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to load model"})
+		InternalError(c, "加载模型失败")
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"model": model.ToAdminView()})
+	c.JSON(http.StatusOK, gin.H{"model": entity.ModelToAdminView(*model)})
 }
 
 func (h *HTTPHandler) DeleteProviderModel(c *gin.Context) {
 	if h.repo == nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "provider repository not configured"})
+		InternalError(c, "服务商仓储未配置")
 		return
 	}
 
 	id, err := normaliseProviderID(c.Param("id"))
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		BadRequest(c, ErrCodeInvalidRequest, err.Error())
 		return
 	}
 
 	modelID := strings.TrimSpace(c.Param("model_id"))
 	if modelID == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "model_id is required"})
+		MissingField(c, "model_id")
 		return
 	}
 
 	ctx := c.Request.Context()
 	if err := h.repo.DeleteModel(ctx, id, modelID); err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			c.JSON(http.StatusNotFound, gin.H{"error": "model not found"})
+			NotFound(c, ErrCodeModelNotFound, "模型不存在")
 			return
 		}
 		logrus.WithError(err).WithFields(logrus.Fields{
 			"provider_id": id,
 			"model_id":    modelID,
 		}).Error("failed to delete provider model")
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to delete model"})
+		InternalError(c, "删除模型失败")
 		return
 	}
 

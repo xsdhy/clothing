@@ -9,7 +9,7 @@ import (
 
 const defaultBcryptCost = bcrypt.DefaultCost
 
-// HashPassword hashes the plain text password.
+// HashPassword 对明文密码进行哈希处理
 func HashPassword(password string) (string, error) {
 	if strings.TrimSpace(password) == "" {
 		return "", errors.New("password must not be empty")
@@ -21,7 +21,7 @@ func HashPassword(password string) (string, error) {
 	return string(hashed), nil
 }
 
-// VerifyPassword compares hashed password with candidate.
+// VerifyPassword 验证密码是否与存储的哈希值匹配
 func VerifyPassword(hash, candidate string) error {
 	if strings.TrimSpace(hash) == "" {
 		return errors.New("stored password hash is empty")

@@ -1,157 +1,52 @@
 package entity
 
+// 重导出转换函数以保持向后兼容性。
+
 import (
+	"clothing/internal/entity/converter"
+	"clothing/internal/entity/db"
+	"clothing/internal/entity/dto"
 	"strings"
-	"time"
 )
 
-// CreateProviderRequest defines payload for creating providers.
-type CreateProviderRequest struct {
-	ID          string                 `json:"id" binding:"required"`
-	Name        string                 `json:"name" binding:"required"`
-	Driver      string                 `json:"driver" binding:"required"`
-	Description string                 `json:"description"`
-	APIKey      string                 `json:"api_key"`
-	BaseURL     string                 `json:"base_url"`
-	Config      map[string]interface{} `json:"config"`
-	IsActive    *bool                  `json:"is_active"`
+// ProviderToAdminView 将 DbProvider 转换为 ProviderAdminView。
+// 使用此函数而非方法以保持向后兼容性。
+func ProviderToAdminView(p DbProvider, includeModels bool) ProviderAdminView {
+	dbProvider := db.Provider(p)
+	return converter.ProviderToAdminView(&dbProvider, includeModels)
 }
 
-// UpdateProviderRequest defines payload for updating providers.
-type UpdateProviderRequest struct {
-	Name        *string                `json:"name"`
-	Driver      *string                `json:"driver"`
-	Description *string                `json:"description"`
-	APIKey      *string                `json:"api_key"`
-	BaseURL     *string                `json:"base_url"`
-	Config      map[string]interface{} `json:"config"`
-	IsActive    *bool                  `json:"is_active"`
+// ModelToAdminView 将 DbModel 转换为 ProviderModelSummary。
+// 使用此函数而非方法以保持向后兼容性。
+func ModelToAdminView(m DbModel) ProviderModelSummary {
+	dbModel := db.Model(m)
+	return converter.ModelToSummary(&dbModel)
 }
 
-// CreateModelRequest defines payload for creating provider models.
-type CreateModelRequest struct {
-	ModelID            string                 `json:"model_id" binding:"required"`
-	Name               string                 `json:"name" binding:"required"`
-	Description        string                 `json:"description"`
-	Price              string                 `json:"price"`
-	MaxImages          *int                   `json:"max_images"`
-	InputModalities    []string               `json:"input_modalities"`
-	OutputModalities   []string               `json:"output_modalities"`
-	SupportedSizes     []string               `json:"supported_sizes"`
-	SupportedDurations []int                  `json:"supported_durations"`
-	DefaultSize        string                 `json:"default_size"`
-	DefaultDuration    *int                   `json:"default_duration"`
-	Settings           map[string]interface{} `json:"settings"`
-	IsActive           *bool                  `json:"is_active"`
-}
-
-// UpdateModelRequest defines payload for updating provider models.
-type UpdateModelRequest struct {
-	Name               *string                `json:"name"`
-	Description        *string                `json:"description"`
-	Price              *string                `json:"price"`
-	MaxImages          *int                   `json:"max_images"`
-	InputModalities    *[]string              `json:"input_modalities"`
-	OutputModalities   *[]string              `json:"output_modalities"`
-	SupportedSizes     *[]string              `json:"supported_sizes"`
-	SupportedDurations *[]int                 `json:"supported_durations"`
-	DefaultSize        *string                `json:"default_size"`
-	DefaultDuration    *int                   `json:"default_duration"`
-	Settings           map[string]interface{} `json:"settings"`
-	IsActive           *bool                  `json:"is_active"`
-}
-
-// ProviderAdminView is the admin-facing provider representation.
-type ProviderAdminView struct {
-	ID          string                 `json:"id"`
-	Name        string                 `json:"name"`
-	Driver      string                 `json:"driver"`
-	Description string                 `json:"description,omitempty"`
-	BaseURL     string                 `json:"base_url,omitempty"`
-	Config      JSONMap                `json:"config,omitempty"`
-	IsActive    bool                   `json:"is_active"`
-	HasAPIKey   bool                   `json:"has_api_key"`
-	CreatedAt   time.Time              `json:"created_at"`
-	UpdatedAt   time.Time              `json:"updated_at"`
-	Models      []ProviderModelSummary `json:"models,omitempty"`
-}
-
-// ProviderModelSummary is the admin-facing model representation.
-type ProviderModelSummary struct {
-	ModelID            string    `json:"model_id"`
-	Name               string    `json:"name"`
-	Description        string    `json:"description,omitempty"`
-	Price              string    `json:"price,omitempty"`
-	MaxImages          int       `json:"max_images,omitempty"`
-	InputModalities    []string  `json:"input_modalities,omitempty"`
-	OutputModalities   []string  `json:"output_modalities,omitempty"`
-	SupportedSizes     []string  `json:"supported_sizes,omitempty"`
-	SupportedDurations []int     `json:"supported_durations,omitempty"`
-	DefaultSize        string    `json:"default_size,omitempty"`
-	DefaultDuration    int       `json:"default_duration,omitempty"`
-	Settings           JSONMap   `json:"settings,omitempty"`
-	IsActive           bool      `json:"is_active"`
-	CreatedAt          time.Time `json:"created_at"`
-	UpdatedAt          time.Time `json:"updated_at"`
-}
-
-// ToAdminView converts DbProvider to ProviderAdminView.
-func (p DbProvider) ToAdminView(includeModels bool) ProviderAdminView {
-	hasAPIKey := strings.TrimSpace(p.APIKey) != ""
-	view := ProviderAdminView{
-		ID:        p.ID,
-		Name:      p.Name,
-		Driver:    p.Driver,
-		BaseURL:   p.BaseURL,
-		Config:    p.Config,
-		IsActive:  p.IsActive,
-		HasAPIKey: hasAPIKey,
-		CreatedAt: p.CreatedAt,
-		UpdatedAt: p.UpdatedAt,
+// toModalities 模态转换辅助函数（保留以兼容）
+func toModalities(values StringArray, fallback StringArray) []Modality {
+	var modalities []Modality
+	source := values
+	if len(source) == 0 {
+		source = fallback
 	}
-	if strings.TrimSpace(p.Description) != "" {
-		view.Description = p.Description
-	}
-
-	if includeModels {
-		view.Models = make([]ProviderModelSummary, 0, len(p.Models))
-		for _, model := range p.Models {
-			view.Models = append(view.Models, model.ToAdminView())
+	for _, item := range source {
+		trimmed := strings.TrimSpace(item)
+		if trimmed != "" {
+			modalities = append(modalities, Modality(trimmed))
 		}
 	}
-	return view
+	return modalities
 }
 
-// ToAdminView converts DbModel to ProviderModelSummary.
-func (m DbModel) ToAdminView() ProviderModelSummary {
-	inputModalities := []string(m.InputModalities.ToSlice())
-	outputModalities := []string(m.OutputModalities.ToSlice())
-	if len(inputModalities) == 0 && len(m.Modalities) > 0 {
-		inputModalities = []string(m.Modalities.ToSlice())
-	}
-	if len(outputModalities) == 0 && len(m.Modalities) > 0 {
-		outputModalities = []string(m.Modalities.ToSlice())
-	}
-	sizes := []string(m.SupportedSizes.ToSlice())
-	durations := mergeDurations(m.SupportedDurations, parseDurations(m.Settings))
-	defaultSize := resolveDefaultSize(m.DefaultSize, sizes, m.Settings)
-	defaultDuration := resolveDefaultDuration(m.DefaultDuration, durations, m.Settings)
+// UserToSummary 将 DbUser 转换为 UserSummary。
+func UserToSummary(u *DbUser) UserSummary {
+	dbUser := db.User(*u)
+	return converter.UserToSummary(&dbUser)
+}
 
-	return ProviderModelSummary{
-		ModelID:            m.ModelID,
-		Name:               m.Name,
-		Description:        m.Description,
-		Price:              m.Price,
-		MaxImages:          m.MaxImages,
-		InputModalities:    inputModalities,
-		OutputModalities:   outputModalities,
-		SupportedSizes:     sizes,
-		SupportedDurations: durations,
-		DefaultSize:        defaultSize,
-		DefaultDuration:    defaultDuration,
-		Settings:           m.Settings,
-		IsActive:           m.IsActive,
-		CreatedAt:          m.CreatedAt,
-		UpdatedAt:          m.UpdatedAt,
-	}
+// TagToDTO 将 DbTag 转换为 Tag DTO。
+func TagToDTO(t *DbTag) dto.Tag {
+	dbTag := db.Tag(*t)
+	return converter.TagToDTO(&dbTag)
 }

@@ -44,5 +44,27 @@ func NewOpenRouter(provider *entity.DbProvider) (*OpenRouter, error) {
 }
 
 func (o *OpenRouter) GenerateContent(ctx context.Context, request entity.GenerateContentRequest, dbModel entity.DbModel) (*entity.GenerateContentResponse, error) {
-	return GenerateContentByOpenaiProtocol(ctx, o.apiKey, o.endpoint, dbModel.ModelID, request.Prompt, request.Inputs.Images, request.Inputs.Videos)
+	return GenerateContentByOpenaiProtocol(ctx, o.apiKey, o.endpoint, dbModel.ModelID, request.Prompt, request.GetImages(), request.GetVideos())
+}
+
+// Capabilities returns the capabilities of the model.
+func (o *OpenRouter) Capabilities(model entity.DbModel) *ModelCapabilities {
+	return &ModelCapabilities{
+		InputModalities:    model.InputModalities,
+		OutputModalities:   model.OutputModalities,
+		MaxImages:          model.MaxImages,
+		SupportedSizes:     model.SupportedSizes,
+		SupportedDurations: model.SupportedDurations,
+		SupportsStream:     model.SupportsStreaming,
+		SupportsCancel:     model.SupportsCancel,
+		SupportsAsync:      model.IsVideoModel(),
+	}
+}
+
+// Validate checks if the request is valid for the model.
+func (o *OpenRouter) Validate(request entity.GenerateContentRequest, model entity.DbModel) error {
+	if strings.TrimSpace(request.Prompt) == "" {
+		return errors.New("prompt is required")
+	}
+	return nil
 }
