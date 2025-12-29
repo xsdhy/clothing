@@ -379,7 +379,7 @@ const ImageGenerator: React.FC<ImageGeneratorProps> = ({
 
       const input_media =
         images.length > 0
-          ? images.map((content) => ({ type: "image", content }))
+          ? images.map((content) => ({ type: "image" as const, content }))
           : undefined;
       const request: GenerationRequest = {
         prompt: prompt.trim(),
