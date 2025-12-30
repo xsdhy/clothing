@@ -151,7 +151,6 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({
     setCurrentTime(video.currentTime);
   };
 
-  const controlSize = compact ? 30 : 38;
   const iconFontSize = compact ? "small" : "medium";
   const showTitle = Boolean(title) && !compact;
 
